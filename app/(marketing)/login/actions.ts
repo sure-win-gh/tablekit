@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { supabaseServer } from "@/lib/db/supabase-server";
+import { establishActiveOrg } from "@/lib/server/admin/active-org";
+import { audit } from "@/lib/server/admin/audit";
 
 const PasswordLoginSchema = z.object({
   email: z.string().email().max(320),
@@ -33,15 +35,27 @@ export async function signInWithPassword(
   }
 
   const supabase = await supabaseServer();
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email: parsed.data.email,
     password: parsed.data.password,
   });
 
-  if (error) {
+  if (error || !data.user) {
     // We deliberately don't distinguish "wrong password" from "no such
     // user" — same message for both denies account enumeration.
     return { status: "error", message: "Invalid email or password." };
+  }
+
+  const orgId = await establishActiveOrg(data.user.id);
+  if (orgId) {
+    await audit.log({
+      organisationId: orgId,
+      actorUserId: data.user.id,
+      action: "login.success",
+      targetType: "user",
+      targetId: data.user.id,
+      metadata: { method: "password" },
+    });
   }
 
   redirect("/dashboard");

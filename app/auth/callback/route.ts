@@ -8,6 +8,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { supabaseServer } from "@/lib/db/supabase-server";
+import { establishActiveOrg } from "@/lib/server/admin/active-org";
+import { audit } from "@/lib/server/admin/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -24,10 +26,22 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = await supabaseServer();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
-  if (error) {
+  if (error || !data.user) {
     return NextResponse.redirect(`${origin}/login?error=invalid_code`);
+  }
+
+  const orgId = await establishActiveOrg(data.user.id);
+  if (orgId) {
+    await audit.log({
+      organisationId: orgId,
+      actorUserId: data.user.id,
+      action: "login.success",
+      targetType: "user",
+      targetId: data.user.id,
+      metadata: { method: "callback" },
+    });
   }
 
   return NextResponse.redirect(`${origin}${safeNext}`);

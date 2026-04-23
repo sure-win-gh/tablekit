@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { makeOrgSlug } from "@/lib/auth/slug";
+import { setActiveOrg } from "@/lib/auth/active-org";
 import { supabaseServer } from "@/lib/db/supabase-server";
 import { memberships, organisations } from "@/lib/db/schema";
 import { adminDb } from "@/lib/server/admin/db";
@@ -101,11 +102,14 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
   });
 
   // If Supabase's "Confirm email" setting is on (default), no session
-  // yet — show a "check your email" screen. If it's off, session is
-  // live and we can drop the user onto the dashboard.
+  // yet — show a "check your email" screen. /auth/callback sets the
+  // active-org cookie when the user clicks the link.
   if (!authData.session) {
     return { status: "needs_confirm", email };
   }
 
+  // Email-confirm off: session is live now, drop them on the dashboard
+  // with active org already pinned.
+  await setActiveOrg(orgId);
   redirect("/dashboard");
 }
