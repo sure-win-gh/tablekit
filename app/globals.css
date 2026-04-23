@@ -1,6 +1,16 @@
 @import "tailwindcss";
 
+/*
+ * Light-only until we do a proper dark-mode design pass. Every
+ * component today uses hard-coded light-scheme Tailwind classes
+ * (text-neutral-900, bg-white, etc.) with no dark: variants, so
+ * flipping the body via prefers-color-scheme produces dark text on
+ * dark backgrounds. color-scheme: light also tells the browser to
+ * render native controls (scrollbars, date pickers) in the light
+ * palette regardless of OS preference.
+ */
 :root {
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #171717;
 }
@@ -8,13 +18,6 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
