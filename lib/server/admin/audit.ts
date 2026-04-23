@@ -24,6 +24,10 @@ export type AuditAction =
   | "signup"
   | "login.success"
   | "login.failure"
+  // venues phase
+  | "venue.created"
+  | "venue.updated"
+  | "venue.deleted"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
@@ -31,7 +35,7 @@ export type AuditAction =
   | "mfa.enrolled"
   | "mfa.disabled";
 
-export type AuditTargetType = "user" | "membership" | "organisation" | "invitation";
+export type AuditTargetType = "user" | "membership" | "organisation" | "invitation" | "venue";
 
 export type AuditInput = {
   organisationId: string;
