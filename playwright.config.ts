@@ -1,4 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
+import { config as loadEnv } from "dotenv";
+
+// Load .env.local first (Next.js precedence), then .env. Teardown
+// hooks use admin API keys read from process.env; the dev server
+// spawned by webServer also inherits the loaded values.
+loadEnv({ path: ".env.local" });
+loadEnv({ path: ".env" });
 
 const baseURL = process.env["PLAYWRIGHT_BASE_URL"] ?? "http://localhost:3000";
 const isCI = Boolean(process.env["CI"]);

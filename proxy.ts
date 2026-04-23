@@ -1,4 +1,8 @@
-// Edge middleware: runs on every request.
+// Edge proxy: runs on every request that matches `config.matcher`.
+//
+// Next 16 renamed the `middleware` file convention to `proxy` with a
+// deprecation warning on the old name. The exported function is named
+// `proxy` to match the new convention.
 //
 // Two jobs:
 //   1. Keep the Supabase session cookie fresh. Without the
@@ -12,7 +16,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabaseUrl = process.env["NEXT_PUBLIC_SUPABASE_URL"];
@@ -20,7 +24,7 @@ export async function middleware(request: NextRequest) {
   if (!supabaseUrl || !supabaseKey) {
     // Misconfigured env — let the request through so the server can
     // render its own "requireEnv" error rather than silently 500ing
-    // from middleware (which is harder to debug).
+    // from the edge (which is harder to debug).
     return response;
   }
 
@@ -59,7 +63,7 @@ export const config = {
   matcher: [
     // Run on everything except static assets, favicon, the health
     // endpoint, and the auth callback (which mints the session and
-    // would otherwise race with this middleware).
+    // would otherwise race with the session refresh here).
     "/((?!_next/static|_next/image|favicon.ico|api/health|auth/callback).*)",
   ],
 };

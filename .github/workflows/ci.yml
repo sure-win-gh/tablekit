@@ -59,3 +59,93 @@ jobs:
 
       - name: Audit dependencies
         run: pnpm audit --audit-level=high --prod
+
+  integration:
+    name: integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: checks
+    # Step-level `if: env.DATABASE_URL != ''` handles the gating
+    # inside the job — we'd rather emit an informative "skipped"
+    # notice than silently not run.
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SESSION_SIGNING_SECRET: ${{ secrets.SESSION_SIGNING_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Integration tests (skipped)
+        if: env.DATABASE_URL == ''
+        run: echo "::notice::DATABASE_URL secret not set — skipping pnpm test:integration. Wire the Supabase secrets (DATABASE_URL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SESSION_SIGNING_SECRET) to enable."
+
+      - name: Integration tests
+        if: env.DATABASE_URL != ''
+        run: pnpm test:integration
+
+  e2e:
+    name: e2e tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: checks
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SESSION_SIGNING_SECRET: ${{ secrets.SESSION_SIGNING_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: E2E tests (skipped)
+        if: env.DATABASE_URL == ''
+        run: echo "::notice::Supabase secrets not set — skipping pnpm test:e2e. Wire them to enable."
+
+      - name: Cache Playwright browsers
+        if: env.DATABASE_URL != ''
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright browsers
+        if: env.DATABASE_URL != ''
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: E2E tests
+        if: env.DATABASE_URL != ''
+        run: pnpm test:e2e
+
+      - name: Upload Playwright traces on failure
+        if: failure() && env.DATABASE_URL != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
