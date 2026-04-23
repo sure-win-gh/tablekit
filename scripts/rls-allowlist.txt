@@ -1,0 +1,9 @@
+# Tables exempt from the check-rls.ts guard.
+#
+# Only add entries here with a one-line justification. This file is
+# reviewed whenever a new table is exempted.
+#
+# Format: one table name per line; anything after `#` is a comment.
+#
+# Example:
+#   drizzle_migrations  # drizzle-kit metadata, no tenant data
