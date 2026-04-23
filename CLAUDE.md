@@ -17,7 +17,7 @@ A lightweight, freemium table booking and management platform for UK independent
 ## Tech stack (canonical — do not deviate without updating this file)
 
 - **Language:** TypeScript (strict mode on).
-- **Framework:** Next.js 15 (App Router) deployed on Vercel.
+- **Framework:** Next.js 16 (App Router, Turbopack dev) deployed on Vercel.
 - **Database:** PostgreSQL on Supabase (UK region, London).
 - **Auth:** Supabase Auth (email+password, magic link, TOTP for owners).
 - **ORM:** Drizzle ORM (preferred over Prisma — smaller, faster, SQL-first).
@@ -93,7 +93,7 @@ pnpm db:studio           # Drizzle Studio
 - Errors: return typed `Result<T, E>` from domain functions; throw only at the HTTP boundary.
 - Files: kebab-case filenames, PascalCase component names.
 - No default exports except where Next.js requires them (pages, layouts).
-- Tailwind: use design tokens from `tailwind.config.ts`. Don't hand-roll colours.
+- Tailwind v4: design tokens live in the `@theme` block of `app/globals.css` (no `tailwind.config.ts`). Don't hand-roll colours.
 
 ## Development loop (the expected flow)
 
