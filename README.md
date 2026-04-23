@@ -1,136 +1,104 @@
-# TableKit — Claude Code scaffolding
+# TableKit
 
-This folder is a ready-to-drop-in scaffolding for vibe-coding **TableKit**, a low-cost UK table-booking SaaS for independent hospitality, using Claude Code.
+Lightweight UK table booking SaaS for independent hospitality — cafés, restaurants, bars, pubs. Freemium (up to 50 bookings/month), paid tiers at £19 and £39. Built solo, in the open.
 
-It doesn't contain a running app — it contains the project's **brain**: the spec, the playbooks, the slash commands, the subagents, and the guardrails. The idea is: copy this into an empty repo, rename one folder, paste the bootstrap prompt into Claude Code, and start shipping.
+Positioning, pricing and non-goals live in [CLAUDE.md](CLAUDE.md). Feature detail lives in [docs/specs/](docs/specs/index.md). Cross-cutting rules live in [docs/playbooks/](docs/playbooks/).
 
-## What's in here
+## Prerequisites
 
-```
-table-booking-scaffold/
-├── CLAUDE.md                    # project-wide instructions Claude reads first
-├── BOOTSTRAP_PROMPT.md          # paste this into Claude Code once, on a fresh repo
-├── README.md                    # you are here
-├── docs/
-│   ├── specs/                   # one markdown file per feature
-│   │   ├── index.md
-│   │   ├── auth.md
-│   │   ├── venues.md
-│   │   ├── bookings.md
-│   │   ├── widget.md
-│   │   ├── payments.md
-│   │   ├── messaging.md
-│   │   ├── guests.md
-│   │   ├── waitlist.md
-│   │   ├── reserve-with-google.md
-│   │   ├── reporting.md
-│   │   ├── multi-venue.md       (Plus)
-│   │   ├── ai-enquiry.md        (Plus)
-│   │   ├── import-export.md
-│   │   └── public-api.md        (Plus)
-│   └── playbooks/               # cross-cutting rules Claude must follow
-│       ├── gdpr.md
-│       ├── payments.md
-│       ├── security.md
-│       ├── incident.md
-│       └── deploy.md
-└── claude-config/               # RENAME to .claude/ after copying
-    ├── settings.json            # permissions + hooks
-    ├── commands/                # custom slash commands
-    │   ├── ship.md
-    │   ├── spec.md
-    │   ├── plan-feature.md
-    │   ├── migrate.md
-    │   ├── review.md
-    │   └── audit.md
-    ├── agents/                  # subagents for focused reviews
-    │   ├── code-reviewer.md
-    │   ├── gdpr-auditor.md
-    │   └── security-reviewer.md
-    └── hooks/                   # shell hooks wired from settings.json
-        ├── guard-pii.js
-        └── context-reminder.js
+- **Node 22.11.0** (see [.nvmrc](.nvmrc) — `nvm use` to match)
+- **pnpm 9.15.0** — enable via corepack: `corepack enable pnpm`
+- **PostgreSQL 15+** for local dev — fastest path is the Supabase CLI: `brew install supabase/tap/supabase && supabase start`
+- **Stripe CLI** for webhook testing (optional until the payments spec): `brew install stripe/stripe-cli/stripe`
+
+## Setup
+
+```bash
+# 1. Install dependencies
+pnpm install
+
+# 2. Create your local env file and fill in real values
+cp .env.local.example .env.local
+
+# 3. Start the dev server on :3000
+pnpm dev
 ```
 
-## Install
+Open [http://localhost:3000](http://localhost:3000). The health endpoint at [http://localhost:3000/api/health](http://localhost:3000/api/health) returns a JSON `ok` payload.
 
-1. Create an empty git repo for the project.
-2. Copy the contents of this folder into the repo root.
-3. **Rename `claude-config/` to `.claude/`.** (This bundle ships as `claude-config/` because the build environment couldn't write to a dotfile folder directly.)
-4. `chmod +x .claude/hooks/*.js` so the hooks can run.
-5. Open the repo in Claude Code.
-6. Paste `BOOTSTRAP_PROMPT.md` into Claude Code.
+## Common scripts
 
-From then on, Claude Code will:
-- Always read `CLAUDE.md` first.
-- Pull in the relevant spec for whatever you're shipping.
-- Run PII / secret guards on every write.
-- Use subagents for reviews before merges.
+| Command | What it does |
+|---|---|
+| `pnpm dev` | Next.js dev server on :3000 (Turbopack) |
+| `pnpm build && pnpm start` | Production build and run |
+| `pnpm typecheck` | `tsc --noEmit` with strict + exactOptionalPropertyTypes |
+| `pnpm lint` | ESLint flat config, Next.js rules |
+| `pnpm format` / `pnpm format:check` | Prettier write / verify |
+| `pnpm test` | Vitest unit tests (one-shot) |
+| `pnpm test:watch` | Vitest watch mode |
+| `pnpm test:e2e` | Playwright smoke tests (auto-starts the dev server) |
+| `pnpm db:generate` | Drizzle: generate migration from schema changes |
+| `pnpm db:migrate` | Drizzle: apply migrations |
+| `pnpm db:studio` | Drizzle Studio browser |
+| `pnpm check:rls` | Fails if any public table has RLS disabled or zero policies |
 
-## How to work with this scaffold
+## Repo layout
 
-**Starting a feature:**
 ```
-/plan-feature bookings
-```
-Claude drafts a plan at `.claude/plans/bookings.md`. Read it. Ask for tweaks. Don't let it code yet.
-
-**Shipping:**
-```
-/ship bookings
-```
-Claude implements in small commits, runs checks, opens a PR.
-
-**Reviewing before merge:**
-```
-/review
-/audit gdpr
-/audit payments     # only when the diff touches money
-```
-
-**Writing a new spec:**
-```
-/spec loyalty-points
-```
-
-**Generating a DB migration:**
-```
-/migrate add optional venue_slug to venues
+app/
+  (marketing)/          public landing, pricing, legal
+  (dashboard)/          operator app (authenticated)
+  (widget)/             embeddable booking widget + hosted booking page
+  api/                  API routes (REST + webhooks)
+components/             React components (shadcn/ui based)
+lib/
+  db/                   Drizzle schema, queries, migrations
+  stripe/               Stripe helpers, webhook handlers
+  email/                Resend templates and senders
+  sms/                  Twilio helpers
+  security/             RLS helpers, encryption, audit log
+  server/admin/         service_role clients — importable from here only
+scripts/                Ops tools (check-rls, etc.)
+tests/
+  unit/                 Vitest
+  e2e/                  Playwright
+drizzle/                Generated migrations (checked in, forward-only)
+docs/
+  specs/                One markdown file per feature
+  playbooks/            GDPR, payments, security, deploy, incident
+.claude/                Project instructions, subagents, slash commands
 ```
 
-## What the playbooks do
+## Working with Claude Code
 
-- **gdpr.md** — we are a data processor, venue is controller, sub-processor list, retention, erasure, DSAR flow. Read before touching any personal data.
-- **payments.md** — PCI SAQ-A scope, Stripe Connect Standard, webhook idempotency, what we never store. Read before touching anything money-related.
-- **security.md** — auth, RLS, secrets, rate limiting, headers, cross-tenant prevention. The baseline.
-- **incident.md** — severity levels, kill switches, rollback, breach path. Read when things are broken or boring, never when you're panicking.
-- **deploy.md** — environments, migrations, release flow, pre-launch checklist.
+This repo is designed for [Claude Code](https://claude.com/claude-code) as the primary dev loop.
 
-## What the subagents do
+- [CLAUDE.md](CLAUDE.md) is loaded on every session. Read it.
+- Feature work starts with reading or writing the matching spec in [docs/specs/](docs/specs/).
+- Slash commands in [.claude/commands/](.claude/commands/): `/spec`, `/plan-feature`, `/ship`, `/migrate`, `/review`, `/audit`.
+- Subagents in [.claude/agents/](.claude/agents/): `code-reviewer`, `gdpr-auditor`, `security-reviewer`.
+- Hooks in [.claude/hooks/](.claude/hooks/) run on tool use to guard against committing PII, card data, or service_role misuse.
 
-- **code-reviewer** — correctness, RLS, tests, style. General-purpose.
-- **gdpr-auditor** — only cares about GDPR. Aggressive, narrow, useful.
-- **security-reviewer** — auth, payments (SAQ-A), webhooks. Has a payments-mode.
+Plans for multi-file work live in [.claude/plans/](.claude/plans/).
 
-Each one has its own system prompt, loaded from `.claude/agents/<name>.md` at invocation.
+## Rules that matter (non-negotiable)
 
-## What the hooks do
+These are load-bearing — read them before your first PR:
 
-- **guard-pii.js** — PreToolUse hook. Blocks writes that look like: secrets in code, plaintext PII being logged, raw card data, service_role client outside the admin surface.
-- **context-reminder.js** — UserPromptSubmit hook. Drops a one-line reminder into every prompt to keep Claude honest about the rules.
+1. **RLS on every tenant table, plus a cross-tenant test.** `pnpm check:rls` is the CI gate.
+2. **No raw card data, ever.** Stripe Elements / Checkout only. Stay in PCI SAQ-A. See [payments.md](docs/playbooks/payments.md).
+3. **PII columns are column-encrypted** via [lib/security/crypto.ts](lib/security/crypto.ts) (stub until design review). See [gdpr.md](docs/playbooks/gdpr.md).
+4. **UK/EU data residency only.** Any new sub-processor needs the playbook updated and 30 days customer notice.
+5. **Secrets in `.env.local` only.** [.env.local.example](.env.local.example) documents what's needed. `.env` is reserved for non-secret defaults.
+6. **Conventional commits, small.** One concern per commit. Forward-only migrations. Two-phase drops.
 
-## Customising
+## Environments and deploy
 
-- All rules live in markdown. Edit a playbook, Claude changes behaviour on the next prompt.
-- Commercial model lives in `CLAUDE.md`. Update pricing or non-goals there.
-- Add new subagents in `.claude/agents/`, reference them from `/audit` or a new slash command.
+See [docs/playbooks/deploy.md](docs/playbooks/deploy.md) for the environment matrix, release flow, migrations, feature flags and pre-launch checklist.
 
-## What this scaffold is NOT
+When things break, [docs/playbooks/incident.md](docs/playbooks/incident.md) has the severity levels, kill switches and rollback playbook.
 
-- It is not a running codebase. You still need to bootstrap the Next.js app (the bootstrap prompt tells Claude Code to do this).
-- It is not a silver bullet. Claude Code will still make mistakes. The playbooks and subagents are designed to catch the most expensive ones.
-- It is not stable forever. Reconsider the shape of the scaffolding every few months — what rules are being ignored, what rules are missing, what feedback loops are slow.
+## Licence
 
-## A note on the folder name
-
-Claude Code reads config from a folder literally named `.claude/`. This bundle was built in a sandbox that couldn't write to dotfile folders, so the directory ships as `claude-config/`. Rename it to `.claude/` and you're set.
+Source-available; not yet open source. TBD.
