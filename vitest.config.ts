@@ -11,13 +11,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
-      exclude: [
-        "node_modules/",
-        ".next/",
-        "tests/",
-        "**/*.config.{ts,mjs,js}",
-        "drizzle/",
-      ],
+      exclude: ["node_modules/", ".next/", "tests/", "**/*.config.{ts,mjs,js}", "drizzle/"],
     },
   },
   resolve: {

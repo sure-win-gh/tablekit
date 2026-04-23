@@ -42,9 +42,7 @@ async function main(): Promise<void> {
 
   const databaseUrl = process.env["DATABASE_URL"];
   if (!databaseUrl) {
-    console.error(
-      "check-rls: DATABASE_URL is not set. Set it, or set SKIP_RLS_CHECK=1 to bypass.",
-    );
+    console.error("check-rls: DATABASE_URL is not set. Set it, or set SKIP_RLS_CHECK=1 to bypass.");
     process.exit(2);
   }
 
@@ -90,9 +88,7 @@ async function main(): Promise<void> {
     }
 
     const checked = rows.length - allowlist.size;
-    console.log(
-      `check-rls: checked ${checked} table(s) (${allowlist.size} allowlisted).`,
-    );
+    console.log(`check-rls: checked ${checked} table(s) (${allowlist.size} allowlisted).`);
 
     if (rlsDisabled.length === 0 && policyless.length === 0) {
       console.log("check-rls: OK — every table has RLS enabled and at least one policy.");

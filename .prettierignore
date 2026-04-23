@@ -9,3 +9,12 @@ pnpm-lock.yaml
 *.min.js
 *.min.css
 next-env.d.ts
+
+# Narrative docs are author-formatted; Prettier rewrites break tables
+# and code fences. Don't touch these without deliberate decision.
+docs/specs/
+docs/playbooks/
+docs/scaffold.md
+.claude/plans/
+.claude/commands/
+.claude/agents/

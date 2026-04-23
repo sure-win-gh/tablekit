@@ -28,20 +28,20 @@ Open [http://localhost:3000](http://localhost:3000). The health endpoint at [htt
 
 ## Common scripts
 
-| Command | What it does |
-|---|---|
-| `pnpm dev` | Next.js dev server on :3000 (Turbopack) |
-| `pnpm build && pnpm start` | Production build and run |
-| `pnpm typecheck` | `tsc --noEmit` with strict + exactOptionalPropertyTypes |
-| `pnpm lint` | ESLint flat config, Next.js rules |
-| `pnpm format` / `pnpm format:check` | Prettier write / verify |
-| `pnpm test` | Vitest unit tests (one-shot) |
-| `pnpm test:watch` | Vitest watch mode |
-| `pnpm test:e2e` | Playwright smoke tests (auto-starts the dev server) |
-| `pnpm db:generate` | Drizzle: generate migration from schema changes |
-| `pnpm db:migrate` | Drizzle: apply migrations |
-| `pnpm db:studio` | Drizzle Studio browser |
-| `pnpm check:rls` | Fails if any public table has RLS disabled or zero policies |
+| Command                             | What it does                                                |
+| ----------------------------------- | ----------------------------------------------------------- |
+| `pnpm dev`                          | Next.js dev server on :3000 (Turbopack)                     |
+| `pnpm build && pnpm start`          | Production build and run                                    |
+| `pnpm typecheck`                    | `tsc --noEmit` with strict + exactOptionalPropertyTypes     |
+| `pnpm lint`                         | ESLint flat config, Next.js rules                           |
+| `pnpm format` / `pnpm format:check` | Prettier write / verify                                     |
+| `pnpm test`                         | Vitest unit tests (one-shot)                                |
+| `pnpm test:watch`                   | Vitest watch mode                                           |
+| `pnpm test:e2e`                     | Playwright smoke tests (auto-starts the dev server)         |
+| `pnpm db:generate`                  | Drizzle: generate migration from schema changes             |
+| `pnpm db:migrate`                   | Drizzle: apply migrations                                   |
+| `pnpm db:studio`                    | Drizzle Studio browser                                      |
+| `pnpm check:rls`                    | Fails if any public table has RLS disabled or zero policies |
 
 ## Repo layout
 

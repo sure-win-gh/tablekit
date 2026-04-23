@@ -7,6 +7,7 @@ This file is the project's primary instruction set for Claude Code. It is loaded
 A lightweight, freemium table booking and management platform for UK independent hospitality operators (cafés, restaurants, bars, pubs). Positioned against OpenTable, ResDiary and Collins at ~10× lower cost. Built by a solo founder using Claude Code.
 
 ### Commercial model
+
 - **Free forever** up to 50 bookings/month.
 - **Core** £19/month (unlimited bookings, deposits, Reserve with Google).
 - **Plus** £39/month (multi-venue, AI enquiry handler, priority support).
@@ -98,6 +99,7 @@ pnpm db:studio           # Drizzle Studio
 ## Development loop (the expected flow)
 
 For any feature:
+
 1. Read `docs/specs/<feature>.md`. If missing, run `/spec <feature>` to create one.
 2. Run `/plan` if the change touches more than three files.
 3. Write a failing test first when the logic is non-trivial.
