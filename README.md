@@ -8,8 +8,10 @@ Positioning, pricing and non-goals live in [CLAUDE.md](CLAUDE.md). Feature detai
 
 - **Node 22.11.0** (see [.nvmrc](.nvmrc) — `nvm use` to match)
 - **pnpm 9.15.0** — enable via corepack: `corepack enable pnpm`
-- **PostgreSQL 15+** for local dev — fastest path is the Supabase CLI: `brew install supabase/tap/supabase && supabase start`
+- **A Supabase project in the EU region** — free tier is enough for dev. Create one at [supabase.com](https://supabase.com); we use it for Postgres, Auth and Storage. The database password you set at project creation goes into `DATABASE_URL`.
 - **Stripe CLI** for webhook testing (optional until the payments spec): `brew install stripe/stripe-cli/stripe`
+
+> **Why hosted, not local?** We tried the local Supabase CLI route (Docker-based) and backed out — it's a heavy install for a solo dev, and the wire format is identical. A hosted dev project matches staging and production exactly, which keeps RLS surprises out of later releases. If you want fully offline dev later, see [docs/playbooks/deploy.md](docs/playbooks/deploy.md).
 
 ## Setup
 
@@ -17,10 +19,26 @@ Positioning, pricing and non-goals live in [CLAUDE.md](CLAUDE.md). Feature detai
 # 1. Install dependencies
 pnpm install
 
-# 2. Create your local env file and fill in real values
+# 2. Create your local env file
 cp .env.local.example .env.local
+```
 
-# 3. Start the dev server on :3000
+Then fill in `.env.local` — at minimum, for the auth phase:
+
+- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` from **Project Settings → API**.
+- `SUPABASE_SERVICE_ROLE_KEY` from the same place (`sb_secret_...`). **Never commit this.** Bypasses RLS.
+- `DATABASE_URL` from **Project Settings → Database → Connection string → Session pooler** (not Direct, not Transaction pooler).
+- `SESSION_SIGNING_SECRET` — generate with `openssl rand -base64 48`.
+
+Sanity check the DB wiring:
+
+```bash
+pnpm check:rls   # "no public-schema tables found. OK." means you're good.
+```
+
+Then:
+
+```bash
 pnpm dev
 ```
 
