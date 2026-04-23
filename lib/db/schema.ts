@@ -86,7 +86,9 @@ export const auditLog = pgTable(
     action: text("action").notNull(),
     targetType: text("target_type"),
     targetId: uuid("target_id"),
-    metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+    metadata: jsonb("metadata")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("audit_log_org_created_at").on(t.organisationId, t.createdAt.desc())],

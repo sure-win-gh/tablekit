@@ -16,9 +16,7 @@ import { cookies } from "next/headers";
 function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
-    throw new Error(
-      `lib/db/supabase-server.ts: ${name} is not set. See .env.local.example.`,
-    );
+    throw new Error(`lib/db/supabase-server.ts: ${name} is not set. See .env.local.example.`);
   }
   return value;
 }

@@ -18,3 +18,7 @@ docs/scaffold.md
 .claude/plans/
 .claude/commands/
 .claude/agents/
+
+# Drizzle-kit generated artifacts. Formatting them creates a loop
+# where every `pnpm db:generate` re-writes them to Drizzle's style.
+drizzle/migrations/meta/
