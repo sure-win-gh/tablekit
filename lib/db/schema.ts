@@ -8,6 +8,9 @@
 //   - camelCase in TS, snake_case in Postgres (Drizzle maps both)
 //   - every table has an explicit `createdAt timestamptz not null default now()`
 //   - `citext` for case-insensitive uniqueness (email, slug)
+//   - every tenant-scoped table carries a denormalised `organisation_id`
+//     populated by a BEFORE INSERT trigger from the parent; RLS
+//     policies use that column directly for a one-hop equality check.
 //   - FKs are declared here; RLS policies + triggers live in the
 //     migration SQL, not the schema (Drizzle can't express them)
 
@@ -15,6 +18,7 @@ import { sql } from "drizzle-orm";
 import {
   customType,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -31,6 +35,10 @@ const citext = customType<{ data: string }>({
     return "citext";
   },
 });
+
+// =============================================================================
+// Auth
+// =============================================================================
 
 export const orgRole = pgEnum("org_role", ["owner", "manager", "host"]);
 
@@ -92,4 +100,112 @@ export const auditLog = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("audit_log_org_created_at").on(t.organisationId, t.createdAt.desc())],
+);
+
+// =============================================================================
+// Venues
+// =============================================================================
+//
+// `areas`, `tables`, `services` each carry a denormalised
+// `organisation_id` synced from their parent by a BEFORE INSERT/UPDATE
+// trigger (see the venues migration). That keeps RLS policies one-hop
+// and stops the `bookings` phase inheriting 4-deep subquery chains.
+
+export const venueType = pgEnum("venue_type", ["cafe", "restaurant", "bar_pub"]);
+
+export const venues = pgTable(
+  "venues",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    venueType: venueType("venue_type").notNull(),
+    timezone: text("timezone").notNull().default("Europe/London"),
+    locale: text("locale").notNull().default("en-GB"),
+    settings: jsonb("settings")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("venues_org_idx").on(t.organisationId)],
+);
+
+export const areas = pgTable(
+  "areas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Populated by the enforce_areas_org_id trigger from the parent
+    // venue. Declared here so TS reads include the column.
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    sort: integer("sort").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("areas_venue_idx").on(t.venueId), index("areas_org_idx").on(t.organisationId)],
+);
+
+// `tables` exported under a non-ambiguous alias for callers — `tables`
+// is a common local variable name; the TS alias `venueTables` keeps
+// imports readable.
+export const venueTables = pgTable(
+  "tables",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Populated by the enforce_tables_org_and_venue trigger from the
+    // parent area.
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    areaId: uuid("area_id")
+      .notNull()
+      .references(() => areas.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    minCover: integer("min_cover").notNull().default(1),
+    maxCover: integer("max_cover").notNull(),
+    shape: text("shape").notNull().default("rect"),
+    position: jsonb("position")
+      .notNull()
+      .default(sql`'{"x":0,"y":0,"w":2,"h":2}'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("tables_venue_idx").on(t.venueId),
+    index("tables_org_idx").on(t.organisationId),
+    index("tables_area_idx").on(t.areaId),
+  ],
+);
+
+export const services = pgTable(
+  "services",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Populated by the enforce_services_org_id trigger from the parent
+    // venue.
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    // Shape: { days: string[], start: "HH:MM", end: "HH:MM" }
+    // Validated at the server-action boundary via Zod.
+    schedule: jsonb("schedule").notNull(),
+    turnMinutes: integer("turn_minutes").notNull().default(90),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("services_venue_idx").on(t.venueId),
+    index("services_org_idx").on(t.organisationId),
+  ],
 );
