@@ -61,7 +61,13 @@ We also expose a guest-facing page at `/privacy/request?v=<venue-slug>` that pos
 ## Encryption
 
 - **At rest:** Postgres TDE via Supabase (AES-256).
-- **Column-level for PII:** envelope encryption. Per-org data key wrapped by a master key in Supabase Vault. `lib/security/crypto.ts` is the only module that touches plaintext.
+- **Column-level for PII:** envelope encryption. `lib/security/crypto.ts` is the only module that touches plaintext or the wrapped DEK.
+  - Each organisation owns a random 32-byte **DEK** stored on `organisations.wrapped_dek`, sealed with the **master key** using AES-256-GCM (format: `iv(12) || tag(16) || ciphertext(32)` = 60 bytes).
+  - PII columns are encrypted with the DEK using AES-256-GCM (12-byte random IV, 16-byte auth tag). Ciphertext is stored as a versioned string: `v1:<iv_b64>:<ct_b64>:<tag_b64>`.
+  - DEKs are provisioned lazily: the first `encryptPii(orgId, …)` call for an org generates, wraps, and persists. No pre-seed step.
+  - Process-level DEK cache (cleared on restart) avoids a per-row unwrap.
+- **Master key:** today `TABLEKIT_MASTER_KEY` env var (32 bytes, base64). Production hardening migrates to Supabase Vault / KMS — the public API of `lib/security/crypto.ts` is stable across the swap. A rotation invalidates every wrapped DEK and every `hashForLookup` value, so treat it as a data-migration event.
+- **Lookup hashing:** `hashForLookup(input, kind)` is HMAC-SHA256 under the master key, hex-encoded. `kind="email"` lowercases + trims; `kind="phone"` strips non-digits. Used for `(org_id, email_hash)` uniqueness on guests and "find-by-email" without decrypting rows.
 - **In transit:** TLS 1.3 everywhere. HSTS preload on dashboard and widget origins.
 - **Backups:** encrypted, region-locked. 30-day point-in-time recovery via Supabase.
 

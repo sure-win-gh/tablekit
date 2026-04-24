@@ -15,6 +15,13 @@
       "when": 1776969792368,
       "tag": "0001_crazy_dark_phoenix",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777025874466,
+      "tag": "0002_goofy_moondragon",
+      "breakpoints": true
     }
   ]
 }

@@ -28,6 +28,15 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+// Raw bytes for the wrapped DEK (bytea). Drizzle's `bytea` helper
+// returns strings by default; we want Buffers everywhere to keep the
+// crypto layer typed.
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
+
 // Case-insensitive text. The `citext` extension is created in the
 // migration that ships with this schema.
 const citext = customType<{ data: string }>({
@@ -48,6 +57,14 @@ export const organisations = pgTable("organisations", {
   slug: citext("slug").notNull().unique(),
   plan: text("plan").notNull().default("free"),
   stripeCustomerId: text("stripe_customer_id"),
+  // Envelope encryption state. `wrappedDek` is this org's DEK sealed
+  // with the master key (AES-256-GCM, `iv || tag || ciphertext` = 60
+  // bytes). Nullable so organisations predating the crypto phase don't
+  // fail the migration; `lib/security/crypto.ts` provisions lazily on
+  // first encrypt/decrypt. `dekVersion` is forward-looking for key
+  // rotation — only `1` exists today.
+  wrappedDek: bytea("wrapped_dek"),
+  dekVersion: integer("dek_version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
