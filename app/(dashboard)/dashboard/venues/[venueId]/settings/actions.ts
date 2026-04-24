@@ -1,10 +1,12 @@
 "use server";
 
 import { and, eq } from "drizzle-orm";
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { requireRole } from "@/lib/auth/require-role";
+import { startOnboarding } from "@/lib/stripe/connect";
 import { venues } from "@/lib/db/schema";
 import { adminDb } from "@/lib/server/admin/db";
 import { audit } from "@/lib/server/admin/audit";
@@ -70,4 +72,54 @@ export async function updateVenue(
 
   revalidatePath(`/dashboard/venues/${updated.id}`, "layout");
   return { status: "saved" };
+}
+
+// ---------------------------------------------------------------------------
+// Stripe Connect onboarding kickoff
+// ---------------------------------------------------------------------------
+//
+// Returns a redirect URL on success (client does window.location.href).
+// Can't redirect from a server action directly to a third-party host
+// without a full response object — Next's `redirect()` is for internal
+// routes only.
+
+const StartOnboardingSchema = z.object({
+  venueId: z.uuid(),
+});
+
+export type StartStripeOnboardingState =
+  | { status: "idle" }
+  | { status: "error"; message: string }
+  | { status: "redirect"; url: string };
+
+export async function startStripeOnboardingAction(
+  _prev: StartStripeOnboardingState,
+  formData: FormData,
+): Promise<StartStripeOnboardingState> {
+  const parsed = StartOnboardingSchema.safeParse({ venueId: formData.get("venueId") });
+  if (!parsed.success) {
+    return { status: "error", message: "Invalid request." };
+  }
+
+  const { orgId, userId } = await requireRole("manager");
+
+  // Reconstruct the base URL from the request headers — the return_url
+  // Stripe hops us back to must match this host.
+  const h = await headers();
+  const host = h.get("host") ?? "localhost:3000";
+  const protocol = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  const appUrl = `${protocol}://${host}`;
+
+  const r = await startOnboarding(orgId, userId, appUrl);
+  if (!r.ok) {
+    return {
+      status: "error",
+      message:
+        r.reason === "payments-disabled"
+          ? "Payments are currently disabled."
+          : "Couldn't start Stripe onboarding — try again in a moment.",
+    };
+  }
+
+  return { status: "redirect", url: r.url };
 }

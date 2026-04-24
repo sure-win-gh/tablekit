@@ -62,8 +62,11 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     // Run on everything except static assets, favicon, the health
-    // endpoint, and the auth callback (which mints the session and
-    // would otherwise race with the session refresh here).
-    "/((?!_next/static|_next/image|favicon.ico|api/health|auth/callback).*)",
+    // endpoint, the auth callback (which mints the session and would
+    // otherwise race with the session refresh here), and the Stripe
+    // webhook (needs a pristine raw body for signature verification —
+    // session-refresh middleware cookies would be fine but skipping
+    // the matcher entirely keeps the critical path minimal).
+    "/((?!_next/static|_next/image|favicon.ico|api/health|api/stripe/webhook|auth/callback).*)",
   ],
 };
