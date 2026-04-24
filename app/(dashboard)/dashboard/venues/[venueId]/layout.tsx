@@ -35,6 +35,7 @@ export default async function VenueLayout({
 
   const tabs: Array<{ href: string; label: string }> = [
     { href: `/dashboard/venues/${venue.id}/floor-plan`, label: "Floor plan" },
+    { href: `/dashboard/venues/${venue.id}/bookings`, label: "Bookings" },
     { href: `/dashboard/venues/${venue.id}/services`, label: "Services" },
     { href: `/dashboard/venues/${venue.id}/settings`, label: "Settings" },
   ];

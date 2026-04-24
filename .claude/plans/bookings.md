@@ -163,57 +163,68 @@ DST transitions: `tstzrange` + UTC means the two-day-a-year wobble is handled co
 ## Data model (this phase)
 
 ```sql
--- New enum
 create type booking_status as enum
   ('requested','confirmed','seated','finished','cancelled','no_show');
 
--- Enables the gist exclusion constraint's `with =` on uuid.
-create extension if not exists btree_gist;
+create extension if not exists btree_gist;  -- gist `with =` on uuid
 
 create table bookings (
   id                 uuid primary key default gen_random_uuid(),
   organisation_id    uuid not null,          -- denormalised; trigger
   venue_id           uuid not null,          -- denormalised; trigger
   service_id         uuid not null references services(id),
+  area_id            uuid not null references areas(id),
   guest_id           uuid not null references guests(id),
-  table_id           uuid references tables(id),
-  party_size         int  not null check (party_size >= 1 and party_size <= 40),
+  party_size         int  not null check (party_size between 1 and 20),
   start_at           timestamptz not null,
   end_at             timestamptz not null,
-  status             booking_status not null default 'requested',
-  source             text not null,         -- 'widget','rwg','phone','walk-in','api'
-  deposit_intent_id  text,
-  notes              text,
+  status             booking_status not null default 'confirmed',
+  source             text not null,         -- 'host' | 'widget' | 'rwg' | 'api'
+  deposit_intent_id  text,                  -- stays null until payments phase
+  notes              text,                  -- host-authored; plaintext for now
+  booked_by_user_id  uuid references users(id) on delete set null,
+  cancelled_at       timestamptz,
+  cancelled_reason   text,
   created_at         timestamptz not null default now(),
-  constraint no_double_book
-    exclude using gist (table_id with =, tstzrange(start_at, end_at) with &&)
+  updated_at         timestamptz not null default now()
 );
-create index bookings_venue_start_idx on bookings(venue_id, start_at);
-create index bookings_org_idx        on bookings(organisation_id);
-create index bookings_guest_idx      on bookings(guest_id);
+
+-- Junction. One row per (booking, table). The denormalised time range
+-- + org/venue/area keep RLS one-hop and let the EXCLUDE constraint do
+-- the real work of preventing double-booking.
+create table booking_tables (
+  booking_id       uuid not null references bookings(id) on delete cascade,
+  table_id         uuid not null references tables(id),
+  organisation_id  uuid not null,           -- denormalised; trigger
+  venue_id         uuid not null,           -- denormalised; trigger
+  area_id          uuid not null,           -- denormalised; trigger
+  start_at         timestamptz not null,    -- denormalised; sync trigger
+  end_at           timestamptz not null,    -- denormalised; sync trigger
+  primary key (booking_id, table_id),
+  constraint no_double_book
+    exclude using gist (table_id with =, tstzrange(start_at, end_at, '[)') with &&)
+);
 
 create table booking_events (
   id               uuid primary key default gen_random_uuid(),
   organisation_id  uuid not null,          -- denormalised; trigger
   booking_id       uuid not null references bookings(id) on delete cascade,
-  type             text not null,          -- 'status.confirmed', 'status.seated', ...
+  type             text not null,
+  actor_user_id    uuid references users(id) on delete set null,
   meta             jsonb not null default '{}',
   created_at       timestamptz not null default now()
 );
-create index booking_events_booking_idx on booking_events(booking_id, created_at);
-create index booking_events_org_idx     on booking_events(organisation_id);
 ```
 
 Triggers:
 
-- `enforce_bookings_org_and_venue` — BEFORE INSERT/UPDATE OF service_id: copy `organisation_id` and `venue_id` from the parent service.
-- `enforce_booking_events_org_id` — BEFORE INSERT/UPDATE OF booking_id: copy `organisation_id` from the parent booking.
+- `enforce_bookings_org_and_venue` — BEFORE INSERT/UPDATE OF service_id/area_id on bookings: copy org/venue from service, verify area belongs to the same venue.
+- `enforce_booking_tables_denorm` — BEFORE INSERT on booking_tables: copy org/venue/area/start_at/end_at from the parent booking. RAISE EXCEPTION if the table's area differs from the booking's area (enforces same-area combinable rule).
+- `sync_booking_tables_on_time_change` — AFTER UPDATE OF start_at/end_at on bookings: propagate to booking_tables.
+- `clear_booking_tables_on_cancel` — AFTER UPDATE OF status on bookings: if NEW.status = 'cancelled', delete from booking_tables where booking_id = NEW.id. (no_show is terminal-after-time so the junction row doesn't need clearing.)
+- `enforce_booking_events_org_id` — BEFORE INSERT/UPDATE OF booking_id: copy org_id from the parent booking.
 
-RLS:
-
-- `bookings_member_read` on `bookings` — `organisation_id in (select user_organisation_ids())`.
-- `booking_events_member_read` on `booking_events` — same.
-- No authed-role write policies; writes go through server actions on adminDb (same pattern as venues).
+RLS: `*_member_read` on bookings / booking_tables / booking_events. No insert/update/delete policies for authenticated — writes go via server actions on adminDb.
 
 ---
 
@@ -263,17 +274,16 @@ RLS:
 
 ---
 
-## Open questions before coding
+## Decisions locked (as of execution)
 
-(Will expand as the prerequisite plans land.)
-
-1. **Fork at the top** — proceed with (c): I draft the `crypto` plan next, then `guests-minimal`, then this `bookings` plan drives execution? Or do you want a different ordering / a different depth for crypto (env-var master key vs Supabase Vault)?
-2. **D2 combinable-tables policy** — same-area-only OK for MVP, or is the UX cost too high and you'd rather invest in a `combinable_with` column upfront?
-3. **D6 host-only in this phase** — confirming the public API + rate-limit / CAPTCHA work really lives with `widget` rather than here?
-4. **D7 deposits deferred** — confirming we're happy with bookings going straight to `confirmed` in this phase (no `requested` holding state). The state machine leaves the `requested → confirmed` path intact so we can introduce deposits later without a migration.
-5. **D8 timezone / DST** — store UTC, display in venue timezone. No surprises there; flagging because booking times are the most user-visible "did we get it right" check.
-6. **Party-size cap** — 40 is arbitrary; spec doesn't say. OK, or should we go lower (20) or just drop the check?
-7. **Guest upsert semantics** — when a host creates a booking with a guest whose `email_hash` already exists in the org, do we reuse the record silently, or surface "we think this is returning guest X, confirm"? I'd default to silent reuse; flag for you because it affects the UX of the new-booking form.
+1. ✅ **Three-phase split approved** — `crypto` and `guests-minimal` have shipped. This plan now drives execution.
+2. ✅ **Combinable tables: same-area-only**. Implementation: a `booking_tables` junction (booking × table), with denormalised `starts_at` / `ends_at` for the `EXCLUDE USING gist` constraint. A CHECK pattern (via a trigger) enforces all tables in a single booking share one `area_id`. This upgrades D2's availability-engine stance with the corresponding schema reality.
+3. ✅ **Host-only creation** this phase. Widget phase owns the public path.
+4. ✅ **Deposits deferred to `payments`**. Host-created bookings go straight to `confirmed`. The state machine still reserves `requested` so deposits can slot in later without a migration.
+5. ✅ **Store UTC, render venue-local**. Helper lives in `lib/bookings/time.ts`.
+6. ✅ **Party-size cap: 20**. Private-events / large-party workflow (set menus, deposit forfeit) is a separate phase.
+7. ✅ **Silent guest upsert** — already implemented in `guests-minimal`. The `new-booking` form calls `upsertGuest` directly.
+8. ✅ **Master key: `TABLEKIT_MASTER_KEY` env var**. Vault / KMS migration is a production-hardening phase; `lib/security/crypto.ts` public API stays stable.
 
 ## Exit criteria
 
