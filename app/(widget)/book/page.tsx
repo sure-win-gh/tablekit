@@ -1,9 +1,14 @@
-export default function BookPage() {
+// Bare `/book` has no venue context — visitors should have followed a
+// per-venue link (`/book/<venueId>`). Render a helpful stub rather
+// than a 404 so a mistyped URL gives a human message.
+
+export default function BookIndexPage() {
   return (
-    <main className="flex flex-1 flex-col items-center justify-center p-8">
-      <h1 className="text-2xl font-semibold">Book a table</h1>
-      <p className="mt-2 text-sm text-neutral-500">
-        Venue booking widget. Wired up in the widget spec.
+    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+      <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">Book a table</h1>
+      <p className="text-sm text-neutral-500">
+        Please follow the booking link your venue sent you, or use the booking button on their
+        website. The link looks like <span className="font-mono">/book/&lt;venue-id&gt;</span>.
       </p>
     </main>
   );
