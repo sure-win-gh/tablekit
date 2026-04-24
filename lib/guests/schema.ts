@@ -39,4 +39,11 @@ export const upsertGuestInput = z.object({
   marketingConsentAt: z.date().optional(),
 });
 
+// The parsed output (defaults filled in). Use this when reading
+// from a safeParse / parse result.
 export type UpsertGuestInput = z.infer<typeof upsertGuestInput>;
+
+// The raw input callers hand to upsertGuest. `lastName` is optional
+// because the Zod default fills it in; the output type above has it
+// required. TypeScript needs both sides.
+export type UpsertGuestRawInput = z.input<typeof upsertGuestInput>;

@@ -15,7 +15,7 @@ import "server-only";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 
 import { upsertGuest } from "@/lib/guests/upsert";
-import { type UpsertGuestInput } from "@/lib/guests/schema";
+import { type UpsertGuestRawInput } from "@/lib/guests/schema";
 import {
   bookingEvents,
   bookingTables,
@@ -38,7 +38,7 @@ export type CreateBookingInput = {
   date: string; // YYYY-MM-DD venue-local
   wallStart: string; // "HH:MM" venue-local
   partySize: number;
-  guest: UpsertGuestInput;
+  guest: UpsertGuestRawInput;
   notes?: string;
   source: BookingSource;
 };
