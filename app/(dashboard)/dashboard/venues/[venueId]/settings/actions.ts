@@ -112,12 +112,14 @@ export async function startStripeOnboardingAction(
 
   const r = await startOnboarding(orgId, userId, appUrl);
   if (!r.ok) {
+    if (r.reason === "payments-disabled") {
+      return { status: "error", message: "Payments are currently disabled." };
+    }
+    // stripe-error carries the actual Stripe message — surface it so
+    // the operator can fix it (e.g. "sign up for Connect at …").
     return {
       status: "error",
-      message:
-        r.reason === "payments-disabled"
-          ? "Payments are currently disabled."
-          : "Couldn't start Stripe onboarding — try again in a moment.",
+      message: `Stripe: ${r.message}`,
     };
   }
 

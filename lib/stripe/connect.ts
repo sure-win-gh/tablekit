@@ -14,6 +14,7 @@
 import "server-only";
 
 import { eq } from "drizzle-orm";
+import Stripe from "stripe";
 
 import { stripeAccounts } from "@/lib/db/schema";
 import { audit } from "@/lib/server/admin/audit";
@@ -43,7 +44,8 @@ export async function getAccount(organisationId: string): Promise<StripeAccountR
 
 export type OnboardingResult =
   | { ok: true; url: string }
-  | { ok: false; reason: "payments-disabled" | "stripe-error" };
+  | { ok: false; reason: "payments-disabled" }
+  | { ok: false; reason: "stripe-error"; message: string };
 
 // Returns the hosted onboarding URL. If the org already has a Stripe
 // account, we reuse it and just mint a fresh account link.
@@ -92,11 +94,19 @@ export async function startOnboarding(
 
     return { ok: true, url: link.url };
   } catch (err) {
-    // Stripe-side errors (e.g. geographic restrictions on the platform
-    // account during test setup) — surface so the UI can tell the
-    // operator rather than hang.
+    // Stripe-side errors (Connect not activated on the platform,
+    // geographic restrictions, missing capabilities) — surface the
+    // raw Stripe message so the operator can act on it instead of a
+    // generic "try again". Stripe error copy is aimed at developers
+    // and is safe to show to authenticated operators.
     console.error("[lib/stripe/connect.ts] startOnboarding failed:", err);
-    return { ok: false, reason: "stripe-error" };
+    const message =
+      err instanceof Stripe.errors.StripeError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : "Unexpected Stripe error";
+    return { ok: false, reason: "stripe-error", message };
   }
 }
 
