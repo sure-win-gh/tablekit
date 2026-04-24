@@ -90,12 +90,24 @@ export async function POST(req: NextRequest) {
       "slot-taken": 409,
       "no-availability": 409,
       "venue-not-found": 404,
+      "deposit-failed": 502,
     }[r.reason];
     return NextResponse.json({ error: r.reason, ...("issues" in r ? { issues: r.issues } : {}) }, { status });
   }
 
+  // Success response: always includes bookingId + reference + status.
+  // If a deposit rule matched, the caller also gets `deposit` —
+  // the widget mounts Stripe Elements with the client_secret and
+  // confirms; the payment_intent.succeeded webhook transitions the
+  // booking to `confirmed`.
   return NextResponse.json(
-    { ok: true, bookingId: r.bookingId, reference: bookingReference(r.bookingId) },
+    {
+      ok: true,
+      bookingId: r.bookingId,
+      reference: bookingReference(r.bookingId),
+      status: r.status,
+      ...(r.deposit ? { deposit: r.deposit } : {}),
+    },
     { status: 201 },
   );
 }

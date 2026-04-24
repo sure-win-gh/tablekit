@@ -5,6 +5,13 @@
 // booking + its table assignments, and emits `booking.created` to
 // audit_log + booking_events.
 //
+// For widget-sourced bookings, if a `deposit_rules` row matches, the
+// booking commits at `status: 'requested'` together with a placeholder
+// `payments` row, and we hand off to `createDepositIntent` out of band
+// to create the Stripe PaymentIntent. The client finishes the flow by
+// confirming the returned client_secret against Stripe Elements; the
+// `payment_intent.succeeded` webhook flips the booking to `confirmed`.
+//
 // Kept out of the server-actions file so the availability engine +
 // domain invariants stay unit-testable without Next's server-action
 // wiring and so the widget phase can call the same function from its
@@ -20,12 +27,20 @@ import {
   bookingEvents,
   bookingTables,
   bookings,
+  payments,
   services,
   venueTables,
   venues,
 } from "@/lib/db/schema";
+import {
+  createDepositIntent,
+  DepositIntentError,
+} from "@/lib/payments/intents";
+import { type DepositRule, resolveRule } from "@/lib/payments/rules";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
+import { stripeEnabled } from "@/lib/stripe/client";
+import { getAccount } from "@/lib/stripe/connect";
 
 import { findSlots, type TableOption } from "./availability";
 import { venueLocalDayRange } from "./time";
@@ -43,6 +58,12 @@ export type CreateBookingInput = {
   source: BookingSource;
 };
 
+export type DepositResponse = {
+  kind: "payment_intent";
+  clientSecret: string;
+  amountMinor: number;
+};
+
 export type CreateBookingResult =
   | {
       ok: true;
@@ -50,11 +71,43 @@ export type CreateBookingResult =
       guestId: string;
       guestReused: boolean;
       tableIds: string[];
+      status: "confirmed" | "requested";
+      deposit?: DepositResponse;
     }
   | { ok: false; reason: "guest-invalid"; issues: string[] }
   | { ok: false; reason: "slot-taken" }
   | { ok: false; reason: "no-availability" }
-  | { ok: false; reason: "venue-not-found" };
+  | { ok: false; reason: "venue-not-found" }
+  | { ok: false; reason: "deposit-failed"; bookingId: string };
+
+// A deposit is required only on widget-sourced bookings (host / api /
+// rwg flows have no UI to collect card details on MVP), when Stripe is
+// configured, when the org has a Connect account with charges_enabled,
+// and when a matching `deposit_rules` row resolves for the booking
+// context. Card-hold rules (flow B) are deferred to the follow-on
+// `payments-card-hold` phase — skipped here.
+async function resolveDepositRequirement(
+  organisationId: string,
+  input: CreateBookingInput,
+  startAt: Date,
+): Promise<{ rule: DepositRule; stripeAccountId: string } | null> {
+  if (input.source !== "widget") return null;
+  if (!stripeEnabled()) return null;
+
+  const account = await getAccount(organisationId);
+  if (!account || !account.chargesEnabled) return null;
+
+  const rule = await resolveRule({
+    venueId: input.venueId,
+    serviceId: input.serviceId,
+    partySize: input.partySize,
+    at: startAt,
+  });
+  if (!rule) return null;
+  if (rule.kind === "card_hold") return null; // flow B — phase 2
+
+  return { rule, stripeAccountId: account.accountId };
+}
 
 export async function createBooking(
   organisationId: string,
@@ -142,11 +195,20 @@ export async function createBooking(
   const option: TableOption | undefined = slot.options[0];
   if (!option) return { ok: false, reason: "no-availability" };
 
-  // 4. Insert the booking + its table assignments in one transaction.
+  // Resolve deposit requirement BEFORE the booking transaction so the
+  // transaction only holds locks for the duration of DB writes — the
+  // Stripe API call happens strictly outside the transaction.
+  const depositReq = await resolveDepositRequirement(organisationId, input, slot.startAt);
+  const initialStatus: "confirmed" | "requested" = depositReq ? "requested" : "confirmed";
+
+  // 4. Insert the booking + its table assignments + (if a deposit is
+  //    required) a placeholder `payments` row all in one transaction.
   //    The EXCLUDE constraint on booking_tables catches any concurrent
   //    booker who got there first — caught and mapped to slot-taken.
+  let bookingId: string;
+  let placeholderPaymentId: string | null = null;
   try {
-    const bookingId = await db.transaction(async (tx) => {
+    const txOut = await db.transaction(async (tx) => {
       const [inserted] = await tx
         .insert(bookings)
         .values({
@@ -161,7 +223,7 @@ export async function createBooking(
           partySize: input.partySize,
           startAt: slot.startAt,
           endAt: slot.endAt,
-          status: "confirmed",
+          status: initialStatus,
           source: input.source,
           notes: input.notes ?? null,
           bookedByUserId: actorUserId,
@@ -189,36 +251,116 @@ export async function createBooking(
         // organisation_id is overwritten by the enforce trigger.
         organisationId,
         bookingId: inserted.id,
-        type: "status.confirmed",
+        type: initialStatus === "confirmed" ? "status.confirmed" : "status.requested",
         actorUserId,
         meta: sql`${JSON.stringify({ tableIds: option.tableIds })}::jsonb`,
       });
 
-      return inserted.id;
-    });
+      // Placeholder `payments` row with a synthetic intent id that the
+      // janitor recognises. Promoted to a real pi_* after the Stripe
+      // call below; left untouched (and swept by the janitor after
+      // 15min) if the call fails.
+      let paymentId: string | null = null;
+      if (depositReq) {
+        const [p] = await tx
+          .insert(payments)
+          .values({
+            organisationId,
+            bookingId: inserted.id,
+            kind: "deposit",
+            stripeIntentId: `pending_${inserted.id}`,
+            amountMinor: 0, // filled in once we know partySize-based total
+            currency: depositReq.rule.currency,
+            status: "pending_creation",
+          })
+          .returning({ id: payments.id });
+        if (!p) throw new Error("createBooking: placeholder payment insert returned no row");
+        paymentId = p.id;
+      }
 
-    await audit.log({
-      organisationId,
-      actorUserId,
-      action: "booking.created",
-      targetType: "booking",
-      targetId: bookingId,
-      metadata: { tableIds: option.tableIds, partySize: input.partySize },
+      return { bookingId: inserted.id, paymentId };
     });
-
-    return {
-      ok: true,
-      bookingId,
-      guestId: guestR.guestId,
-      guestReused: guestR.reused,
-      tableIds: option.tableIds,
-    };
+    bookingId = txOut.bookingId;
+    placeholderPaymentId = txOut.paymentId;
   } catch (err: unknown) {
     // 23P01: exclusion_violation — another booking claimed this slot.
     if (isExclusionViolation(err)) {
       return { ok: false, reason: "slot-taken" };
     }
     throw err;
+  }
+
+  await audit.log({
+    organisationId,
+    actorUserId,
+    action: "booking.created",
+    targetType: "booking",
+    targetId: bookingId,
+    metadata: {
+      tableIds: option.tableIds,
+      partySize: input.partySize,
+      status: initialStatus,
+      depositRequired: Boolean(depositReq),
+    },
+  });
+
+  // If no deposit required, we're done — caller sees a confirmed booking.
+  if (!depositReq || !placeholderPaymentId) {
+    return {
+      ok: true,
+      bookingId,
+      guestId: guestR.guestId,
+      guestReused: guestR.reused,
+      tableIds: option.tableIds,
+      status: "confirmed",
+    };
+  }
+
+  // Deposit required. Stripe call is out-of-transaction; if it fails
+  // the booking + placeholder row remain for the janitor to sweep.
+  try {
+    const intent = await createDepositIntent({
+      organisationId,
+      bookingId,
+      paymentId: placeholderPaymentId,
+      guestId: guestR.guestId,
+      partySize: input.partySize,
+      rule: depositReq.rule,
+      stripeAccountId: depositReq.stripeAccountId,
+    });
+    return {
+      ok: true,
+      bookingId,
+      guestId: guestR.guestId,
+      guestReused: guestR.reused,
+      tableIds: option.tableIds,
+      status: "requested",
+      deposit: {
+        kind: "payment_intent",
+        clientSecret: intent.clientSecret,
+        amountMinor: intent.amountMinor,
+      },
+    };
+  } catch (err) {
+    // Don't leak the raw error to the client — it may contain Stripe
+    // diagnostic text. Audit + let the janitor handle cleanup.
+    console.error("[lib/bookings/create.ts] deposit intent creation failed:", {
+      bookingId,
+      paymentId: placeholderPaymentId,
+      message: err instanceof DepositIntentError ? err.message : String(err),
+    });
+    await audit.log({
+      organisationId,
+      actorUserId,
+      action: "stripe.intent.failed",
+      targetType: "payment",
+      targetId: placeholderPaymentId,
+      metadata: {
+        bookingId,
+        reason: err instanceof DepositIntentError ? err.code : "unknown",
+      },
+    });
+    return { ok: false, reason: "deposit-failed", bookingId };
   }
 }
 

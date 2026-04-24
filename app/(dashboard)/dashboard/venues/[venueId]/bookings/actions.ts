@@ -73,6 +73,10 @@ export async function createBookingAction(
       "slot-taken": "Someone else just took that slot — pick another.",
       "no-availability": "That slot is no longer available.",
       "venue-not-found": "Venue not found.",
+      // `deposit-failed` can't fire here — host bookings skip the
+      // deposit branch inside createBooking — but the map has to be
+      // exhaustive for TS.
+      "deposit-failed": "Unexpected payment error — please try again.",
     }[r.reason];
     return { status: "error", message };
   }
