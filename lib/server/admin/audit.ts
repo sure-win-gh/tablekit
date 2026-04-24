@@ -35,6 +35,11 @@ export type AuditAction =
   // bookings phase
   | "booking.created"
   | "booking.transitioned"
+  // payments-connect phase
+  | "stripe.connect.started"
+  | "stripe.account.updated"
+  | "stripe.webhook.received"
+  | "stripe.webhook.failed"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
@@ -49,7 +54,8 @@ export type AuditTargetType =
   | "invitation"
   | "venue"
   | "guest"
-  | "booking";
+  | "booking"
+  | "stripe_account";
 
 export type AuditInput = {
   organisationId: string;

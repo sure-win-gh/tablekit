@@ -16,6 +16,8 @@
 
 import { sql } from "drizzle-orm";
 import {
+  boolean,
+  char,
   customType,
   index,
   integer,
@@ -379,5 +381,58 @@ export const bookingEvents = pgTable(
   (t) => [
     index("booking_events_booking_idx").on(t.bookingId, t.createdAt),
     index("booking_events_org_idx").on(t.organisationId),
+  ],
+);
+
+// =============================================================================
+// Stripe (payments-connect phase)
+// =============================================================================
+//
+// stripe_accounts is one-per-organisation (D1 in the payments-connect
+// plan — we deviated from the spec which said per-venue; per-org
+// matches operator mental model and avoids N re-onboardings).
+//
+// stripe_events is the idempotency table. Every webhook event Stripe
+// delivers is written here by its evt_* id with ON CONFLICT DO
+// NOTHING, so retries are free. `handled_at` lets us tell at a glance
+// which events our dispatch map has acted on versus which are just
+// stored for future phases.
+
+export const stripeAccounts = pgTable("stripe_accounts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organisationId: uuid("organisation_id")
+    .notNull()
+    .unique()
+    .references(() => organisations.id, { onDelete: "cascade" }),
+  accountId: text("account_id").notNull().unique(),
+  chargesEnabled: boolean("charges_enabled").notNull().default(false),
+  payoutsEnabled: boolean("payouts_enabled").notNull().default(false),
+  detailsSubmitted: boolean("details_submitted").notNull().default(false),
+  country: char("country", { length: 2 }),
+  defaultCurrency: char("default_currency", { length: 3 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Every Stripe webhook event we've ever received, keyed by the evt_*
+// id. Primary-key conflict = duplicate delivery from Stripe, we no-op.
+// `handled_at` is set when dispatch runs a registered handler; an
+// event can be stored without being handled yet (e.g. an event type
+// whose handler lands in a later phase).
+export const stripeEvents = pgTable(
+  "stripe_events",
+  {
+    id: text("id").primaryKey(), // evt_xxx
+    type: text("type").notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+    handledAt: timestamp("handled_at", { withTimezone: true }),
+    payload: jsonb("payload").notNull(),
+  },
+  (t) => [
+    index("stripe_events_type_idx").on(t.type),
+    // Partial index for the "needs a handler" worklist.
+    index("stripe_events_unhandled_idx")
+      .on(t.receivedAt)
+      .where(sql`${t.handledAt} is null`),
   ],
 );
