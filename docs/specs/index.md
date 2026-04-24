@@ -11,7 +11,7 @@ This folder holds the source of truth for every feature. Claude should read the 
 | 3 | [`bookings.md`](bookings.md) | draft  | Availability, create/update, status workflow |
 | 4 | [`widget.md`](widget.md)     | draft  | Embeddable widget + hosted booking link |
 | 5 | [`payments.md`](payments.md) | draft  | Deposits, Stripe Connect, no-show capture — charter |
-| 5a| [`payments-deposits.md`](payments-deposits.md) | draft | Deposits + card-hold slice (post-Connect) |
+| 5a| [`payments-deposits.md`](payments-deposits.md) | phase 1 shipped | Deposits + refunds + janitor (flow A) |
 | 6 | [`messaging.md`](messaging.md) | draft | Email + SMS transactional flow |
 | 7 | [`guests.md`](guests.md)     | draft  | Guest profiles, CRM basics, tags |
 | 8 | [`waitlist.md`](waitlist.md) | draft  | Walk-in + waitlist |

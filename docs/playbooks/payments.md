@@ -41,6 +41,51 @@ All amounts are in minor units (pence). Never floats.
 - Handle: `payment_intent.succeeded`, `payment_intent.payment_failed`, `charge.refunded`, `account.updated`.
 - Retries: Stripe retries up to 3 days. Our handler must be idempotent and fast (<5s).
 
+### Connect events — important
+
+Deposit PaymentIntents live on the **connected account**, not the platform. Events on connected accounts are a separate delivery stream:
+
+- **Local dev:** `stripe listen --forward-connect-to localhost:3000/api/stripe/webhook --forward-to localhost:3000/api/stripe/webhook` — both flags together, otherwise you'll only see platform events.
+- **Staging / prod:** configure **two** webhook endpoints in the Stripe dashboard pointing at the same URL. One is type "Account" (platform events: `account.updated`, etc.), the other is type "Connect" (connected-account events: `payment_intent.*`, `charge.*`). Both have their own `whsec_*`; use the same value for `STRIPE_WEBHOOK_SECRET` by creating them with the same signing secret, or keep them separate and extend the receiver to try both.
+- Smoke check: trigger a deposit → `stripe listen` should log `payment_intent.succeeded` with `account=acct_*` set.
+
+## Idempotency keys
+
+Every Stripe create-call uses a deterministic idempotency key so network retries + webhook races converge safely:
+
+- `customer_<guest_id>_v1` — `stripe.customers.create` on first deposit for a guest.
+- `booking_<booking_id>_deposit_v1` — `stripe.paymentIntents.create` for the deposit flow.
+- `refund_<payments_row_id>_v1` — `stripe.refunds.create` for operator-initiated refunds.
+
+The `_v1` suffix lets us rotate keys if a bug ever forces a different body for the same logical operation.
+
+## Stripe Intent / booking transaction boundary
+
+**Rule:** the Stripe API call never runs inside the booking DB transaction. See `lib/bookings/create.ts`. The ordering is:
+
+1. Inside the transaction: insert booking at `status='requested'` + a placeholder `payments` row with `stripe_intent_id='pending_<bookingId>'`, `status='pending_creation'`.
+2. Outside the transaction: `stripe.paymentIntents.create(...)` with the idempotency key from above.
+3. Still outside: update the placeholder row with the real `pi_*` + Stripe status.
+
+If step 2 or 3 fails, the booking + placeholder remain in `requested`/`pending_creation`. The janitor (`lib/payments/janitor.ts`, cron `*/5 * * * *`) sweeps them after 15 minutes — cancels the Intent if a real `pi_*` exists, transitions the booking to `cancelled` with `cancelled_reason='deposit_abandoned'`, marks the payments row `canceled`.
+
+## Refunds
+
+- Refunds triggered from dashboard only (not from automated flows).
+- Full refund = cancel within the deposit window (from `deposit_rules.refund_window_hours`).
+- Partial refund = manual operator action with reason captured. (Partial UI is a phase-2 follow-up; MVP ships full-refund only.)
+- Refunds are logged in `audit_log` with `user_id` of the operator who initiated them. The actor id also rides in Stripe `metadata.actor_user_id` so the eventual `charge.refunded` webhook can verify attribution without request context.
+
+## Replaying stuck events
+
+`stripe_events` keeps every event we've ever received, with `handled_at` null iff no registered handler ran (either because the type isn't wired, or because dispatch threw). To replay:
+
+1. `SELECT id, type, payload FROM stripe_events WHERE handled_at IS NULL ORDER BY received_at;`
+2. For each row, fetch the payload and replay through `dispatch()` from `lib/stripe/webhook.ts` (a script under `scripts/` is the right home if this ever becomes routine).
+3. `markHandled(eventId)` on success.
+
+Alternatively, re-trigger from Stripe dashboard → Developers → Events → ⋯ → Resend.
+
 ## Refunds
 
 - Refunds triggered from dashboard only (not from automated flows).
