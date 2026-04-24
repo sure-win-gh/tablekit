@@ -270,3 +270,114 @@ export const guests = pgTable(
     index("guests_org_idx").on(t.organisationId),
   ],
 );
+
+// =============================================================================
+// Bookings
+// =============================================================================
+//
+// The transaction the product exists for. See .claude/plans/bookings.md
+// for the full write-up. Shape notes:
+//
+//   - `bookings` holds the reservation, `booking_tables` (junction)
+//     holds which tables it occupies. This lets one booking combine
+//     two or more tables in the same area (8-top on 4 + 4).
+//   - Double-booking prevention lives on `booking_tables` via an
+//     EXCLUDE USING gist constraint (migration, not schema).
+//   - `booking_events` is the append-only audit trail for state
+//     changes + free-text notes added by hosts.
+//   - `organisation_id` / `venue_id` are denormalised on every row
+//     and kept in sync by triggers. No RLS subquery chains.
+
+export const bookingStatus = pgEnum("booking_status", [
+  "requested",
+  "confirmed",
+  "seated",
+  "finished",
+  "cancelled",
+  "no_show",
+]);
+
+export const bookings = pgTable(
+  "bookings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    serviceId: uuid("service_id")
+      .notNull()
+      .references(() => services.id),
+    areaId: uuid("area_id")
+      .notNull()
+      .references(() => areas.id),
+    guestId: uuid("guest_id")
+      .notNull()
+      .references(() => guests.id),
+    partySize: integer("party_size").notNull(),
+    startAt: timestamp("start_at", { withTimezone: true }).notNull(),
+    endAt: timestamp("end_at", { withTimezone: true }).notNull(),
+    status: bookingStatus("status").notNull().default("confirmed"),
+    source: text("source").notNull(),
+    // Plumbed for the payments phase; always null today.
+    depositIntentId: text("deposit_intent_id"),
+    notes: text("notes"),
+    bookedByUserId: uuid("booked_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    cancelledReason: text("cancelled_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("bookings_venue_start_idx").on(t.venueId, t.startAt),
+    index("bookings_org_idx").on(t.organisationId),
+    index("bookings_guest_idx").on(t.guestId),
+  ],
+);
+
+export const bookingTables = pgTable(
+  "booking_tables",
+  {
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    tableId: uuid("table_id")
+      .notNull()
+      .references(() => venueTables.id, { onDelete: "cascade" }),
+    organisationId: uuid("organisation_id").notNull(),
+    venueId: uuid("venue_id").notNull(),
+    areaId: uuid("area_id").notNull(),
+    startAt: timestamp("start_at", { withTimezone: true }).notNull(),
+    endAt: timestamp("end_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.bookingId, t.tableId] }),
+    index("booking_tables_table_idx").on(t.tableId),
+    index("booking_tables_org_idx").on(t.organisationId),
+  ],
+);
+
+export const bookingEvents = pgTable(
+  "booking_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id").notNull(),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    meta: jsonb("meta")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("booking_events_booking_idx").on(t.bookingId, t.createdAt),
+    index("booking_events_org_idx").on(t.organisationId),
+  ],
+);

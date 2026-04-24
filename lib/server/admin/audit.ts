@@ -32,6 +32,9 @@ export type AuditAction =
   | "guest.created"
   | "guest.reused"
   | "guest.updated"
+  // bookings phase
+  | "booking.created"
+  | "booking.transitioned"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
@@ -45,7 +48,8 @@ export type AuditTargetType =
   | "organisation"
   | "invitation"
   | "venue"
-  | "guest";
+  | "guest"
+  | "booking";
 
 export type AuditInput = {
   organisationId: string;
