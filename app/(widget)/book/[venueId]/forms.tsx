@@ -1,7 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  Elements,
+  PaymentElement,
+  useElements,
+  useStripe,
+} from "@stripe/react-stripe-js";
+import { loadStripe, type Stripe } from "@stripe/stripe-js";
 
 type SlotLite = { serviceId: string; serviceName: string; wallStart: string };
 
@@ -107,10 +114,18 @@ export function SlotPicker({
 // without a token and the server-side helper passes through.
 // ---------------------------------------------------------------------------
 
+type DepositHandoff = {
+  bookingId: string;
+  reference: string;
+  clientSecret: string;
+  amountMinor: number;
+};
+
 type SubmitState =
   | { status: "idle" }
   | { status: "submitting" }
-  | { status: "success"; reference: string; time: string }
+  | { status: "deposit"; handoff: DepositHandoff }
+  | { status: "success"; reference: string; time: string; depositCaptured: boolean }
   | { status: "error"; message: string };
 
 export function BookingForm({
@@ -159,10 +174,37 @@ export function BookingForm({
         body: JSON.stringify(payload),
       });
       const body = (await res.json()) as
-        | { ok: true; bookingId: string; reference: string }
+        | {
+            ok: true;
+            bookingId: string;
+            reference: string;
+            status: "confirmed" | "requested";
+            deposit?: {
+              kind: "payment_intent";
+              clientSecret: string;
+              amountMinor: number;
+            };
+          }
         | { error: string; issues?: string[] };
       if ("ok" in body && body.ok) {
-        setState({ status: "success", reference: body.reference, time: wallStart });
+        if (body.deposit) {
+          setState({
+            status: "deposit",
+            handoff: {
+              bookingId: body.bookingId,
+              reference: body.reference,
+              clientSecret: body.deposit.clientSecret,
+              amountMinor: body.deposit.amountMinor,
+            },
+          });
+          return;
+        }
+        setState({
+          status: "success",
+          reference: body.reference,
+          time: wallStart,
+          depositCaptured: false,
+        });
         return;
       }
       const message =
@@ -175,6 +217,24 @@ export function BookingForm({
     }
   }
 
+  if (state.status === "deposit") {
+    return (
+      <DepositStep
+        handoff={state.handoff}
+        date={date}
+        time={wallStart}
+        onPaid={() =>
+          setState({
+            status: "success",
+            reference: state.handoff.reference,
+            time: wallStart,
+            depositCaptured: true,
+          })
+        }
+      />
+    );
+  }
+
   if (state.status === "success") {
     return (
       <section className="flex flex-col gap-3 rounded-md border border-emerald-200 bg-emerald-50 p-6 text-emerald-900">
@@ -183,6 +243,11 @@ export function BookingForm({
           Your reference is <span className="font-mono font-semibold">{state.reference}</span>. We&apos;ve
           got you down for {state.time} on {date}, party of {partySize}.
         </p>
+        {state.depositCaptured ? (
+          <p className="text-sm">
+            Your deposit was taken — it&apos;ll be applied to your bill on the night.
+          </p>
+        ) : null}
       </section>
     );
   }
@@ -283,6 +348,122 @@ function errorMessage(code: string): string {
     default:
       return "Something went wrong. Try again.";
   }
+}
+
+// ---------------------------------------------------------------------------
+// Deposit step — mounted when the API returns a `deposit.clientSecret`.
+// We confirm the PaymentIntent client-side with Stripe Elements; 3DS
+// challenges happen in-browser via Stripe's own UI. The
+// payment_intent.succeeded webhook flips the booking to confirmed on
+// the server side; this component just drives the client interaction
+// and then moves the widget to the success screen.
+// ---------------------------------------------------------------------------
+
+// Module-level cache: loadStripe is a global-ish Promise.
+let stripePromise: Promise<Stripe | null> | null = null;
+function getStripe(): Promise<Stripe | null> {
+  if (stripePromise) return stripePromise;
+  const pk = process.env["NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY"];
+  if (!pk || pk.includes("YOUR_")) return Promise.resolve(null);
+  stripePromise = loadStripe(pk);
+  return stripePromise;
+}
+
+function DepositStep({
+  handoff,
+  date,
+  time,
+  onPaid,
+}: {
+  handoff: DepositHandoff;
+  date: string;
+  time: string;
+  onPaid: () => void;
+}) {
+  const stripe = useMemo(() => getStripe(), []);
+  return (
+    <section className="flex flex-col gap-4 rounded-md border border-neutral-200 p-6">
+      <header>
+        <h2 className="text-lg font-semibold tracking-tight text-neutral-900">Deposit required</h2>
+        <p className="text-sm text-neutral-500">
+          {time} on {date} · a {formatGbp(handoff.amountMinor)} deposit secures the table. It&apos;s
+          applied to your bill on the night.
+        </p>
+      </header>
+      <Elements
+        stripe={stripe}
+        options={{
+          clientSecret: handoff.clientSecret,
+          appearance: { theme: "stripe" },
+        }}
+      >
+        <DepositPaymentForm onPaid={onPaid} />
+      </Elements>
+    </section>
+  );
+}
+
+function DepositPaymentForm({ onPaid }: { onPaid: () => void }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [state, setState] = useState<
+    { status: "idle" } | { status: "confirming" } | { status: "error"; message: string }
+  >({ status: "idle" });
+
+  async function pay(e: FormEvent) {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+    setState({ status: "confirming" });
+
+    const result = await stripe.confirmPayment({
+      elements,
+      // Redirect only if the card requires a 3DS hop Stripe can't do
+      // inline. For cards that complete inline, `redirect: "if_required"`
+      // resolves without navigating and we drive the UI ourselves.
+      confirmParams: {
+        return_url: window.location.href,
+      },
+      redirect: "if_required",
+    });
+
+    if (result.error) {
+      setState({
+        status: "error",
+        message: result.error.message ?? "Payment failed. Try again.",
+      });
+      return;
+    }
+    // result.paymentIntent is present when redirect didn't happen.
+    if (result.paymentIntent?.status === "succeeded") {
+      onPaid();
+      return;
+    }
+    setState({
+      status: "error",
+      message: "Payment didn't complete. Please try again.",
+    });
+  }
+
+  return (
+    <form onSubmit={pay} className="flex flex-col gap-4">
+      <PaymentElement options={{ layout: "tabs" }} />
+      {state.status === "error" ? (
+        <p className="text-sm text-rose-600">{state.message}</p>
+      ) : null}
+      <button
+        type="submit"
+        disabled={!stripe || state.status === "confirming"}
+        className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-50"
+      >
+        {state.status === "confirming" ? "Processing…" : "Pay deposit"}
+      </button>
+    </form>
+  );
+}
+
+function formatGbp(minor: number): string {
+  const pounds = (minor / 100).toFixed(2).replace(/\.00$/, "");
+  return `£${pounds}`;
 }
 
 // Minimal hCaptcha loader. The `h-captcha` div auto-renders once the
