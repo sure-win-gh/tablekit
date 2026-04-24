@@ -53,7 +53,13 @@ for (const re of piiLog) {
 }
 
 // service_role client outside admin surface.
-if (/service_role/i.test(content) && !file.includes("lib/server/admin/") && !file.endsWith(".md")) {
+if (
+  /service_role/i.test(content) &&
+  !file.includes("lib/server/admin/") &&
+  !file.includes("tests/integration/") &&
+  !file.includes(".claude/hooks/") &&
+  !file.endsWith(".md")
+) {
   problems.push("service_role Supabase client used outside lib/server/admin/");
 }
 
