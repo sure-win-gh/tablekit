@@ -1,6 +1,22 @@
 @import "tailwindcss";
 
 /*
+ * Tailwind v4 auto-scans the whole project for class names by default.
+ * That includes directories with no Tailwind classes in them (plans,
+ * docs, migrations, test fixtures, agent / command markdown). On an
+ * iCloud-synced repo these files can be offloaded ("dataless"), and
+ * scanning them stalls the dev server when macOS has to fetch each
+ * one back from iCloud on demand. Skip them.
+ *
+ * Paths are relative to this CSS file (app/globals.css).
+ */
+@source not "../.claude";
+@source not "../docs";
+@source not "../drizzle";
+@source not "../tests";
+@source not "../scripts";
+
+/*
  * Light-only until we do a proper dark-mode design pass. Every
  * component today uses hard-coded light-scheme Tailwind classes
  * (text-neutral-900, bg-white, etc.) with no dark: variants, so
