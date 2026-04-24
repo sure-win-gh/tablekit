@@ -25,6 +25,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -224,5 +225,48 @@ export const services = pgTable(
   (t) => [
     index("services_venue_idx").on(t.venueId),
     index("services_org_idx").on(t.organisationId),
+  ],
+);
+
+// =============================================================================
+// Guests
+// =============================================================================
+//
+// Org-scoped. The guests-minimal phase ships only the columns bookings
+// needs:
+//   - first_name: plaintext for dashboard readability
+//   - <field>_cipher: AES-256-GCM via lib/security/crypto.ts
+//   - email_hash: HMAC-SHA256 lookup hash for `(org_id, email_hash)`
+//     uniqueness and silent upsert dedup
+//   - erased_at: plumbed so bookings can filter; DSAR scrub job lands
+//     with the `guests-dsar` phase
+//
+// DoB, notes, phone hash, marketing suppression state are added by the
+// features that need them.
+
+export const guests = pgTable(
+  "guests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    firstName: text("first_name").notNull(),
+    lastNameCipher: text("last_name_cipher").notNull(),
+    emailCipher: text("email_cipher").notNull(),
+    emailHash: text("email_hash").notNull(),
+    phoneCipher: text("phone_cipher"),
+    marketingConsentAt: timestamp("marketing_consent_at", { withTimezone: true }),
+    erasedAt: timestamp("erased_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Dedup key for upsert + the primary lookup path. Partial index so
+    // erased rows don't block a future re-signup under the same email.
+    uniqueIndex("guests_org_email_hash_unique")
+      .on(t.organisationId, t.emailHash)
+      .where(sql`${t.erasedAt} is null`),
+    index("guests_org_idx").on(t.organisationId),
   ],
 );

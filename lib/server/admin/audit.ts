@@ -28,6 +28,10 @@ export type AuditAction =
   | "venue.created"
   | "venue.updated"
   | "venue.deleted"
+  // guests-minimal phase
+  | "guest.created"
+  | "guest.reused"
+  | "guest.updated"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
@@ -35,7 +39,13 @@ export type AuditAction =
   | "mfa.enrolled"
   | "mfa.disabled";
 
-export type AuditTargetType = "user" | "membership" | "organisation" | "invitation" | "venue";
+export type AuditTargetType =
+  | "user"
+  | "membership"
+  | "organisation"
+  | "invitation"
+  | "venue"
+  | "guest";
 
 export type AuditInput = {
   organisationId: string;
