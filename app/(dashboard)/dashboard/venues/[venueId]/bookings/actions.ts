@@ -8,6 +8,7 @@ import { createBooking } from "@/lib/bookings/create";
 import { BOOKING_STATUSES, type BookingStatus } from "@/lib/bookings/state";
 import { transitionBooking } from "@/lib/bookings/transition";
 import { upsertGuestInput } from "@/lib/guests/schema";
+import { refundBooking } from "@/lib/payments/refunds";
 
 // Shape of the form post from /bookings/new. The guest fields feed
 // straight into lib/guests — no second Zod pass needed.
@@ -134,4 +135,59 @@ export async function transitionBookingAction(
 
   revalidatePath(`/dashboard/venues/${parsed.data.venueId}/bookings`);
   return { status: "done", from: r.from, to: r.to };
+}
+
+// ---------------------------------------------------------------------------
+// Refund (full) — operator-initiated. Partial refunds deferred to a
+// dedicated UI when there's a real demand; MVP is full-refund only.
+// ---------------------------------------------------------------------------
+
+const RefundForm = z.object({
+  venueId: z.uuid(),
+  bookingId: z.uuid(),
+  reason: z.string().min(3, "Reason must be at least 3 characters").max(200),
+});
+
+export type RefundActionState =
+  | { status: "idle" }
+  | { status: "error"; message: string }
+  | { status: "done"; refundId: string };
+
+export async function refundBookingAction(
+  _prev: RefundActionState,
+  formData: FormData,
+): Promise<RefundActionState> {
+  const { userId, orgId } = await requireRole("manager");
+
+  const parsed = RefundForm.safeParse({
+    venueId: formData.get("venueId"),
+    bookingId: formData.get("bookingId"),
+    reason: formData.get("reason"),
+  });
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: parsed.error.issues[0]?.message ?? "Check the refund form.",
+    };
+  }
+
+  const r = await refundBooking({
+    organisationId: orgId,
+    actorUserId: userId,
+    bookingId: parsed.data.bookingId,
+    reason: parsed.data.reason,
+  });
+  if (!r.ok) {
+    const message = {
+      "payments-disabled": "Payments are currently disabled.",
+      "no-connect-account": "Stripe isn't connected for this organisation.",
+      "no-deposit": "This booking doesn't have a succeeded deposit to refund.",
+      "booking-not-in-org": "Booking not found.",
+      "stripe-error": r.message ?? "Stripe error — try again in a minute.",
+    }[r.reason];
+    return { status: "error", message };
+  }
+
+  revalidatePath(`/dashboard/venues/${parsed.data.venueId}/bookings`);
+  return { status: "done", refundId: r.refundId };
 }
