@@ -260,6 +260,11 @@ export const guests = pgTable(
     emailCipher: text("email_cipher").notNull(),
     emailHash: text("email_hash").notNull(),
     phoneCipher: text("phone_cipher"),
+    // Stripe Customer id on the org's connected account (cus_*). Null
+    // until the guest's first payment flow. Reused across subsequent
+    // bookings so repeat guests don't clutter the operator's Stripe
+    // dashboard.
+    stripeCustomerId: text("stripe_customer_id"),
     marketingConsentAt: timestamp("marketing_consent_at", { withTimezone: true }),
     erasedAt: timestamp("erased_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -436,5 +441,101 @@ export const stripeEvents = pgTable(
     index("stripe_events_unhandled_idx")
       .on(t.receivedAt)
       .where(sql`${t.handledAt} is null`),
+  ],
+);
+
+// =============================================================================
+// Payments (payments-deposits phase)
+// =============================================================================
+//
+// `deposit_rules` — per-venue rules for when to require a deposit / card
+// hold. Resolver at lib/payments/rules.ts picks at most one rule per
+// booking using a documented priority order. `kind` is free text at the
+// Drizzle level; the migration pins it with a CHECK constraint so new
+// values can't sneak in.
+//
+// `payments` — one row per Stripe Intent we've created or observed.
+// Flows: 'deposit' (pi_*, charged at booking), 'hold' (seti_*, flow B
+// in the spec — Phase 2), 'no_show_capture' (pi_*, Phase 2), 'refund'
+// (re_*, negative amount, dashboard-initiated).
+//
+// The `stripe_intent_id` column stores a synthetic `pending_<bookingId>`
+// placeholder for the brief window between the DB transaction commit
+// and the out-of-transaction Stripe API call. The janitor sweeps any
+// placeholder still pending after 15 minutes.
+
+export const depositRules = pgTable(
+  "deposit_rules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Populated by enforce_deposit_rules_org_id from the parent venue.
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    // null = applies to all services in the venue.
+    serviceId: uuid("service_id").references(() => services.id, { onDelete: "cascade" }),
+    minParty: integer("min_party").notNull().default(1),
+    // null = no ceiling.
+    maxParty: integer("max_party"),
+    // 0 = Sunday … 6 = Saturday (matches JS Date.getDay()). Default is
+    // all days of the week.
+    dayOfWeek: integer("day_of_week")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[0,1,2,3,4,5,6]::integer[]`),
+    // 'per_cover' | 'flat' | 'card_hold' — constrained in the migration.
+    kind: text("kind").notNull(),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: char("currency", { length: 3 }).notNull().default("GBP"),
+    refundWindowHours: integer("refund_window_hours").notNull().default(24),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("deposit_rules_venue_idx").on(t.venueId),
+    index("deposit_rules_org_idx").on(t.organisationId),
+  ],
+);
+
+export const payments = pgTable(
+  "payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Populated by enforce_payments_org_id from the parent booking.
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    // 'deposit' | 'hold' | 'no_show_capture' | 'refund' — constrained
+    // in the migration.
+    kind: text("kind").notNull(),
+    // pi_* | seti_* | re_* in steady state; `pending_<bookingId>` in
+    // the brief window between transaction commit and successful Stripe
+    // call. Unique per row — the janitor never gets confused by ghosts.
+    stripeIntentId: text("stripe_intent_id").notNull().unique(),
+    // Denormalised pointer for convenience. Source of truth lives on
+    // guests.stripe_customer_id.
+    stripeCustomerId: text("stripe_customer_id"),
+    stripePaymentMethodId: text("stripe_payment_method_id"),
+    // Minor units. Negative for refunds.
+    amountMinor: integer("amount_minor").notNull(),
+    currency: char("currency", { length: 3 }).notNull(),
+    // Mirrors Stripe status verbatim: 'pending_creation',
+    // 'requires_payment_method', 'requires_action', 'succeeded',
+    // 'canceled', 'failed', etc.
+    status: text("status").notNull(),
+    failureCode: text("failure_code"),
+    failureMessage: text("failure_message"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("payments_booking_idx").on(t.bookingId),
+    index("payments_org_idx").on(t.organisationId),
   ],
 );

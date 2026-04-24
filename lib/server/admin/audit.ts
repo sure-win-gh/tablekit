@@ -40,6 +40,17 @@ export type AuditAction =
   | "stripe.account.updated"
   | "stripe.webhook.received"
   | "stripe.webhook.failed"
+  // payments-deposits phase
+  | "deposit_rule.created"
+  | "deposit_rule.updated"
+  | "deposit_rule.deleted"
+  | "stripe.intent.created"
+  | "stripe.intent.succeeded"
+  | "stripe.intent.failed"
+  | "stripe.refund.created"
+  | "stripe.refund.succeeded"
+  | "booking.deposit.requested"
+  | "booking.deposit.abandoned"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
@@ -55,7 +66,9 @@ export type AuditTargetType =
   | "venue"
   | "guest"
   | "booking"
-  | "stripe_account";
+  | "stripe_account"
+  | "deposit_rule"
+  | "payment";
 
 export type AuditInput = {
   organisationId: string;

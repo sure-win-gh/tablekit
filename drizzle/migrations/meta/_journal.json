@@ -57,6 +57,13 @@
       "when": 1777046638125,
       "tag": "0007_elite_lady_bullseye",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1777060012779,
+      "tag": "0008_motionless_luminals",
+      "breakpoints": true
     }
   ]
 }
