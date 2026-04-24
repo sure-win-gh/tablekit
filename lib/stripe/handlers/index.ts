@@ -3,5 +3,8 @@
 // map is populated.
 
 import "./account-updated";
+import "./payment-intent-succeeded";
+import "./payment-intent-failed";
+import "./charge-refunded";
 
 export {};
