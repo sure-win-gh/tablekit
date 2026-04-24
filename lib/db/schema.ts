@@ -113,7 +113,9 @@ export const auditLog = pgTable(
     }),
     action: text("action").notNull(),
     targetType: text("target_type"),
-    targetId: uuid("target_id"),
+    // Free-form external id — accepts our own UUIDs as well as Stripe
+    // `acct_*` / `pi_*` / `seti_*`, Twilio SIDs, Resend message ids, etc.
+    targetId: text("target_id"),
     metadata: jsonb("metadata")
       .notNull()
       .default(sql`'{}'::jsonb`),

@@ -50,6 +50,13 @@
       "when": 1777031072669,
       "tag": "0006_wet_tomas",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1777046638125,
+      "tag": "0007_elite_lady_bullseye",
+      "breakpoints": true
     }
   ]
 }

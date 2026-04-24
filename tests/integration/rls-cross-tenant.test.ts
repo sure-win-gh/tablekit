@@ -190,4 +190,20 @@ describe("RLS cross-tenant isolation", () => {
       ),
     ).rejects.toThrow();
   });
+
+  it("audit_log.target_id accepts non-UUID external ids (Stripe, Twilio, …)", async () => {
+    // Regression guard for migration 0007 — before widening target_id
+    // from uuid to text, logging a Stripe acct_* failed the insert with
+    // a cast error and blocked the Connect onboarding flow.
+    await expect(
+      audit.log({
+        organisationId: ctx.orgAId,
+        actorUserId: ctx.userAId,
+        action: "stripe.connect.started",
+        targetType: "stripe_account",
+        targetId: "acct_TEST_REGRESSION_1234567890",
+        metadata: { test: true },
+      }),
+    ).resolves.toBeUndefined();
+  });
 });

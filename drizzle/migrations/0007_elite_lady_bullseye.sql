@@ -1,0 +1,14 @@
+-- Widen audit_log.target_id from uuid to text.
+--
+-- Forward-only, non-destructive: text is a strict superset of the uuid
+-- text representation, existing rows are recast via the implicit
+-- uuid → text cast (canonical string form). No USING clause needed.
+-- Table is org-scoped + append-only; at MVP volumes the rewrite is
+-- near-instant.
+--
+-- Motivation: target_id must accept external identifiers that aren't
+-- UUIDs — Stripe `acct_*` / `pi_*` / `seti_*` / `re_*`, Twilio SIDs,
+-- Resend message ids. The previous uuid type caused
+-- stripe.connect.started to fail with a cast error the moment we
+-- tried to audit-log an account id.
+ALTER TABLE "audit_log" ALTER COLUMN "target_id" SET DATA TYPE text;
