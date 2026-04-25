@@ -29,9 +29,7 @@ describe("templateChannels", () => {
     expect(templateChannels("booking.reminder_2h")).toEqual(["sms"]);
     expect(templateChannels("booking.cancelled")).toEqual(["email"]);
     expect(templateChannels("booking.thank_you")).toEqual(["email"]);
-    // waitlist_ready: renderer ships with the waitlist phase — empty
-    // for now.
-    expect(templateChannels("booking.waitlist_ready")).toEqual([]);
+    expect(templateChannels("booking.waitlist_ready")).toEqual(["sms"]);
   });
 });
 
@@ -79,10 +77,18 @@ describe("renderForChannel", () => {
     });
   });
 
-  it("returns no-renderer for a template/channel combo that's not yet registered", async () => {
+  it("renders booking.waitlist_ready SMS body", async () => {
     const r = await renderForChannel("booking.waitlist_ready", "sms", ctx);
+    expect(r.kind).toBe("sms");
+    if (r.kind !== "sms") return;
+    expect(r.rendered.body).toContain("table for 2 is ready");
+    expect(r.rendered.body).toContain("STOP");
+    expect(r.rendered.body.length).toBeLessThanOrEqual(160);
+  });
+
+  it("returns no-renderer for a template/channel combo that's not registered", async () => {
+    // confirmation is email-only; SMS isn't registered for it.
+    const r = await renderForChannel("booking.confirmation", "sms", ctx);
     expect(r.kind).toBe("no-renderer");
-    const r2 = await renderForChannel("booking.confirmation", "sms", ctx);
-    expect(r2.kind).toBe("no-renderer");
   });
 });

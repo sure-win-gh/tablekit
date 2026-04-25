@@ -21,6 +21,7 @@ import { renderBookingConfirmation } from "@/lib/email/templates/booking-confirm
 import { renderBookingReminder24h } from "@/lib/email/templates/booking-reminder-24h";
 import { renderBookingThankYou } from "@/lib/email/templates/booking-thank-you";
 import { renderBookingReminder2h } from "@/lib/sms/templates/booking-reminder-2h";
+import { renderBookingWaitlistReady } from "@/lib/sms/templates/booking-waitlist-ready";
 
 export type MessageChannel = "email" | "sms";
 
@@ -46,10 +47,7 @@ const TEMPLATE_REGISTRY: Record<MessageTemplate, RegistryEntry> = {
   "booking.reminder_2h": { sms: renderBookingReminder2h },
   "booking.cancelled": { email: renderBookingCancelled },
   "booking.thank_you": { email: renderBookingThankYou },
-  // waitlist.ready ships with the waitlist phase. Stub so the type
-  // map is exhaustive; dispatch will treat absence of renderers as
-  // "skip — no renderer registered yet".
-  "booking.waitlist_ready": {},
+  "booking.waitlist_ready": { sms: renderBookingWaitlistReady },
 };
 
 // Channels a given template currently supports. Inline triggers
