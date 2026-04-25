@@ -86,27 +86,36 @@ export default async function BookingsPage({
       .orderBy(asc(bookings.startAt));
   });
 
-  // Find bookings on this page with a succeeded deposit — those are
-  // the ones that can be refunded. One small query rather than a
-  // bookings × payments join so the main list shape stays clean.
+  // Single query for all the payment-shape signals the row needs:
+  //   * refundable        — has a succeeded deposit
+  //   * hasCardHold       — has a succeeded card-hold (flow B booking)
+  //   * noShowOutcome     — 'captured' | 'failed' | undefined for the
+  //                          no-show capture row, if any
   const bookingIds = rows.map((r) => r.id);
-  const refundableSet = new Set<string>(
+  const paymentRows =
     bookingIds.length === 0
       ? []
       : await withUser(async (db) =>
           db
-            .select({ bookingId: payments.bookingId })
+            .select({
+              bookingId: payments.bookingId,
+              kind: payments.kind,
+              status: payments.status,
+            })
             .from(payments)
-            .where(
-              and(
-                inArray(payments.bookingId, bookingIds),
-                eq(payments.kind, "deposit"),
-                eq(payments.status, "succeeded"),
-              ),
-            )
-            .then((rs) => rs.map((r) => r.bookingId)),
-        ),
-  );
+            .where(inArray(payments.bookingId, bookingIds)),
+        );
+
+  const refundableSet = new Set<string>();
+  const cardHoldSet = new Set<string>();
+  const noShowOutcomes = new Map<string, "captured" | "failed">();
+  for (const p of paymentRows) {
+    if (p.kind === "deposit" && p.status === "succeeded") refundableSet.add(p.bookingId);
+    if (p.kind === "hold" && p.status === "succeeded") cardHoldSet.add(p.bookingId);
+    if (p.kind === "no_show_capture") {
+      noShowOutcomes.set(p.bookingId, p.status === "succeeded" ? "captured" : "failed");
+    }
+  }
 
   // Group by service for the day view (lunch / dinner etc.). Empty
   // groups are hidden.
@@ -164,6 +173,8 @@ export default async function BookingsPage({
                     guestFirstName={b.guestFirstName}
                     notes={b.notes}
                     refundable={refundableSet.has(b.id)}
+                    cardHold={cardHoldSet.has(b.id)}
+                    noShowOutcome={noShowOutcomes.get(b.id) ?? null}
                   />
                 ))}
               </ul>

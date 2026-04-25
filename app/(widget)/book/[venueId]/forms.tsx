@@ -265,8 +265,7 @@ export function BookingForm({
         {state.paymentKind === "setup_intent" ? (
           <p className="text-sm">
             Your card is on file. We won&apos;t charge it unless you don&apos;t turn up — in which
-            case {state.amountMinor ? formatGbp(state.amountMinor) : "a no-show fee"} will be
-            taken.
+            case {state.amountMinor ? formatGbp(state.amountMinor) : "a no-show fee"} will be taken.
           </p>
         ) : null}
       </section>
@@ -505,11 +504,7 @@ function DepositPaymentForm({
         disabled={!stripe || state.status === "confirming"}
         className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-50"
       >
-        {state.status === "confirming"
-          ? "Processing…"
-          : isHold
-            ? "Save card"
-            : "Pay deposit"}
+        {state.status === "confirming" ? "Processing…" : isHold ? "Save card" : "Pay deposit"}
       </button>
     </form>
   );

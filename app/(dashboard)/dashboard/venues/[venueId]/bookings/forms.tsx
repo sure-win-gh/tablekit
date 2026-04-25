@@ -50,6 +50,8 @@ export function BookingRow({
   guestFirstName,
   notes,
   refundable,
+  cardHold,
+  noShowOutcome,
 }: {
   venueId: string;
   bookingId: string;
@@ -61,6 +63,8 @@ export function BookingRow({
   guestFirstName: string;
   notes: string | null;
   refundable: boolean;
+  cardHold: boolean;
+  noShowOutcome: "captured" | "failed" | null;
 }) {
   return (
     <li className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -81,6 +85,21 @@ export function BookingRow({
         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_TINT[status]}`}>
           {STATUS_LABEL[status]}
         </span>
+        {cardHold && !noShowOutcome ? (
+          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">
+            Card on file
+          </span>
+        ) : null}
+        {noShowOutcome === "captured" ? (
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+            No-show charged
+          </span>
+        ) : null}
+        {noShowOutcome === "failed" ? (
+          <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-800">
+            Capture failed
+          </span>
+        ) : null}
         {actions.map((to) => (
           <TransitionButton
             key={to}

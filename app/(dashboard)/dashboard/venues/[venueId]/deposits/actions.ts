@@ -38,7 +38,7 @@ async function assertChargesEnabled(orgId: string): Promise<void> {
 // Create
 // ---------------------------------------------------------------------------
 
-const KIND = ["per_cover", "flat"] as const; // card_hold is Phase 2
+const KIND = ["per_cover", "flat", "card_hold"] as const;
 const DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 
 const CreateBody = z.object({

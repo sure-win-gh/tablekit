@@ -63,8 +63,9 @@ export function NewDepositRuleForm({
             defaultValue="per_cover"
             className="rounded-md border border-neutral-300 px-2 py-1 text-neutral-900"
           >
-            <option value="per_cover">Per cover</option>
-            <option value="flat">Flat</option>
+            <option value="per_cover">Per cover (deposit)</option>
+            <option value="flat">Flat (deposit)</option>
+            <option value="card_hold">Card hold (charge on no-show)</option>
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm">
@@ -175,7 +176,9 @@ export function DepositRuleRow({
         <span className="font-medium text-neutral-900">
           {rule.kind === "per_cover"
             ? `£${(rule.amountMinor / 100).toFixed(2)} per cover`
-            : `£${(rule.amountMinor / 100).toFixed(2)} flat`}
+            : rule.kind === "card_hold"
+              ? `£${(rule.amountMinor / 100).toFixed(2)} card hold`
+              : `£${(rule.amountMinor / 100).toFixed(2)} flat`}
           {" · "}
           {serviceName ?? "All services"}
         </span>
