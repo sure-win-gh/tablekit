@@ -32,6 +32,7 @@ import {
   venueTables,
   venues,
 } from "@/lib/db/schema";
+import { onBookingConfirmed } from "@/lib/messaging/triggers";
 import { CardHoldIntentError, createCardHoldIntent } from "@/lib/payments/holds";
 import { createDepositIntent, DepositIntentError } from "@/lib/payments/intents";
 import { type DepositRule, resolveRule } from "@/lib/payments/rules";
@@ -321,6 +322,14 @@ export async function createBooking(
 
   // If no deposit required, we're done — caller sees a confirmed booking.
   if (!depositReq || !placeholderPaymentId) {
+    // Fire confirmation email + schedule reminders. Wrapped so a
+    // messaging failure never breaks booking creation.
+    void onBookingConfirmed({ organisationId, bookingId }).catch((err) => {
+      console.error("[lib/bookings/create.ts] onBookingConfirmed failed:", {
+        bookingId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
     return {
       ok: true,
       bookingId,

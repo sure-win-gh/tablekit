@@ -19,6 +19,7 @@ import type Stripe from "stripe";
 import { eq, sql } from "drizzle-orm";
 
 import { bookingEvents, bookings, payments } from "@/lib/db/schema";
+import { onBookingConfirmed } from "@/lib/messaging/triggers";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 
@@ -105,6 +106,16 @@ async function handleSetupIntentSucceeded(event: Stripe.Event): Promise<void> {
       customerId,
       paymentMethodId,
     },
+  });
+
+  void onBookingConfirmed({
+    organisationId: payment.organisationId,
+    bookingId: payment.bookingId,
+  }).catch((err) => {
+    console.error("[lib/stripe/handlers/setup-intent-succeeded.ts] onBookingConfirmed failed:", {
+      bookingId: payment.bookingId,
+      message: err instanceof Error ? err.message : String(err),
+    });
   });
 }
 

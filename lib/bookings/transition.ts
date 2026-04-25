@@ -13,6 +13,7 @@ import "server-only";
 import { and, eq } from "drizzle-orm";
 
 import { bookingEvents, bookings } from "@/lib/db/schema";
+import { onBookingCancelled, onBookingFinished } from "@/lib/messaging/triggers";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 
@@ -83,6 +84,24 @@ export async function transitionBooking(
         ...(options?.cancelledReason ? { cancelledReason: options.cancelledReason } : {}),
       },
     });
+
+    // Fire messaging triggers. Wrapped so a messaging failure can
+    // never roll back the transition the operator just made.
+    if (to === "cancelled") {
+      void onBookingCancelled({ organisationId, bookingId }).catch((err) => {
+        console.error("[lib/bookings/transition.ts] onBookingCancelled failed:", {
+          bookingId,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+    } else if (to === "finished") {
+      void onBookingFinished({ organisationId, bookingId }).catch((err) => {
+        console.error("[lib/bookings/transition.ts] onBookingFinished failed:", {
+          bookingId,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
 
     return { ok: true, from, to };
   });

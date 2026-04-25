@@ -19,6 +19,7 @@ import type Stripe from "stripe";
 import { eq, sql } from "drizzle-orm";
 
 import { bookingEvents, bookings, payments } from "@/lib/db/schema";
+import { onBookingConfirmed } from "@/lib/messaging/triggers";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 
@@ -101,6 +102,19 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
     targetType: "payment",
     targetId: payment.id,
     metadata: { intentId: pi.id, bookingId: payment.bookingId, kind: payment.kind },
+  });
+
+  // Fire confirmation messaging now that the booking is confirmed.
+  // Wrapped so a messaging hiccup doesn't prevent the webhook from
+  // returning 200 (Stripe would otherwise retry).
+  void onBookingConfirmed({
+    organisationId: payment.organisationId,
+    bookingId: payment.bookingId,
+  }).catch((err) => {
+    console.error("[lib/stripe/handlers/payment-intent-succeeded.ts] onBookingConfirmed failed:", {
+      bookingId: payment.bookingId,
+      message: err instanceof Error ? err.message : String(err),
+    });
   });
 }
 

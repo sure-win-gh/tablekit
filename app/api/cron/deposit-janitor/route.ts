@@ -16,6 +16,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 
+import { processNextBatch } from "@/lib/messaging/dispatch";
 import { sweepAbandonedDeposits } from "@/lib/payments/janitor";
 import { sweepDueNoShowCaptures } from "@/lib/payments/no-show";
 
@@ -34,9 +35,13 @@ export async function GET(req: NextRequest) {
 
   const janitor = await sweepAbandonedDeposits();
   const noShow = await sweepDueNoShowCaptures();
+  // Drain whatever messaging work is due. 200 rows is a generous cap;
+  // each send is ~500ms, well under Vercel's function timeout.
+  const messages = await processNextBatch({ limit: 200 });
   return NextResponse.json({
     ok: true,
     abandonment: janitor,
     noShow,
+    messages,
   });
 }
