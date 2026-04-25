@@ -42,10 +42,7 @@ export function signUnsubscribe(p: UnsubscribePayload): { p: string; s: string }
   return { p: encoded, s: hashForLookup(encoded, "raw") };
 }
 
-export function verifyUnsubscribe(
-  pEncoded: string,
-  sigHex: string,
-): UnsubscribePayload | null {
+export function verifyUnsubscribe(pEncoded: string, sigHex: string): UnsubscribePayload | null {
   const expected = hashForLookup(pEncoded, "raw");
   if (!constantTimeEqual(expected, sigHex)) return null;
   return decodePayload(pEncoded);
