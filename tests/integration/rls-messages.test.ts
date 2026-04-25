@@ -123,7 +123,7 @@ beforeAll(async () => {
         startAt: new Date("2026-09-01T12:00:00Z"),
         endAt: new Date("2026-09-01T13:00:00Z"),
         status: "confirmed",
-        source: "test",
+        source: "host",
       })
       .returning({ id: schema.bookings.id });
     return b!.id;
