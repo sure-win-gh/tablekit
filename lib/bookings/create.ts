@@ -32,6 +32,7 @@ import {
   venueTables,
   venues,
 } from "@/lib/db/schema";
+import { CardHoldIntentError, createCardHoldIntent } from "@/lib/payments/holds";
 import { createDepositIntent, DepositIntentError } from "@/lib/payments/intents";
 import { type DepositRule, resolveRule } from "@/lib/payments/rules";
 import { audit } from "@/lib/server/admin/audit";
@@ -55,16 +56,26 @@ export type CreateBookingInput = {
   source: BookingSource;
 };
 
-export type DepositResponse = {
-  kind: "payment_intent";
-  clientSecret: string;
-  amountMinor: number;
-  // Connect Standard direct charges live on the connected account.
-  // Stripe.js needs this on its instance so the Payment Element can
-  // resolve the Intent — without it the Element load-errors with an
-  // empty "{}" message.
-  stripeAccount: string;
-};
+export type DepositResponse =
+  | {
+      kind: "payment_intent";
+      clientSecret: string;
+      amountMinor: number;
+      // Connect Standard direct charges live on the connected account.
+      // Stripe.js needs this on its instance so the Payment Element can
+      // resolve the Intent — without it the Element load-errors with an
+      // empty "{}" message.
+      stripeAccount: string;
+    }
+  | {
+      kind: "setup_intent";
+      clientSecret: string;
+      // The amount we'll capture if the booking becomes a no-show. Shown
+      // in the widget so the guest knows what the card is being held
+      // against — no money moves at booking time.
+      amountMinor: number;
+      stripeAccount: string;
+    };
 
 export type CreateBookingResult =
   | {
@@ -82,12 +93,14 @@ export type CreateBookingResult =
   | { ok: false; reason: "venue-not-found" }
   | { ok: false; reason: "deposit-failed"; bookingId: string };
 
-// A deposit is required only on widget-sourced bookings (host / api /
-// rwg flows have no UI to collect card details on MVP), when Stripe is
-// configured, when the org has a Connect account with charges_enabled,
-// and when a matching `deposit_rules` row resolves for the booking
-// context. Card-hold rules (flow B) are deferred to the follow-on
-// `payments-card-hold` phase — skipped here.
+// A deposit / card-hold is required only on widget-sourced bookings
+// (host / api / rwg flows have no UI to collect card details on MVP),
+// when Stripe is configured, when the org has a Connect account with
+// charges_enabled, and when a matching `deposit_rules` row resolves
+// for the booking context. The kind ('per_cover' / 'flat' / 'card_hold')
+// is decided downstream — flow A (deposit) charges at booking time;
+// flow B (card_hold) stores the card via SetupIntent and only captures
+// on no-show.
 async function resolveDepositRequirement(
   organisationId: string,
   input: CreateBookingInput,
@@ -106,7 +119,6 @@ async function resolveDepositRequirement(
     at: startAt,
   });
   if (!rule) return null;
-  if (rule.kind === "card_hold") return null; // flow B — phase 2
 
   return { rule, stripeAccountId: account.accountId };
 }
@@ -264,12 +276,13 @@ export async function createBooking(
       // 15min) if the call fails.
       let paymentId: string | null = null;
       if (depositReq) {
+        const placeholderKind = depositReq.rule.kind === "card_hold" ? "hold" : "deposit";
         const [p] = await tx
           .insert(payments)
           .values({
             organisationId,
             bookingId: inserted.id,
-            kind: "deposit",
+            kind: placeholderKind,
             stripeIntentId: `pending_${inserted.id}`,
             amountMinor: 0, // filled in once we know partySize-based total
             currency: depositReq.rule.currency,
@@ -318,9 +331,36 @@ export async function createBooking(
     };
   }
 
-  // Deposit required. Stripe call is out-of-transaction; if it fails
-  // the booking + placeholder row remain for the janitor to sweep.
+  // Deposit / card-hold required. Stripe call is out-of-transaction;
+  // if it fails the booking + placeholder row remain for the janitor
+  // to sweep.
+  const isHold = depositReq.rule.kind === "card_hold";
   try {
+    if (isHold) {
+      const setup = await createCardHoldIntent({
+        organisationId,
+        bookingId,
+        paymentId: placeholderPaymentId,
+        guestId: guestR.guestId,
+        partySize: input.partySize,
+        rule: depositReq.rule,
+        stripeAccountId: depositReq.stripeAccountId,
+      });
+      return {
+        ok: true,
+        bookingId,
+        guestId: guestR.guestId,
+        guestReused: guestR.reused,
+        tableIds: option.tableIds,
+        status: "requested",
+        deposit: {
+          kind: "setup_intent",
+          clientSecret: setup.clientSecret,
+          amountMinor: setup.amountMinor,
+          stripeAccount: depositReq.stripeAccountId,
+        },
+      };
+    }
     const intent = await createDepositIntent({
       organisationId,
       bookingId,
@@ -347,20 +387,27 @@ export async function createBooking(
   } catch (err) {
     // Don't leak the raw error to the client — it may contain Stripe
     // diagnostic text. Audit + let the janitor handle cleanup.
-    console.error("[lib/bookings/create.ts] deposit intent creation failed:", {
+    console.error("[lib/bookings/create.ts] intent creation failed:", {
       bookingId,
       paymentId: placeholderPaymentId,
-      message: err instanceof DepositIntentError ? err.message : String(err),
+      isHold,
+      message:
+        err instanceof DepositIntentError || err instanceof CardHoldIntentError
+          ? err.message
+          : String(err),
     });
     await audit.log({
       organisationId,
       actorUserId,
-      action: "stripe.intent.failed",
+      action: isHold ? "stripe.setup_intent.failed" : "stripe.intent.failed",
       targetType: "payment",
       targetId: placeholderPaymentId,
       metadata: {
         bookingId,
-        reason: err instanceof DepositIntentError ? err.code : "unknown",
+        reason:
+          err instanceof DepositIntentError || err instanceof CardHoldIntentError
+            ? err.code
+            : "unknown",
       },
     });
     return { ok: false, reason: "deposit-failed", bookingId };

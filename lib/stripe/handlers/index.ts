@@ -6,5 +6,7 @@ import "./account-updated";
 import "./payment-intent-succeeded";
 import "./payment-intent-failed";
 import "./charge-refunded";
+import "./setup-intent-succeeded";
+import "./setup-intent-failed";
 
 export {};

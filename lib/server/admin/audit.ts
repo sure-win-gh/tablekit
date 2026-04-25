@@ -51,6 +51,13 @@ export type AuditAction =
   | "stripe.refund.succeeded"
   | "booking.deposit.requested"
   | "booking.deposit.abandoned"
+  // payments-card-hold phase (phase 2 — flow B)
+  | "stripe.setup_intent.created"
+  | "stripe.setup_intent.succeeded"
+  | "stripe.setup_intent.failed"
+  | "stripe.no_show_capture.succeeded"
+  | "stripe.no_show_capture.failed"
+  | "booking.no_show.captured"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
