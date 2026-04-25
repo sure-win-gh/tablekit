@@ -1,7 +1,7 @@
 # Spec: Walk-ins and waitlist
 
-**Status:** draft
-**Depends on:** `bookings.md`
+**Status:** shipped — schema + add/seat/cancel domain helpers + dashboard tab + waitlist_ready SMS template all live.
+**Depends on:** `bookings.md`, `messaging.md`
 
 ## What we're building
 
