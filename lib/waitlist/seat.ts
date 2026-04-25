@@ -15,7 +15,14 @@ import "server-only";
 
 import { and, eq, sql } from "drizzle-orm";
 
-import { bookingEvents, bookingTables, bookings, services, venueTables, waitlists } from "@/lib/db/schema";
+import {
+  bookingEvents,
+  bookingTables,
+  bookings,
+  services,
+  venueTables,
+  waitlists,
+} from "@/lib/db/schema";
 import { enqueueMessage } from "@/lib/messaging/enqueue";
 import { processNextBatch } from "@/lib/messaging/dispatch";
 import { audit } from "@/lib/server/admin/audit";
@@ -23,7 +30,10 @@ import { adminDb } from "@/lib/server/admin/db";
 
 export type SeatWaitlistResult =
   | { ok: true; bookingId: string }
-  | { ok: false; reason: "not-found" | "wrong-status" | "no-service" | "table-not-in-venue" | "slot-taken" };
+  | {
+      ok: false;
+      reason: "not-found" | "wrong-status" | "no-service" | "table-not-in-venue" | "slot-taken";
+    };
 
 export async function seatWaitlist(
   organisationId: string,
