@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lt } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lt } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -11,7 +11,7 @@ import {
 } from "@/lib/bookings/time";
 import { nextActions, type BookingStatus } from "@/lib/bookings/state";
 import { withUser } from "@/lib/db/client";
-import { bookings, guests, services, venues } from "@/lib/db/schema";
+import { bookings, guests, payments, services, venues } from "@/lib/db/schema";
 
 import { BookingRow } from "./forms";
 
@@ -72,6 +72,28 @@ export default async function BookingsPage({
       .orderBy(asc(bookings.startAt));
   });
 
+  // Find bookings on this page with a succeeded deposit — those are
+  // the ones that can be refunded. One small query rather than a
+  // bookings × payments join so the main list shape stays clean.
+  const bookingIds = rows.map((r) => r.id);
+  const refundableSet = new Set<string>(
+    bookingIds.length === 0
+      ? []
+      : await withUser(async (db) =>
+          db
+            .select({ bookingId: payments.bookingId })
+            .from(payments)
+            .where(
+              and(
+                inArray(payments.bookingId, bookingIds),
+                eq(payments.kind, "deposit"),
+                eq(payments.status, "succeeded"),
+              ),
+            )
+            .then((rs) => rs.map((r) => r.bookingId)),
+        ),
+  );
+
   // Group by service for the day view (lunch / dinner etc.). Empty
   // groups are hidden.
   const byService = new Map<string, typeof rows>();
@@ -124,6 +146,7 @@ export default async function BookingsPage({
                     actions={nextActions(b.status as BookingStatus)}
                     guestFirstName={b.guestFirstName}
                     notes={b.notes}
+                    refundable={refundableSet.has(b.id)}
                   />
                 ))}
               </ul>
