@@ -12,7 +12,7 @@ This folder holds the source of truth for every feature. Claude should read the 
 | 4 | [`widget.md`](widget.md)     | draft  | Embeddable widget + hosted booking link |
 | 5 | [`payments.md`](payments.md) | draft  | Deposits, Stripe Connect, no-show capture — charter |
 | 5a| [`payments-deposits.md`](payments-deposits.md) | shipped | Deposits + card hold + refunds + no-show capture (flows A/B/C) |
-| 6 | [`messaging.md`](messaging.md) | draft | Email + SMS transactional flow |
+| 6 | [`messaging.md`](messaging.md) | shipped | Email + SMS transactional flow (waitlist_ready ships with waitlist) |
 | 7 | [`guests.md`](guests.md)     | draft  | Guest profiles, CRM basics, tags |
 | 8 | [`waitlist.md`](waitlist.md) | draft  | Walk-in + waitlist |
 | 9 | [`reserve-with-google.md`](reserve-with-google.md) | draft | RWG integration |

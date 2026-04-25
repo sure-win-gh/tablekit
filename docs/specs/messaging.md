@@ -1,6 +1,6 @@
 # Spec: Transactional email + SMS
 
-**Status:** draft
+**Status:** shipped — confirmation + 24h reminder + cancelled + thank_you (email) and reminder_2h (SMS) live; waitlist_ready ships with the waitlist phase.
 **Depends on:** `bookings.md`
 
 ## What we're building
