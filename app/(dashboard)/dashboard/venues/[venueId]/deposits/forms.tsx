@@ -2,7 +2,8 @@
 
 import { useActionState } from "react";
 
-import { createDepositRule, deleteDepositRule, type ActionState } from "./actions";
+import { createDepositRule, deleteDepositRule } from "./actions";
+import type { ActionState } from "./types";
 
 type ServiceOption = { id: string; name: string };
 

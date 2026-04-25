@@ -9,7 +9,7 @@ import { depositRules, venues, stripeAccounts } from "@/lib/db/schema";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 
-type ActionState = { status: "idle" } | { status: "error"; message: string } | { status: "saved" };
+import type { ActionState } from "./types";
 
 async function assertVenueInOrg(venueId: string, orgId: string): Promise<void> {
   const rows = await adminDb()
@@ -169,5 +169,3 @@ export async function deleteDepositRule(
   revalidatePath(`/dashboard/venues/${parsed.data.venueId}/deposits`);
   return { status: "saved" };
 }
-
-export type { ActionState };
