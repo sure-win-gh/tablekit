@@ -12,6 +12,7 @@ import {
 import { nextActions, type BookingStatus } from "@/lib/bookings/state";
 import { withUser } from "@/lib/db/client";
 import { bookings, guests, payments, services, venues } from "@/lib/db/schema";
+import { sweepDueNoShowCaptures } from "@/lib/payments/no-show";
 
 import { BookingRow, DateNav } from "./forms";
 
@@ -46,6 +47,19 @@ export default async function BookingsPage({
 
   const date = dateParam ?? todayInZone(venue.timezone);
   const { startUtc, endUtc } = venueLocalDayRange(date, venue.timezone);
+
+  // Best-effort no-show sweep for this venue. Runs on every page load
+  // so during-service traffic captures abandoned holds in near-real-
+  // time (Vercel Hobby cron is once-daily — see vercel.json). Failures
+  // log + continue so the operator's bookings view never blocks.
+  try {
+    await sweepDueNoShowCaptures({ venueId });
+  } catch (err) {
+    console.error("[dashboard/bookings] inline no-show sweep failed:", {
+      venueId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   const rows = await withUser(async (db) => {
     return db

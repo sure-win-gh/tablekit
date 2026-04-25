@@ -1,13 +1,23 @@
-// Vercel Cron entry point for the deposit-abandonment janitor.
+// Vercel Cron entry point for nightly payments maintenance.
 //
-// Scheduled at */5 * * * * by vercel.json. Vercel Cron invokes this
-// route with an `Authorization: Bearer ${CRON_SECRET}` header — we
-// refuse any call without a matching secret so nobody can poke the
-// endpoint manually to trigger sweeps.
+// Scheduled at 0 3 * * * by vercel.json (Hobby tier caps cron freq at
+// once per day). The route name is historical — it now does two jobs
+// in sequence, both idempotent + safe to run together:
+//
+//   1. Deposit-abandonment janitor — cancels stuck `requested`
+//      bookings + their PaymentIntents (flow A).
+//   2. No-show capture sweeper — charges card-hold deposits that
+//      didn't seat by start_at + 30min (flow B).
+//
+// Both are also driven inline at the start of POST /api/v1/bookings
+// (janitor, venue-scoped) and on the bookings list page load
+// (no-show, venue-scoped) for near-real-time during operating hours.
+// This route is the unconditional backstop.
 
 import { NextResponse, type NextRequest } from "next/server";
 
 import { sweepAbandonedDeposits } from "@/lib/payments/janitor";
+import { sweepDueNoShowCaptures } from "@/lib/payments/no-show";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,6 +32,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorised" }, { status: 401 });
   }
 
-  const result = await sweepAbandonedDeposits();
-  return NextResponse.json({ ok: true, ...result });
+  const janitor = await sweepAbandonedDeposits();
+  const noShow = await sweepDueNoShowCaptures();
+  return NextResponse.json({
+    ok: true,
+    abandonment: janitor,
+    noShow,
+  });
 }
