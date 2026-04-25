@@ -34,10 +34,7 @@ test.describe("bookings flow", () => {
   let venueId: string | null = null;
 
   test.beforeAll(async () => {
-    test.skip(
-      !SUPABASE_URL || !SERVICE_ROLE_KEY || !DATABASE_URL,
-      "Supabase/DB env not set",
-    );
+    test.skip(!SUPABASE_URL || !SERVICE_ROLE_KEY || !DATABASE_URL, "Supabase/DB env not set");
 
     const admin = createClient(SUPABASE_URL!, SERVICE_ROLE_KEY!, {
       auth: { autoRefreshToken: false, persistSession: false },

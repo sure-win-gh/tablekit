@@ -41,9 +41,7 @@ export type RefundBookingResult =
       message?: string;
     };
 
-export async function refundBooking(
-  input: RefundBookingInput,
-): Promise<RefundBookingResult> {
+export async function refundBooking(input: RefundBookingInput): Promise<RefundBookingResult> {
   if (paymentsDisabled()) return { ok: false, reason: "payments-disabled" };
 
   const db = adminDb();
@@ -98,7 +96,8 @@ export async function refundBooking(
       status: "pending_creation",
     })
     .returning({ id: payments.id });
-  if (!placeholder) return { ok: false, reason: "stripe-error", message: "Failed to record refund" };
+  if (!placeholder)
+    return { ok: false, reason: "stripe-error", message: "Failed to record refund" };
 
   try {
     const refund = await stripe().refunds.create(

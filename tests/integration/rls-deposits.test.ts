@@ -322,7 +322,10 @@ describe("enforce_*_org_id triggers", () => {
         kind: "per_cover",
         amountMinor: 500,
       })
-      .returning({ id: schema.depositRules.id, organisationId: schema.depositRules.organisationId });
+      .returning({
+        id: schema.depositRules.id,
+        organisationId: schema.depositRules.organisationId,
+      });
     expect(row?.organisationId).toBe(ctx.orgAId);
     await db.delete(schema.depositRules).where(eq(schema.depositRules.id, row!.id));
   });

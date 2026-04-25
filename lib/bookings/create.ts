@@ -32,10 +32,7 @@ import {
   venueTables,
   venues,
 } from "@/lib/db/schema";
-import {
-  createDepositIntent,
-  DepositIntentError,
-} from "@/lib/payments/intents";
+import { createDepositIntent, DepositIntentError } from "@/lib/payments/intents";
 import { type DepositRule, resolveRule } from "@/lib/payments/rules";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";

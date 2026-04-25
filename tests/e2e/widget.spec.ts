@@ -99,7 +99,10 @@ test.describe("widget flow", () => {
     // Treat both as acceptable terminal states for this smoke — the
     // integration test exercises the no-captcha path directly.
     const terminal = await Promise.race([
-      page.getByText(/You're booked/).waitFor({ timeout: 10_000 }).then(() => "booked" as const),
+      page
+        .getByText(/You're booked/)
+        .waitFor({ timeout: 10_000 })
+        .then(() => "booked" as const),
       page
         .getByText(/Couldn't verify the captcha|Something went wrong|Too many requests/)
         .waitFor({ timeout: 10_000 })

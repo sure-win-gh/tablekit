@@ -40,10 +40,7 @@ test.describe("stripe connect onboarding", () => {
   let orgId: string | null = null;
 
   test.beforeAll(async () => {
-    test.skip(
-      !SUPABASE_URL || !SERVICE_ROLE_KEY || !DATABASE_URL,
-      "Supabase/DB env not set",
-    );
+    test.skip(!SUPABASE_URL || !SERVICE_ROLE_KEY || !DATABASE_URL, "Supabase/DB env not set");
     test.skip(!stripeConfigured(), "STRIPE_SECRET_KEY not configured (placeholder)");
 
     const admin = createClient(SUPABASE_URL!, SERVICE_ROLE_KEY!, {

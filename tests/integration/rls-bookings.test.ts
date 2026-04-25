@@ -155,11 +155,23 @@ beforeAll(async () => {
   };
   const [svcA] = await db
     .insert(schema.services)
-    .values({ organisationId: orgA.id, venueId: venueA.id, name: "Open", schedule, turnMinutes: 45 })
+    .values({
+      organisationId: orgA.id,
+      venueId: venueA.id,
+      name: "Open",
+      schedule,
+      turnMinutes: 45,
+    })
     .returning({ id: schema.services.id });
   const [svcB] = await db
     .insert(schema.services)
-    .values({ organisationId: orgB.id, venueId: venueB.id, name: "Open", schedule, turnMinutes: 45 })
+    .values({
+      organisationId: orgB.id,
+      venueId: venueB.id,
+      name: "Open",
+      schedule,
+      turnMinutes: 45,
+    })
     .returning({ id: schema.services.id });
   if (!svcA || !svcB) throw new Error("service insert returned no row");
 

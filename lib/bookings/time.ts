@@ -16,11 +16,7 @@ export type VenueTimeContext = {
 
 // Wall-clock "YYYY-MM-DD" + "HH:MM" in the venue's zone → UTC Date.
 // Handles BST/GMT and every other IANA zone.
-export function zonedWallToUtc(
-  dateYMD: string,
-  wallHHMM: string,
-  timezone: string,
-): Date {
+export function zonedWallToUtc(dateYMD: string, wallHHMM: string, timezone: string): Date {
   const [hour = "00", minute = "00"] = wallHHMM.split(":");
   return fromZonedTime(
     `${dateYMD}T${hour.padStart(2, "0")}:${minute.padStart(2, "0")}:00`,
@@ -58,10 +54,7 @@ export function formatVenueTime(instantUtc: Date, ctx: VenueTimeContext): string
   return formatInTimeZone(instantUtc, ctx.timezone, "HH:mm");
 }
 
-export function formatVenueDateLong(
-  instantUtc: Date,
-  ctx: VenueTimeContext,
-): string {
+export function formatVenueDateLong(instantUtc: Date, ctx: VenueTimeContext): string {
   return formatInTimeZone(instantUtc, ctx.timezone, "EEEE d LLLL");
 }
 

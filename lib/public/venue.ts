@@ -9,12 +9,7 @@ import "server-only";
 
 import { and, eq, gte, lt } from "drizzle-orm";
 
-import {
-  bookingTables,
-  services,
-  venueTables,
-  venues,
-} from "@/lib/db/schema";
+import { bookingTables, services, venueTables, venues } from "@/lib/db/schema";
 import { adminDb } from "@/lib/server/admin/db";
 import {
   findSlots,

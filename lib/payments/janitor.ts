@@ -16,12 +16,7 @@ import "server-only";
 import { and, eq, lt, sql } from "drizzle-orm";
 import Stripe from "stripe";
 
-import {
-  bookingEvents,
-  bookings,
-  payments,
-  stripeAccounts,
-} from "@/lib/db/schema";
+import { bookingEvents, bookings, payments, stripeAccounts } from "@/lib/db/schema";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 import { paymentsDisabled, stripe, stripeEnabled } from "@/lib/stripe/client";
@@ -33,9 +28,7 @@ export type JanitorResult = {
   failed: number;
 };
 
-export async function sweepAbandonedDeposits(
-  opts: { now?: Date } = {},
-): Promise<JanitorResult> {
+export async function sweepAbandonedDeposits(opts: { now?: Date } = {}): Promise<JanitorResult> {
   const now = opts.now ?? new Date();
   const cutoff = new Date(now.getTime() - TTL_MINUTES * 60 * 1000);
 
@@ -56,10 +49,7 @@ export async function sweepAbandonedDeposits(
       paymentStatus: payments.status,
     })
     .from(bookings)
-    .innerJoin(
-      payments,
-      and(eq(payments.bookingId, bookings.id), eq(payments.kind, "deposit")),
-    )
+    .innerJoin(payments, and(eq(payments.bookingId, bookings.id), eq(payments.kind, "deposit")))
     .where(
       and(
         eq(bookings.status, "requested"),
@@ -121,10 +111,7 @@ export async function sweepAbandonedDeposits(
         }
       }
 
-      await db
-        .update(payments)
-        .set({ status: "canceled" })
-        .where(eq(payments.id, row.paymentId));
+      await db.update(payments).set({ status: "canceled" }).where(eq(payments.id, row.paymentId));
 
       await db
         .update(bookings)

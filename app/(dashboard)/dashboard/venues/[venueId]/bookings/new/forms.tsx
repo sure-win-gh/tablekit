@@ -27,7 +27,9 @@ export function SlotPicker({
 }) {
   const router = useRouter();
 
-  function navigate(patch: Partial<{ date: string; party: number; serviceId: string; wallStart: string }>) {
+  function navigate(
+    patch: Partial<{ date: string; party: number; serviceId: string; wallStart: string }>,
+  ) {
     const sp = new URLSearchParams();
     sp.set("date", patch.date ?? date);
     sp.set("party", String(patch.party ?? partySize));
@@ -73,16 +75,14 @@ export function SlotPicker({
 
       {slots.length === 0 ? (
         <p className="rounded-md border border-dashed border-neutral-300 p-4 text-sm text-neutral-500">
-          No availability for that date and party size. Try another date, party size, or check
-          that a service is scheduled for this day of the week.
+          No availability for that date and party size. Try another date, party size, or check that
+          a service is scheduled for this day of the week.
         </p>
       ) : (
         <div className="flex flex-col gap-3">
           {[...byService.entries()].map(([svcName, list]) => (
             <div key={svcName}>
-              <h3 className="text-sm font-semibold tracking-tight text-neutral-700">
-                {svcName}
-              </h3>
+              <h3 className="text-sm font-semibold tracking-tight text-neutral-700">{svcName}</h3>
               <div className="mt-2 flex flex-wrap gap-2">
                 {list.map((s) => {
                   const isPicked =
@@ -91,9 +91,7 @@ export function SlotPicker({
                     <button
                       key={`${s.serviceId}-${s.wallStart}`}
                       type="button"
-                      onClick={() =>
-                        navigate({ serviceId: s.serviceId, wallStart: s.wallStart })
-                      }
+                      onClick={() => navigate({ serviceId: s.serviceId, wallStart: s.wallStart })}
                       className={`rounded-md border px-3 py-1.5 text-sm font-medium tabular-nums transition ${
                         isPicked
                           ? "border-neutral-900 bg-neutral-900 text-white"
@@ -143,7 +141,10 @@ export function NewBookingForm({
   );
 
   return (
-    <form action={formAction} className="flex flex-col gap-4 rounded-md border border-neutral-200 p-4">
+    <form
+      action={formAction}
+      className="flex flex-col gap-4 rounded-md border border-neutral-200 p-4"
+    >
       <input type="hidden" name="venueId" value={venueId} />
       <input type="hidden" name="serviceId" value={serviceId} />
       <input type="hidden" name="date" value={date} />

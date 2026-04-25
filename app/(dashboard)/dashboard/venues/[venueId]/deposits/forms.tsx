@@ -2,11 +2,7 @@
 
 import { useActionState } from "react";
 
-import {
-  createDepositRule,
-  deleteDepositRule,
-  type ActionState,
-} from "./actions";
+import { createDepositRule, deleteDepositRule, type ActionState } from "./actions";
 
 type ServiceOption = { id: string; name: string };
 
@@ -29,10 +25,9 @@ export function NewDepositRuleForm({
   services: ServiceOption[];
   chargesEnabled: boolean;
 }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(
-    createDepositRule,
-    { status: "idle" },
-  );
+  const [state, action, pending] = useActionState<ActionState, FormData>(createDepositRule, {
+    status: "idle",
+  });
   if (!chargesEnabled) {
     return (
       <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -125,12 +120,7 @@ export function NewDepositRuleForm({
               key={d.value}
               className="flex items-center gap-1 rounded-md border border-neutral-300 px-2 py-1"
             >
-              <input
-                type="checkbox"
-                name="day_of_week"
-                value={d.value}
-                defaultChecked
-              />
+              <input type="checkbox" name="day_of_week" value={d.value} defaultChecked />
               <span>{d.label}</span>
             </label>
           ))}
@@ -171,10 +161,9 @@ export function DepositRuleRow({
   serviceName: string | null;
   venueId: string;
 }) {
-  const [, action, pending] = useActionState<ActionState, FormData>(
-    deleteDepositRule,
-    { status: "idle" },
-  );
+  const [, action, pending] = useActionState<ActionState, FormData>(deleteDepositRule, {
+    status: "idle",
+  });
   const dayLabels = rule.dayOfWeek
     .sort()
     .map((d) => DAYS_LONG.find((x) => x.value === d)?.label ?? String(d))
@@ -183,12 +172,15 @@ export function DepositRuleRow({
     <div className="flex items-center justify-between border-b border-neutral-200 py-3">
       <div className="flex flex-col text-sm">
         <span className="font-medium text-neutral-900">
-          {rule.kind === "per_cover" ? `£${(rule.amountMinor / 100).toFixed(2)} per cover` : `£${(rule.amountMinor / 100).toFixed(2)} flat`}
+          {rule.kind === "per_cover"
+            ? `£${(rule.amountMinor / 100).toFixed(2)} per cover`
+            : `£${(rule.amountMinor / 100).toFixed(2)} flat`}
           {" · "}
           {serviceName ?? "All services"}
         </span>
         <span className="text-neutral-500">
-          Party {rule.minParty}–{rule.maxParty ?? "∞"} · {dayLabels} · {rule.refundWindowHours}h refund window
+          Party {rule.minParty}–{rule.maxParty ?? "∞"} · {dayLabels} · {rule.refundWindowHours}h
+          refund window
         </span>
       </div>
       <form action={action}>

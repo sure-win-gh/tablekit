@@ -89,7 +89,9 @@ export default async function BookingsPage({
             {formatVenueDateLong(startUtc, { timezone: venue.timezone })}
           </h2>
           <p className="text-xs text-neutral-500">
-            {rows.length === 0 ? "No bookings yet." : `${rows.length} booking${rows.length === 1 ? "" : "s"}`}
+            {rows.length === 0
+              ? "No bookings yet."
+              : `${rows.length} booking${rows.length === 1 ? "" : "s"}`}
           </p>
         </div>
         <Link
@@ -132,4 +134,3 @@ export default async function BookingsPage({
     </section>
   );
 }
-

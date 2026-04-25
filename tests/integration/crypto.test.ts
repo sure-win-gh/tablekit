@@ -96,8 +96,7 @@ describe("crypto — envelope encryption", () => {
     // Flip one character in the ciphertext segment (middle section).
     const parts = ct.split(":");
     const ctB64 = parts[2]!;
-    const flipped =
-      ctB64[0] === "A" ? "B" + ctB64.slice(1) : "A" + ctB64.slice(1);
+    const flipped = ctB64[0] === "A" ? "B" + ctB64.slice(1) : "A" + ctB64.slice(1);
     const tampered = `${parts[0]}:${parts[1]}:${flipped}:${parts[3]}` as Ciphertext;
     await expect(decryptPii(orgAId, tampered)).rejects.toThrow();
   });

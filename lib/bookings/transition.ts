@@ -77,7 +77,11 @@ export async function transitionBooking(
       action: "booking.transitioned",
       targetType: "booking",
       targetId: bookingId,
-      metadata: { from, to, ...(options?.cancelledReason ? { cancelledReason: options.cancelledReason } : {}) },
+      metadata: {
+        from,
+        to,
+        ...(options?.cancelledReason ? { cancelledReason: options.cancelledReason } : {}),
+      },
     });
 
     return { ok: true, from, to };

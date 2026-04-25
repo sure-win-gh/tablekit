@@ -58,7 +58,8 @@ export async function rateLimit(
     }
     const data = (await res.json()) as Array<{ result: number | string }>;
     const zcardEntry = data[2];
-    const count = typeof zcardEntry?.result === "number" ? zcardEntry.result : Number(zcardEntry?.result ?? 0);
+    const count =
+      typeof zcardEntry?.result === "number" ? zcardEntry.result : Number(zcardEntry?.result ?? 0);
     const remaining = Math.max(0, limit - count);
     if (count > limit) {
       return { ok: false, remaining: 0, retryAfterSec: windowSec };

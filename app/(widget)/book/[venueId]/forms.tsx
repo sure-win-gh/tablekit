@@ -2,12 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import {
-  Elements,
-  PaymentElement,
-  useElements,
-  useStripe,
-} from "@stripe/react-stripe-js";
+import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
 
 type SlotLite = { serviceId: string; serviceName: string; wallStart: string };
@@ -31,7 +26,9 @@ export function SlotPicker({
 }) {
   const router = useRouter();
 
-  function navigate(patch: Partial<{ date: string; party: number; serviceId: string; wallStart: string }>) {
+  function navigate(
+    patch: Partial<{ date: string; party: number; serviceId: string; wallStart: string }>,
+  ) {
     const sp = new URLSearchParams();
     sp.set("date", patch.date ?? date);
     sp.set("party", String(patch.party ?? partySize));
@@ -83,7 +80,8 @@ export function SlotPicker({
               <h3 className="text-sm font-semibold tracking-tight text-neutral-700">{svcName}</h3>
               <div className="mt-2 flex flex-wrap gap-2">
                 {list.map((s) => {
-                  const isPicked = picked?.serviceId === s.serviceId && picked?.wallStart === s.wallStart;
+                  const isPicked =
+                    picked?.serviceId === s.serviceId && picked?.wallStart === s.wallStart;
                   return (
                     <button
                       key={`${s.serviceId}-${s.wallStart}`}
@@ -240,8 +238,8 @@ export function BookingForm({
       <section className="flex flex-col gap-3 rounded-md border border-emerald-200 bg-emerald-50 p-6 text-emerald-900">
         <h2 className="text-lg font-semibold">You&apos;re booked.</h2>
         <p className="text-sm">
-          Your reference is <span className="font-mono font-semibold">{state.reference}</span>. We&apos;ve
-          got you down for {state.time} on {date}, party of {partySize}.
+          Your reference is <span className="font-mono font-semibold">{state.reference}</span>.
+          We&apos;ve got you down for {state.time} on {date}, party of {partySize}.
         </p>
         {state.depositCaptured ? (
           <p className="text-sm">
@@ -253,7 +251,10 @@ export function BookingForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4 rounded-md border border-neutral-200 p-6">
+    <form
+      onSubmit={onSubmit}
+      className="flex flex-col gap-4 rounded-md border border-neutral-200 p-6"
+    >
       <header>
         <h2 className="text-lg font-semibold tracking-tight text-neutral-900">Your details</h2>
         <p className="text-sm text-neutral-500">
@@ -447,9 +448,7 @@ function DepositPaymentForm({ onPaid }: { onPaid: () => void }) {
   return (
     <form onSubmit={pay} className="flex flex-col gap-4">
       <PaymentElement options={{ layout: "tabs" }} />
-      {state.status === "error" ? (
-        <p className="text-sm text-rose-600">{state.message}</p>
-      ) : null}
+      {state.status === "error" ? <p className="text-sm text-rose-600">{state.message}</p> : null}
       <button
         type="submit"
         disabled={!stripe || state.status === "confirming"}

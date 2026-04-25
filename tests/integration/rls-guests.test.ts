@@ -100,10 +100,7 @@ describe("guests — upsert behaviour", () => {
     if (!r.ok) return;
     expect(r.reused).toBe(false);
 
-    const [row] = await db
-      .select()
-      .from(schema.guests)
-      .where(eq(schema.guests.id, r.guestId));
+    const [row] = await db.select().from(schema.guests).where(eq(schema.guests.id, r.guestId));
     expect(row).toBeDefined();
     if (!row) return;
 
@@ -130,10 +127,7 @@ describe("guests — upsert behaviour", () => {
     if (!r.ok) return;
     expect(r.reused).toBe(true);
 
-    const [row] = await db
-      .select()
-      .from(schema.guests)
-      .where(eq(schema.guests.id, r.guestId));
+    const [row] = await db.select().from(schema.guests).where(eq(schema.guests.id, r.guestId));
     if (!row) return;
     expect(row.phoneCipher).not.toBeNull();
     expect(await decryptPii(orgAId, row.phoneCipher as Ciphertext)).toBe("+44 7700 900123");

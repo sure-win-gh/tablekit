@@ -57,7 +57,7 @@ export function BookingRow({
   return (
     <li className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-4">
-        <div className="w-24 font-mono text-sm tabular-nums text-neutral-900">
+        <div className="w-24 font-mono text-sm text-neutral-900 tabular-nums">
           {wallStart}
           <span className="text-neutral-400"> – </span>
           {wallEnd}
@@ -70,9 +70,7 @@ export function BookingRow({
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <span
-          className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_TINT[status]}`}
-        >
+        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_TINT[status]}`}>
           {STATUS_LABEL[status]}
         </span>
         {actions.map((to) => (

@@ -6,11 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import {
-  findSlots,
-  type ServiceSpec,
-  type TableSpec,
-} from "@/lib/bookings/availability";
+import { findSlots, type ServiceSpec, type TableSpec } from "@/lib/bookings/availability";
 
 const TZ = "Europe/London";
 const DATE = "2026-05-10"; // Sunday, BST so UTC+1
@@ -18,7 +14,11 @@ const DATE = "2026-05-10"; // Sunday, BST so UTC+1
 const cafeService: ServiceSpec = {
   id: "svc-1",
   name: "Open",
-  schedule: { days: ["sun", "mon", "tue", "wed", "thu", "fri", "sat"], start: "08:00", end: "17:00" },
+  schedule: {
+    days: ["sun", "mon", "tue", "wed", "thu", "fri", "sat"],
+    start: "08:00",
+    end: "17:00",
+  },
   turnMinutes: 45,
 };
 
@@ -166,12 +166,7 @@ describe("findSlots", () => {
       date: DATE,
       partySize: 6,
       services: [cafeService],
-      tables: [
-        t("T1", "A", 1, 2),
-        t("T2", "A", 1, 4),
-        t("T3", "A", 1, 6),
-        t("T4", "A", 1, 6),
-      ],
+      tables: [t("T1", "A", 1, 2), t("T2", "A", 1, 4), t("T3", "A", 1, 6), t("T4", "A", 1, 6)],
       occupied: [],
     });
     const first = slots[0]!;

@@ -10,11 +10,7 @@ export const metadata = {
   title: "Deposits · TableKit",
 };
 
-export default async function DepositsPage({
-  params,
-}: {
-  params: Promise<{ venueId: string }>;
-}) {
+export default async function DepositsPage({ params }: { params: Promise<{ venueId: string }> }) {
   const { orgId } = await requireRole("manager");
   const { venueId } = await params;
 
@@ -63,10 +59,10 @@ export default async function DepositsPage({
       <div>
         <h2 className="text-lg font-medium tracking-tight text-neutral-900">Deposit rules</h2>
         <p className="text-sm text-neutral-500">
-          The most-specific matching rule wins — a service-specific rule beats a wildcard,
-          narrower day-of-week beats broader, narrower party range beats open, most recently
-          created breaks ties. Bookings that match a rule collect a deposit via the widget;
-          host-created bookings skip deposits.
+          The most-specific matching rule wins — a service-specific rule beats a wildcard, narrower
+          day-of-week beats broader, narrower party range beats open, most recently created breaks
+          ties. Bookings that match a rule collect a deposit via the widget; host-created bookings
+          skip deposits.
         </p>
       </div>
 

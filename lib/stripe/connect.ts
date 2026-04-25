@@ -113,7 +113,9 @@ export async function startOnboarding(
 // Pull the latest flags from Stripe + mirror onto our row. Called
 // from the return-URL handler; also a convenient "force refresh"
 // button in the billing UI.
-export async function refreshAccountState(organisationId: string): Promise<StripeAccountRow | null> {
+export async function refreshAccountState(
+  organisationId: string,
+): Promise<StripeAccountRow | null> {
   const row = await getAccount(organisationId);
   if (!row) return null;
 

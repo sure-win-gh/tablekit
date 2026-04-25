@@ -14,13 +14,7 @@
 // share an `area_id`. Enforced at the DB layer by a trigger; surfaced
 // here by only pairing within the same area.
 
-import {
-  dayKeyInZone,
-  formatWallHHMM,
-  parseWallHHMM,
-  zonedWallToUtc,
-  type DayKey,
-} from "./time";
+import { dayKeyInZone, formatWallHHMM, parseWallHHMM, zonedWallToUtc, type DayKey } from "./time";
 
 export type ServiceSpec = {
   id: string;

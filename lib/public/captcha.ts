@@ -10,7 +10,10 @@ export type CaptchaResult =
   | { ok: true }
   | { ok: false; reason: "missing-token" | "invalid" | "verifier-down" };
 
-export async function verifyCaptcha(token: string | undefined, ip?: string): Promise<CaptchaResult> {
+export async function verifyCaptcha(
+  token: string | undefined,
+  ip?: string,
+): Promise<CaptchaResult> {
   const secret = process.env["HCAPTCHA_SECRET"];
   // Permissive fallback — no secret configured.
   if (!secret) return { ok: true };

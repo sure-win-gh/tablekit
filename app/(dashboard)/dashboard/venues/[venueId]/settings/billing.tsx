@@ -2,10 +2,7 @@
 
 import { useActionState } from "react";
 
-import {
-  startStripeOnboardingAction,
-  type StartStripeOnboardingState,
-} from "./actions";
+import { startStripeOnboardingAction, type StartStripeOnboardingState } from "./actions";
 
 type AccountSummary = {
   accountId: string;
@@ -56,8 +53,8 @@ export function BillingSection({
       <div>
         <h2 className="text-lg font-medium tracking-tight text-neutral-900">Payments</h2>
         <p className="text-sm text-neutral-500">
-          Connect a Stripe account to collect deposits and hold cards for no-show protection.
-          We use Stripe Connect Standard — you&apos;re the merchant of record.
+          Connect a Stripe account to collect deposits and hold cards for no-show protection. We use
+          Stripe Connect Standard — you&apos;re the merchant of record.
         </p>
       </div>
 
@@ -86,11 +83,7 @@ export function BillingSection({
           disabled={pending}
           className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-50"
         >
-          {pending
-            ? "Preparing…"
-            : account
-              ? "Continue Stripe onboarding"
-              : "Connect Stripe"}
+          {pending ? "Preparing…" : account ? "Continue Stripe onboarding" : "Connect Stripe"}
         </button>
         {state.status === "error" ? (
           <span className="ml-3 text-sm text-rose-600">{state.message}</span>

@@ -54,12 +54,7 @@ export async function upsertGuest(
       marketingConsentAt: guests.marketingConsentAt,
     })
     .from(guests)
-    .where(
-      and(
-        eq(guests.organisationId, organisationId),
-        eq(guests.emailHash, emailHash),
-      ),
-    )
+    .where(and(eq(guests.organisationId, organisationId), eq(guests.emailHash, emailHash)))
     .limit(1);
 
   if (existing) {
@@ -100,9 +95,7 @@ export async function upsertGuest(
   // Fresh insert.
   const lastNameCipher = await encryptPii(organisationId, input.lastName);
   const emailCipher = await encryptPii(organisationId, input.email);
-  const phoneCipher = input.phone
-    ? await encryptPii(organisationId, input.phone)
-    : null;
+  const phoneCipher = input.phone ? await encryptPii(organisationId, input.phone) : null;
 
   const [inserted] = await db
     .insert(guests)

@@ -43,7 +43,11 @@ const DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 
 const CreateBody = z.object({
   venueId: z.uuid(),
-  serviceId: z.string().uuid().optional().or(z.literal("").transform(() => undefined)),
+  serviceId: z
+    .string()
+    .uuid()
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
   kind: z.enum(KIND),
   amountMinor: z.coerce.number().int().min(1).max(1_000_00), // up to £1,000
   minParty: z.coerce.number().int().min(1).max(50).default(1),
@@ -83,10 +87,7 @@ export async function createDepositRule(
       message: parsed.error.issues[0]?.message ?? "Check the rule fields.",
     };
   }
-  if (
-    parsed.data.maxParty !== undefined &&
-    parsed.data.maxParty < parsed.data.minParty
-  ) {
+  if (parsed.data.maxParty !== undefined && parsed.data.maxParty < parsed.data.minParty) {
     return { status: "error", message: "Max party can't be less than min party." };
   }
 
@@ -151,9 +152,7 @@ export async function deleteDepositRule(
 
   const deleted = await adminDb()
     .delete(depositRules)
-    .where(
-      and(eq(depositRules.id, parsed.data.ruleId), eq(depositRules.organisationId, orgId)),
-    )
+    .where(and(eq(depositRules.id, parsed.data.ruleId), eq(depositRules.organisationId, orgId)))
     .returning({ id: depositRules.id });
 
   if (deleted.length > 0) {

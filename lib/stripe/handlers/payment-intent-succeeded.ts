@@ -28,7 +28,8 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
   const pi = event.data.object as Stripe.PaymentIntent;
   const db = adminDb();
 
-  const paymentId = typeof pi.metadata?.["payment_id"] === "string" ? pi.metadata["payment_id"] : null;
+  const paymentId =
+    typeof pi.metadata?.["payment_id"] === "string" ? pi.metadata["payment_id"] : null;
 
   // Primary lookup: by real pi_*. Fallback to metadata.payment_id so
   // a webhook racing wave 2b's placeholder update still finds the row.

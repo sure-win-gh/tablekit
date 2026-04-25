@@ -21,11 +21,7 @@ type SearchParams = {
   wallStart?: string;
 };
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ venueId: string }>;
-}) {
+export async function generateMetadata({ params }: { params: Promise<{ venueId: string }> }) {
   const { venueId } = await params;
   const venue = await loadPublicVenue(venueId);
   return { title: venue ? `Book at ${venue.name} · TableKit` : "Book · TableKit" };
@@ -50,9 +46,7 @@ export default async function PublicBookingPage({
 
   const pickedSlot =
     sp.serviceId && sp.wallStart
-      ? availability.slots.find(
-          (s) => s.serviceId === sp.serviceId && s.wallStart === sp.wallStart,
-        )
+      ? availability.slots.find((s) => s.serviceId === sp.serviceId && s.wallStart === sp.wallStart)
       : undefined;
 
   const dateLongUtc = availability.slots[0]?.startAt ?? new Date(`${date}T12:00:00Z`);
@@ -60,7 +54,7 @@ export default async function PublicBookingPage({
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-6">
       <header>
-        <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+        <p className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
           Book a table
         </p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight text-neutral-900">
@@ -80,7 +74,9 @@ export default async function PublicBookingPage({
           serviceName: s.serviceName,
           wallStart: s.wallStart,
         }))}
-        picked={pickedSlot ? { serviceId: pickedSlot.serviceId, wallStart: pickedSlot.wallStart } : null}
+        picked={
+          pickedSlot ? { serviceId: pickedSlot.serviceId, wallStart: pickedSlot.wallStart } : null
+        }
       />
 
       {pickedSlot ? (
@@ -90,7 +86,9 @@ export default async function PublicBookingPage({
           date={date}
           wallStart={pickedSlot.wallStart}
           partySize={partySize}
-          captchaSitekey={captchaEnabled() ? process.env["NEXT_PUBLIC_HCAPTCHA_SITEKEY"] ?? null : null}
+          captchaSitekey={
+            captchaEnabled() ? (process.env["NEXT_PUBLIC_HCAPTCHA_SITEKEY"] ?? null) : null
+          }
         />
       ) : null}
     </main>

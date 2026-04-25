@@ -14,11 +14,7 @@ import { randomBytes } from "node:crypto";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import {
-  _resetMasterKeyForTests,
-  constantTimeEqual,
-  hashForLookup,
-} from "@/lib/security/crypto";
+import { _resetMasterKeyForTests, constantTimeEqual, hashForLookup } from "@/lib/security/crypto";
 
 describe("crypto — master key loader", () => {
   const originalKey = process.env["TABLEKIT_MASTER_KEY"];

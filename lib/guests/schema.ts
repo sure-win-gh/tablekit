@@ -13,11 +13,7 @@ import { z } from "zod";
 const phoneRegex = /^\+?[0-9()\-\s]{7,20}$/;
 
 export const upsertGuestInput = z.object({
-  firstName: z
-    .string()
-    .trim()
-    .min(1, "First name is required")
-    .max(80, "First name too long"),
+  firstName: z.string().trim().min(1, "First name is required").max(80, "First name too long"),
   // Empty string allowed for last name — cafe walk-ins often give
   // first name only. Stored as an encrypted empty string so the column
   // stays NOT NULL.

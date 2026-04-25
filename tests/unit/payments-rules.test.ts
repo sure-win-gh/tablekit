@@ -77,9 +77,9 @@ describe("rankRules — filtering", () => {
 
   it("keeps rules when max_party is null (no ceiling)", () => {
     const r = mkRule({ maxParty: null });
-    expect(
-      rankRules([r], { venueId: VENUE, serviceId: SVC, partySize: 100, at: FRIDAY }),
-    ).toEqual([r]);
+    expect(rankRules([r], { venueId: VENUE, serviceId: SVC, partySize: 100, at: FRIDAY })).toEqual([
+      r,
+    ]);
   });
 
   it("drops rules whose day_of_week array doesn't include the booking day", () => {
@@ -103,20 +103,24 @@ describe("rankRules — priority ordering", () => {
   it("service-match rule beats wildcard rule", () => {
     const wildcard = mkRule({ id: "w", serviceId: null, amountMinor: 1000 });
     const specific = mkRule({ id: "s", serviceId: SVC, amountMinor: 5000 });
-    const out = rankRules(
-      [wildcard, specific],
-      { venueId: VENUE, serviceId: SVC, partySize: 2, at: FRIDAY },
-    );
+    const out = rankRules([wildcard, specific], {
+      venueId: VENUE,
+      serviceId: SVC,
+      partySize: 2,
+      at: FRIDAY,
+    });
     expect(out.map((r) => r.id)).toEqual(["s", "w"]);
   });
 
   it("narrower day_of_week wins when service specificity ties", () => {
     const weekend = mkRule({ id: "wkd", dayOfWeek: [5, 6] });
     const allDays = mkRule({ id: "all", dayOfWeek: [0, 1, 2, 3, 4, 5, 6] });
-    const out = rankRules(
-      [allDays, weekend],
-      { venueId: VENUE, serviceId: SVC, partySize: 2, at: FRIDAY },
-    );
+    const out = rankRules([allDays, weekend], {
+      venueId: VENUE,
+      serviceId: SVC,
+      partySize: 2,
+      at: FRIDAY,
+    });
     expect(out.map((r) => r.id)).toEqual(["wkd", "all"]);
   });
 
@@ -124,30 +128,36 @@ describe("rankRules — priority ordering", () => {
     // Both cover all days, both wildcard on service. a is tighter on party range.
     const tight = mkRule({ id: "t", minParty: 4, maxParty: 6 });
     const loose = mkRule({ id: "l", minParty: 1, maxParty: null });
-    const out = rankRules(
-      [loose, tight],
-      { venueId: VENUE, serviceId: SVC, partySize: 5, at: FRIDAY },
-    );
+    const out = rankRules([loose, tight], {
+      venueId: VENUE,
+      serviceId: SVC,
+      partySize: 5,
+      at: FRIDAY,
+    });
     expect(out.map((r) => r.id)).toEqual(["t", "l"]);
   });
 
   it("most recently created rule wins on a full tie", () => {
     const older = mkRule({ id: "old", createdAt: new Date("2026-01-01T00:00:00Z") });
     const newer = mkRule({ id: "new", createdAt: new Date("2026-02-01T00:00:00Z") });
-    const out = rankRules(
-      [older, newer],
-      { venueId: VENUE, serviceId: SVC, partySize: 2, at: FRIDAY },
-    );
+    const out = rankRules([older, newer], {
+      venueId: VENUE,
+      serviceId: SVC,
+      partySize: 2,
+      at: FRIDAY,
+    });
     expect(out.map((r) => r.id)).toEqual(["new", "old"]);
   });
 
   it("does not surface a rule that filters out even if it has the highest specificity", () => {
     const wrongDay = mkRule({ id: "x", serviceId: SVC, dayOfWeek: [6] }); // Saturday only
     const fallback = mkRule({ id: "y", serviceId: null });
-    const out = rankRules(
-      [wrongDay, fallback],
-      { venueId: VENUE, serviceId: SVC, partySize: 2, at: FRIDAY },
-    );
+    const out = rankRules([wrongDay, fallback], {
+      venueId: VENUE,
+      serviceId: SVC,
+      partySize: 2,
+      at: FRIDAY,
+    });
     expect(out.map((r) => r.id)).toEqual(["y"]);
   });
 });

@@ -92,7 +92,10 @@ export async function POST(req: NextRequest) {
       "venue-not-found": 404,
       "deposit-failed": 502,
     }[r.reason];
-    return NextResponse.json({ error: r.reason, ...("issues" in r ? { issues: r.issues } : {}) }, { status });
+    return NextResponse.json(
+      { error: r.reason, ...("issues" in r ? { issues: r.issues } : {}) },
+      { status },
+    );
   }
 
   // Success response: always includes bookingId + reference + status.
