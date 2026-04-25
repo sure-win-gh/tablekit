@@ -69,8 +69,32 @@ The `_v1` suffix lets us rotate keys if a bug ever forces a different body for t
 
 If step 2 or 3 fails, the booking + placeholder remain in `requested`/`pending_creation`. The janitor (`lib/payments/janitor.ts`) sweeps them after 15 minutes — cancels the Intent if a real `pi_*` exists, transitions the booking to `cancelled` with `cancelled_reason='deposit_abandoned'`, marks the payments row `canceled`. Two callers run it:
 
-1. **Daily Vercel Cron** at 03:00 UTC (`vercel.json` → `/api/cron/deposit-janitor`). Vercel Hobby caps cron frequency at once-per-day; this is the overnight backstop. Move to `*/5 * * * *` (or similar) after the Pro upgrade.
+1. **Daily Vercel Cron** at 03:00 UTC (`vercel.json` → `/api/cron/deposit-janitor`). Vercel Hobby caps cron frequency at once-per-day; this is the overnight backstop. Move to `*/5 * * * *` (or similar) after the Pro upgrade. The same route also runs `sweepDueNoShowCaptures()` (flow B) — Hobby allows only one cron schedule, so the route is the single nightly maintenance entry point.
 2. **Inline sweep on `POST /api/v1/bookings`** scoped to the booking's venue. Active venues clean up in near-real-time as a side-effect of the next booker arriving. Fire-and-forget semantics: if the sweep throws we log + continue so the booking isn't blocked.
+
+## Flow B — card hold + off-session no-show capture
+
+Flow B uses a `SetupIntent` (not a PaymentIntent) at booking time so no money moves up front. Same Customer-on-the-connected-account pattern as flow A; the eventual capture amount rides in `metadata.hold_amount_minor` so the no-show sweeper doesn't re-resolve the rule.
+
+The `setup_intent.succeeded` handler stores the resulting `customer` + `payment_method` ids on the `payments` row (kind='hold') so the off-session capture can charge them later.
+
+### No-show capture
+
+`lib/payments/no-show.ts#sweepDueNoShowCaptures` finds bookings where:
+
+- `status = 'confirmed'` (no `seated` / `finished` transition happened)
+- a `payments` row with `kind='hold'`, `status='succeeded'` exists (card stored)
+- `start_at + 30 minutes < now()`
+- no prior `kind='no_show_capture'` row exists for this booking
+
+For each candidate, it creates an off-session PaymentIntent on the connected account: `{ off_session: true, confirm: true, payment_method, customer }` with idempotency key `booking_<id>_no_show_capture_v1`. A new `payments` row records the capture (succeeded or failed) and the booking transitions to `no_show` either way — they didn't turn up regardless of whether the bank approved the off-session charge.
+
+Two callers, same shape as the abandonment janitor:
+
+1. **Daily cron** (the same `/api/cron/deposit-janitor` route — see above).
+2. **Inline trigger on `/dashboard/venues/[venueId]/bookings`** page load, scoped to that venue. Operators viewing today's bookings during service drive near-real-time captures.
+
+If the off-session capture fails (declined card, 3DS now required, expired card), the `payments` row's `status='failed'` plus `failure_code` / `failure_message` give operators the diagnostic, and `audit_log.action = 'stripe.no_show_capture.failed'` flags it. Operator chases manually — there's no automated retry to avoid hammering already-declined cards.
 
 ## Refunds
 

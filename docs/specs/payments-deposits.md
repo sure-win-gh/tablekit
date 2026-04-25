@@ -1,6 +1,6 @@
 # Spec: Deposits and no-show capture
 
-**Status:** phase 1 shipped (flow A + refunds + abandonment janitor). Flow B (card hold + no-show cron) remains as phase 2.
+**Status:** shipped — flow A (deposit at booking + refunds + abandonment janitor) + flow B (card hold + off-session no-show capture) + flow C (no payment) all live.
 **Depends on:** `payments.md` (charter), `bookings.md`, `widget.md`, `venues.md`. See also `docs/playbooks/payments.md`.
 **Follows:** payments-connect (shipped — see commits `a7a853a`, `0661241`, `4af0181`).
 

@@ -324,3 +324,129 @@ describe("charge.refunded handler", () => {
     await db.delete(schema.stripeEvents).where(eq(schema.stripeEvents.id, event.id));
   });
 });
+
+describe("setup_intent.succeeded handler (flow B — card hold)", () => {
+  it("flips booking → confirmed, stores customer + payment_method, marks payments succeeded", async () => {
+    // Reset booking + use a dedicated hold-payment row so this test
+    // doesn't collide with the earlier deposit fixtures.
+    await db
+      .update(schema.bookings)
+      .set({ status: "requested", depositIntentId: null })
+      .where(eq(schema.bookings.id, ctx.bookingId));
+
+    const setupId = `seti_test_${run}`;
+    const [holdRow] = await db
+      .insert(schema.payments)
+      .values({
+        organisationId: ctx.orgId,
+        bookingId: ctx.bookingId,
+        kind: "hold",
+        stripeIntentId: setupId,
+        amountMinor: 2500,
+        currency: "GBP",
+        status: "requires_payment_method",
+      })
+      .returning({ id: schema.payments.id });
+
+    const customerId = `cus_test_${run}`;
+    const paymentMethodId = `pm_test_${run}`;
+    const payload = mkEvent("setup_intent.succeeded", {
+      id: setupId,
+      object: "setup_intent",
+      status: "succeeded",
+      customer: customerId,
+      payment_method: paymentMethodId,
+      metadata: { payment_id: holdRow!.id, booking_id: ctx.bookingId, kind: "hold" },
+    });
+    const body = JSON.stringify(payload);
+    const event = verifyAndParse(body, signEvent(body, FAKE_WEBHOOK_SECRET));
+    await storeEvent(event);
+    await dispatch(event);
+
+    const [pay] = await db
+      .select({
+        status: schema.payments.status,
+        stripeCustomerId: schema.payments.stripeCustomerId,
+        stripePaymentMethodId: schema.payments.stripePaymentMethodId,
+      })
+      .from(schema.payments)
+      .where(eq(schema.payments.id, holdRow!.id));
+    expect(pay?.status).toBe("succeeded");
+    expect(pay?.stripeCustomerId).toBe(customerId);
+    expect(pay?.stripePaymentMethodId).toBe(paymentMethodId);
+
+    const [bk] = await db
+      .select({ status: schema.bookings.status })
+      .from(schema.bookings)
+      .where(eq(schema.bookings.id, ctx.bookingId));
+    expect(bk?.status).toBe("confirmed");
+
+    // Replay — idempotent.
+    await dispatch(event);
+    const [pay2] = await db
+      .select({ status: schema.payments.status })
+      .from(schema.payments)
+      .where(eq(schema.payments.id, holdRow!.id));
+    expect(pay2?.status).toBe("succeeded");
+
+    await db.delete(schema.payments).where(eq(schema.payments.id, holdRow!.id));
+    await db.delete(schema.stripeEvents).where(eq(schema.stripeEvents.id, event.id));
+  });
+});
+
+describe("setup_intent.setup_failed handler (flow B)", () => {
+  it("records failure on the hold payments row + appends booking_events; booking stays requested", async () => {
+    await db
+      .update(schema.bookings)
+      .set({ status: "requested", depositIntentId: null })
+      .where(eq(schema.bookings.id, ctx.bookingId));
+
+    const setupId = `seti_fail_${run}`;
+    const [holdRow] = await db
+      .insert(schema.payments)
+      .values({
+        organisationId: ctx.orgId,
+        bookingId: ctx.bookingId,
+        kind: "hold",
+        stripeIntentId: setupId,
+        amountMinor: 2500,
+        currency: "GBP",
+        status: "requires_payment_method",
+      })
+      .returning({ id: schema.payments.id });
+
+    const payload = mkEvent("setup_intent.setup_failed", {
+      id: setupId,
+      object: "setup_intent",
+      status: "requires_payment_method",
+      last_setup_error: {
+        code: "card_declined",
+        message: "Your card was declined.",
+      },
+      metadata: { payment_id: holdRow!.id, booking_id: ctx.bookingId, kind: "hold" },
+    });
+    const body = JSON.stringify(payload);
+    const event = verifyAndParse(body, signEvent(body, FAKE_WEBHOOK_SECRET));
+    await storeEvent(event);
+    await dispatch(event);
+
+    const [pay] = await db
+      .select({
+        failureCode: schema.payments.failureCode,
+        failureMessage: schema.payments.failureMessage,
+      })
+      .from(schema.payments)
+      .where(eq(schema.payments.id, holdRow!.id));
+    expect(pay?.failureCode).toBe("card_declined");
+    expect(pay?.failureMessage).toBe("Your card was declined.");
+
+    const [bk] = await db
+      .select({ status: schema.bookings.status })
+      .from(schema.bookings)
+      .where(eq(schema.bookings.id, ctx.bookingId));
+    expect(bk?.status).toBe("requested");
+
+    await db.delete(schema.payments).where(eq(schema.payments.id, holdRow!.id));
+    await db.delete(schema.stripeEvents).where(eq(schema.stripeEvents.id, event.id));
+  });
+});
