@@ -118,13 +118,24 @@ type DepositHandoff = {
   clientSecret: string;
   amountMinor: number;
   stripeAccount: string;
+  // 'payment_intent' = flow A (charged at booking)
+  // 'setup_intent'   = flow B (card stored, captured only on no-show)
+  kind: "payment_intent" | "setup_intent";
 };
 
 type SubmitState =
   | { status: "idle" }
   | { status: "submitting" }
   | { status: "deposit"; handoff: DepositHandoff }
-  | { status: "success"; reference: string; time: string; depositCaptured: boolean }
+  | {
+      status: "success";
+      reference: string;
+      time: string;
+      // 'none' = flow C (no payment step); 'payment_intent' = flow A
+      // (deposit charged); 'setup_intent' = flow B (card on file).
+      paymentKind: "none" | "payment_intent" | "setup_intent";
+      amountMinor?: number;
+    }
   | { status: "error"; message: string };
 
 export function BookingForm({
@@ -179,7 +190,7 @@ export function BookingForm({
             reference: string;
             status: "confirmed" | "requested";
             deposit?: {
-              kind: "payment_intent";
+              kind: "payment_intent" | "setup_intent";
               clientSecret: string;
               amountMinor: number;
               stripeAccount: string;
@@ -196,6 +207,7 @@ export function BookingForm({
               clientSecret: body.deposit.clientSecret,
               amountMinor: body.deposit.amountMinor,
               stripeAccount: body.deposit.stripeAccount,
+              kind: body.deposit.kind,
             },
           });
           return;
@@ -204,7 +216,7 @@ export function BookingForm({
           status: "success",
           reference: body.reference,
           time: wallStart,
-          depositCaptured: false,
+          paymentKind: "none",
         });
         return;
       }
@@ -229,7 +241,8 @@ export function BookingForm({
             status: "success",
             reference: state.handoff.reference,
             time: wallStart,
-            depositCaptured: true,
+            paymentKind: state.handoff.kind,
+            amountMinor: state.handoff.amountMinor,
           })
         }
       />
@@ -244,9 +257,16 @@ export function BookingForm({
           Your reference is <span className="font-mono font-semibold">{state.reference}</span>.
           We&apos;ve got you down for {state.time} on {date}, party of {partySize}.
         </p>
-        {state.depositCaptured ? (
+        {state.paymentKind === "payment_intent" ? (
           <p className="text-sm">
             Your deposit was taken — it&apos;ll be applied to your bill on the night.
+          </p>
+        ) : null}
+        {state.paymentKind === "setup_intent" ? (
+          <p className="text-sm">
+            Your card is on file. We won&apos;t charge it unless you don&apos;t turn up — in which
+            case {state.amountMinor ? formatGbp(state.amountMinor) : "a no-show fee"} will be
+            taken.
           </p>
         ) : null}
       </section>
@@ -390,13 +410,18 @@ function DepositStep({
   onPaid: () => void;
 }) {
   const stripe = useMemo(() => getStripe(handoff.stripeAccount), [handoff.stripeAccount]);
+  const isHold = handoff.kind === "setup_intent";
   return (
     <section className="flex flex-col gap-4 rounded-md border border-neutral-200 p-6">
       <header>
-        <h2 className="text-lg font-semibold tracking-tight text-neutral-900">Deposit required</h2>
+        <h2 className="text-lg font-semibold tracking-tight text-neutral-900">
+          {isHold ? "Card required" : "Deposit required"}
+        </h2>
         <p className="text-sm text-neutral-500">
-          {time} on {date} · a {formatGbp(handoff.amountMinor)} deposit secures the table. It&apos;s
-          applied to your bill on the night.
+          {time} on {date} ·{" "}
+          {isHold
+            ? `we'll only charge ${formatGbp(handoff.amountMinor)} if you don't show up.`
+            : `a ${formatGbp(handoff.amountMinor)} deposit secures the table. It's applied to your bill on the night.`}
         </p>
       </header>
       <Elements
@@ -406,34 +431,46 @@ function DepositStep({
           appearance: { theme: "stripe" },
         }}
       >
-        <DepositPaymentForm onPaid={onPaid} />
+        <DepositPaymentForm kind={handoff.kind} onPaid={onPaid} />
       </Elements>
     </section>
   );
 }
 
-function DepositPaymentForm({ onPaid }: { onPaid: () => void }) {
+function DepositPaymentForm({
+  kind,
+  onPaid,
+}: {
+  kind: "payment_intent" | "setup_intent";
+  onPaid: () => void;
+}) {
   const stripe = useStripe();
   const elements = useElements();
   const [state, setState] = useState<
     { status: "idle" } | { status: "confirming" } | { status: "error"; message: string }
   >({ status: "idle" });
+  const isHold = kind === "setup_intent";
 
   async function pay(e: FormEvent) {
     e.preventDefault();
     if (!stripe || !elements) return;
     setState({ status: "confirming" });
 
-    const result = await stripe.confirmPayment({
-      elements,
-      // Redirect only if the card requires a 3DS hop Stripe can't do
-      // inline. For cards that complete inline, `redirect: "if_required"`
-      // resolves without navigating and we drive the UI ourselves.
-      confirmParams: {
-        return_url: window.location.href,
-      },
-      redirect: "if_required",
-    });
+    // Redirect only if the card requires a 3DS hop Stripe can't do
+    // inline. For cards that complete inline, `redirect: "if_required"`
+    // resolves without navigating and we drive the UI ourselves.
+    const confirmParams = { return_url: window.location.href };
+    const result = isHold
+      ? await stripe.confirmSetup({
+          elements,
+          confirmParams,
+          redirect: "if_required",
+        })
+      : await stripe.confirmPayment({
+          elements,
+          confirmParams,
+          redirect: "if_required",
+        });
 
     if (result.error) {
       setState({
@@ -442,14 +479,20 @@ function DepositPaymentForm({ onPaid }: { onPaid: () => void }) {
       });
       return;
     }
-    // result.paymentIntent is present when redirect didn't happen.
-    if (result.paymentIntent?.status === "succeeded") {
+    // confirmPayment returns { paymentIntent }; confirmSetup returns
+    // { setupIntent }. Both have .status = 'succeeded' on success.
+    const succeeded =
+      ("paymentIntent" in result && result.paymentIntent?.status === "succeeded") ||
+      ("setupIntent" in result && result.setupIntent?.status === "succeeded");
+    if (succeeded) {
       onPaid();
       return;
     }
     setState({
       status: "error",
-      message: "Payment didn't complete. Please try again.",
+      message: isHold
+        ? "Couldn't save your card. Please try again."
+        : "Payment didn't complete. Please try again.",
     });
   }
 
@@ -462,7 +505,11 @@ function DepositPaymentForm({ onPaid }: { onPaid: () => void }) {
         disabled={!stripe || state.status === "confirming"}
         className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-50"
       >
-        {state.status === "confirming" ? "Processing…" : "Pay deposit"}
+        {state.status === "confirming"
+          ? "Processing…"
+          : isHold
+            ? "Save card"
+            : "Pay deposit"}
       </button>
     </form>
   );
