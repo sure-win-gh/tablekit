@@ -265,6 +265,23 @@ export const guests = pgTable(
     // bookings so repeat guests don't clutter the operator's Stripe
     // dashboard.
     stripeCustomerId: text("stripe_customer_id"),
+    // Per-venue unsubscribe arrays. Storing venue ids (rather than a
+    // global flag) lets the same guest opt out of one operator's
+    // emails without affecting others — important because guests can
+    // book at multiple venues across orgs.
+    emailUnsubscribedVenues: uuid("email_unsubscribed_venues")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::uuid[]`),
+    smsUnsubscribedVenues: uuid("sms_unsubscribed_venues")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::uuid[]`),
+    // Hard-invalid markers — set by Resend bounce / Twilio failure
+    // webhooks. Once true, dispatch skips the channel for all venues
+    // until manually cleared.
+    emailInvalid: boolean("email_invalid").notNull().default(false),
+    phoneInvalid: boolean("phone_invalid").notNull().default(false),
     marketingConsentAt: timestamp("marketing_consent_at", { withTimezone: true }),
     erasedAt: timestamp("erased_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -537,5 +554,71 @@ export const payments = pgTable(
   (t) => [
     index("payments_booking_idx").on(t.bookingId),
     index("payments_org_idx").on(t.organisationId),
+  ],
+);
+
+// =============================================================================
+// Messaging (transactional email + SMS)
+// =============================================================================
+//
+// One row per (booking, template, channel) — uniqueness enforced both
+// for idempotency (a confirmation can't fire twice) and to give the
+// dispatch worker a clear contract: queued rows are work items.
+//
+// status lifecycle:
+//   queued -> sending -> sent       (provider accepted)
+//                     -> delivered  (provider webhook confirmed)
+//                     -> bounced    (provider webhook reported bounce)
+//                     -> failed     (exhausted retries)
+//   queued -> failed                (hard reject before any send)
+//
+// next_attempt_at gates the worker's WHERE clause so retries respect
+// the backoff schedule. attempts counts retries (0 on first send).
+
+export const messages = pgTable(
+  "messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Populated by enforce_messages_org_id from the parent booking.
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    // 'email' | 'sms' — constrained in the migration.
+    channel: text("channel").notNull(),
+    // 'booking.confirmation' | 'booking.reminder_24h' | 'booking.reminder_2h'
+    // | 'booking.cancelled' | 'booking.thank_you' | 'booking.waitlist_ready'
+    // — also constrained in the migration so a typo can't slip past.
+    template: text("template").notNull(),
+    // 'queued' | 'sending' | 'sent' | 'delivered' | 'bounced' | 'failed'
+    status: text("status").notNull().default("queued"),
+    // Provider's message id once accepted (re_*, MS… for Twilio, etc.)
+    providerId: text("provider_id"),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    // Last error message — kept for the dashboard; truncated to 500
+    // chars at write time so a verbose Stripe-style trace doesn't bloat
+    // the row.
+    error: text("error"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Idempotency key per spec — two attempts to enqueue the same
+    // (booking, template, channel) collapse to one row.
+    uniqueIndex("messages_booking_template_channel_unique").on(t.bookingId, t.template, t.channel),
+    index("messages_booking_idx").on(t.bookingId),
+    index("messages_org_idx").on(t.organisationId),
+    // Worker work-list: queued rows whose next_attempt_at has come due.
+    // Partial index keeps the working set small on a hot table.
+    index("messages_worker_idx")
+      .on(t.nextAttemptAt)
+      .where(sql`${t.status} in ('queued','sending')`),
   ],
 );

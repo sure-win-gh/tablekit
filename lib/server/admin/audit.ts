@@ -58,6 +58,13 @@ export type AuditAction =
   | "stripe.no_show_capture.succeeded"
   | "stripe.no_show_capture.failed"
   | "booking.no_show.captured"
+  // messaging phase
+  | "message.queued"
+  | "message.sent"
+  | "message.failed"
+  | "message.bounced"
+  | "guest.unsubscribed"
+  | "guest.contact_invalidated"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
@@ -75,7 +82,8 @@ export type AuditTargetType =
   | "booking"
   | "stripe_account"
   | "deposit_rule"
-  | "payment";
+  | "payment"
+  | "message";
 
 export type AuditInput = {
   organisationId: string;
