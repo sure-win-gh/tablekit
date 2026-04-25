@@ -597,9 +597,7 @@ export const messages = pgTable(
     // Provider's message id once accepted (re_*, MS… for Twilio, etc.)
     providerId: text("provider_id"),
     attempts: integer("attempts").notNull().default(0),
-    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
     // Last error message — kept for the dashboard; truncated to 500
     // chars at write time so a verbose Stripe-style trace doesn't bloat
     // the row.
