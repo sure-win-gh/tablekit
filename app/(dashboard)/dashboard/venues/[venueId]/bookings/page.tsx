@@ -13,7 +13,7 @@ import { nextActions, type BookingStatus } from "@/lib/bookings/state";
 import { withUser } from "@/lib/db/client";
 import { bookings, guests, payments, services, venues } from "@/lib/db/schema";
 
-import { BookingRow } from "./forms";
+import { BookingRow, DateNav } from "./forms";
 
 // Per-day bookings list. Defaults to today in the venue's timezone.
 // `?date=YYYY-MM-DD` overrides — used by the future calendar UI and
@@ -105,7 +105,7 @@ export default async function BookingsPage({
 
   return (
     <section className="flex flex-col gap-6">
-      <header className="flex items-baseline justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-medium">
             {formatVenueDateLong(startUtc, { timezone: venue.timezone })}
@@ -116,12 +116,15 @@ export default async function BookingsPage({
               : `${rows.length} booking${rows.length === 1 ? "" : "s"}`}
           </p>
         </div>
-        <Link
-          href={`/dashboard/venues/${venueId}/bookings/new`}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-800"
-        >
-          + New booking
-        </Link>
+        <div className="flex items-center gap-3">
+          <DateNav venueId={venueId} date={date} />
+          <Link
+            href={`/dashboard/venues/${venueId}/bookings/new`}
+            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-800"
+          >
+            + New booking
+          </Link>
+        </div>
       </header>
 
       {rows.length === 0 ? (

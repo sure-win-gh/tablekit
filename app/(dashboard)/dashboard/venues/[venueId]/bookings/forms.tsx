@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useActionState, useState } from "react";
 
 import { type BookingStatus } from "@/lib/bookings/state";
@@ -139,6 +140,54 @@ function TransitionButton({
         <span className="text-xs text-rose-600">{state.message}</span>
       ) : null}
     </form>
+  );
+}
+
+// Date navigator for the bookings page. Drives the ?date= query
+// param; prev / today / next buttons + a native date input. Pure
+// URL-driven — no local state needed.
+export function DateNav({ venueId, date }: { venueId: string; date: string }) {
+  const router = useRouter();
+  const today = new Date().toISOString().slice(0, 10);
+  const setDate = (d: string) => router.push(`/dashboard/venues/${venueId}/bookings?date=${d}`);
+  const shift = (days: number) => {
+    const d = new Date(`${date}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    setDate(d.toISOString().slice(0, 10));
+  };
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => shift(-1)}
+        className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-700 hover:border-neutral-400"
+        aria-label="Previous day"
+      >
+        ←
+      </button>
+      <button
+        type="button"
+        onClick={() => setDate(today)}
+        disabled={date === today}
+        className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-700 hover:border-neutral-400 disabled:opacity-40"
+      >
+        Today
+      </button>
+      <input
+        type="date"
+        value={date}
+        onChange={(e) => setDate(e.target.value)}
+        className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-900"
+      />
+      <button
+        type="button"
+        onClick={() => shift(1)}
+        className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-700 hover:border-neutral-400"
+        aria-label="Next day"
+      >
+        →
+      </button>
+    </div>
   );
 }
 
