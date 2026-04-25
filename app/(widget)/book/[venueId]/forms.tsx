@@ -117,6 +117,7 @@ type DepositHandoff = {
   reference: string;
   clientSecret: string;
   amountMinor: number;
+  stripeAccount: string;
 };
 
 type SubmitState =
@@ -181,6 +182,7 @@ export function BookingForm({
               kind: "payment_intent";
               clientSecret: string;
               amountMinor: number;
+              stripeAccount: string;
             };
           }
         | { error: string; issues?: string[] };
@@ -193,6 +195,7 @@ export function BookingForm({
               reference: body.reference,
               clientSecret: body.deposit.clientSecret,
               amountMinor: body.deposit.amountMinor,
+              stripeAccount: body.deposit.stripeAccount,
             },
           });
           return;
@@ -360,14 +363,19 @@ function errorMessage(code: string): string {
 // and then moves the widget to the success screen.
 // ---------------------------------------------------------------------------
 
-// Module-level cache: loadStripe is a global-ish Promise.
-let stripePromise: Promise<Stripe | null> | null = null;
-function getStripe(): Promise<Stripe | null> {
-  if (stripePromise) return stripePromise;
+// Module-level cache keyed by connected-account id. Connect Standard
+// direct charges live on acct_*, so Stripe.js must be initialised with
+// `stripeAccount` — otherwise the Payment Element load-errors trying
+// to look up the Intent on the platform account.
+const stripePromises: Map<string, Promise<Stripe | null>> = new Map();
+function getStripe(stripeAccount: string): Promise<Stripe | null> {
+  const cached = stripePromises.get(stripeAccount);
+  if (cached) return cached;
   const pk = process.env["NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY"];
   if (!pk || pk.includes("YOUR_")) return Promise.resolve(null);
-  stripePromise = loadStripe(pk);
-  return stripePromise;
+  const promise = loadStripe(pk, { stripeAccount });
+  stripePromises.set(stripeAccount, promise);
+  return promise;
 }
 
 function DepositStep({
@@ -381,7 +389,7 @@ function DepositStep({
   time: string;
   onPaid: () => void;
 }) {
-  const stripe = useMemo(() => getStripe(), []);
+  const stripe = useMemo(() => getStripe(handoff.stripeAccount), [handoff.stripeAccount]);
   return (
     <section className="flex flex-col gap-4 rounded-md border border-neutral-200 p-6">
       <header>

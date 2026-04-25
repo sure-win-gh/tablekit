@@ -59,6 +59,11 @@ export type DepositResponse = {
   kind: "payment_intent";
   clientSecret: string;
   amountMinor: number;
+  // Connect Standard direct charges live on the connected account.
+  // Stripe.js needs this on its instance so the Payment Element can
+  // resolve the Intent — without it the Element load-errors with an
+  // empty "{}" message.
+  stripeAccount: string;
 };
 
 export type CreateBookingResult =
@@ -336,6 +341,7 @@ export async function createBooking(
         kind: "payment_intent",
         clientSecret: intent.clientSecret,
         amountMinor: intent.amountMinor,
+        stripeAccount: depositReq.stripeAccountId,
       },
     };
   } catch (err) {
