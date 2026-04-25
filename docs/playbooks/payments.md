@@ -67,7 +67,10 @@ The `_v1` suffix lets us rotate keys if a bug ever forces a different body for t
 2. Outside the transaction: `stripe.paymentIntents.create(...)` with the idempotency key from above.
 3. Still outside: update the placeholder row with the real `pi_*` + Stripe status.
 
-If step 2 or 3 fails, the booking + placeholder remain in `requested`/`pending_creation`. The janitor (`lib/payments/janitor.ts`, cron `*/5 * * * *`) sweeps them after 15 minutes — cancels the Intent if a real `pi_*` exists, transitions the booking to `cancelled` with `cancelled_reason='deposit_abandoned'`, marks the payments row `canceled`.
+If step 2 or 3 fails, the booking + placeholder remain in `requested`/`pending_creation`. The janitor (`lib/payments/janitor.ts`) sweeps them after 15 minutes — cancels the Intent if a real `pi_*` exists, transitions the booking to `cancelled` with `cancelled_reason='deposit_abandoned'`, marks the payments row `canceled`. Two callers run it:
+
+1. **Daily Vercel Cron** at 03:00 UTC (`vercel.json` → `/api/cron/deposit-janitor`). Vercel Hobby caps cron frequency at once-per-day; this is the overnight backstop. Move to `*/5 * * * *` (or similar) after the Pro upgrade.
+2. **Inline sweep on `POST /api/v1/bookings`** scoped to the booking's venue. Active venues clean up in near-real-time as a side-effect of the next booker arriving. Fire-and-forget semantics: if the sweep throws we log + continue so the booking isn't blocked.
 
 ## Refunds
 

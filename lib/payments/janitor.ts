@@ -1,11 +1,21 @@
 // Deposit-abandonment janitor.
 //
-// Runs every 5 minutes via Vercel Cron (see vercel.json → /api/cron/
-// deposit-janitor). Finds bookings stuck in `requested` with a still-
-// unconfirmed deposit older than TTL_MINUTES, cancels the Stripe
-// PaymentIntent (if a real pi_* exists), transitions the booking to
-// cancelled with reason `deposit_abandoned`, and marks the payments
-// row canceled.
+// Two callers in Phase 1, both safe to run concurrently:
+//
+//   1. Daily Vercel Cron (`vercel.json` → /api/cron/deposit-janitor)
+//      runs the full sweep at 03:00 — backstop for venues with no
+//      daytime traffic. Vercel Hobby tier limits cron frequency to
+//      once-per-day; once we move to Pro we can tighten this.
+//
+//   2. Inline call at the start of `POST /api/v1/bookings` runs a
+//      venue-scoped sweep (`venueId` filter). Active venues get near-
+//      realtime cleanup as a side-effect of the next booker arriving.
+//
+// In both cases: find bookings stuck in `requested` with a still-
+// unconfirmed deposit older than TTL_MINUTES, cancel the Stripe
+// PaymentIntent (if a real pi_* exists), transition the booking to
+// cancelled with reason `deposit_abandoned`, mark the payments row
+// canceled.
 //
 // Idempotent: a second run over the same state is a no-op because the
 // WHERE clause only matches bookings still in `requested`. Stripe's
@@ -28,7 +38,9 @@ export type JanitorResult = {
   failed: number;
 };
 
-export async function sweepAbandonedDeposits(opts: { now?: Date } = {}): Promise<JanitorResult> {
+export async function sweepAbandonedDeposits(
+  opts: { now?: Date; venueId?: string } = {},
+): Promise<JanitorResult> {
   const now = opts.now ?? new Date();
   const cutoff = new Date(now.getTime() - TTL_MINUTES * 60 * 1000);
 
@@ -39,7 +51,14 @@ export async function sweepAbandonedDeposits(opts: { now?: Date } = {}): Promise
   // Candidate bookings: status=requested, created_at < cutoff, and
   // a payments row exists for this booking with kind=deposit in a
   // not-yet-complete state. We join in SQL so the filter happens at
-  // the DB level.
+  // the DB level. The optional venueId narrows further — used by the
+  // inline sweep on POST /api/v1/bookings.
+  const where = and(
+    eq(bookings.status, "requested"),
+    lt(bookings.createdAt, cutoff),
+    sql`${payments.status} in ('pending_creation','requires_payment_method','requires_action','processing')`,
+    ...(opts.venueId ? [eq(bookings.venueId, opts.venueId)] : []),
+  );
   const stale = await db
     .select({
       bookingId: bookings.id,
@@ -50,13 +69,7 @@ export async function sweepAbandonedDeposits(opts: { now?: Date } = {}): Promise
     })
     .from(bookings)
     .innerJoin(payments, and(eq(payments.bookingId, bookings.id), eq(payments.kind, "deposit")))
-    .where(
-      and(
-        eq(bookings.status, "requested"),
-        lt(bookings.createdAt, cutoff),
-        sql`${payments.status} in ('pending_creation','requires_payment_method','requires_action','processing')`,
-      ),
-    );
+    .where(where);
 
   if (stale.length === 0) return { swept: 0, failed: 0 };
 

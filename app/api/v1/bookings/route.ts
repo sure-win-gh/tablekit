@@ -15,6 +15,7 @@ import { z } from "zod";
 
 import { createBooking } from "@/lib/bookings/create";
 import { upsertGuestInput } from "@/lib/guests/schema";
+import { sweepAbandonedDeposits } from "@/lib/payments/janitor";
 import { bookingReference, verifyCaptcha } from "@/lib/public/captcha";
 import { ipFromHeaders, rateLimit } from "@/lib/public/rate-limit";
 import { resolveVenueOrg } from "@/lib/public/venue";
@@ -70,6 +71,20 @@ export async function POST(req: NextRequest) {
   const organisationId = await resolveVenueOrg(parsed.data.venueId);
   if (!organisationId) {
     return NextResponse.json({ error: "venue-not-found" }, { status: 404 });
+  }
+
+  // 4b. Best-effort sweep of abandoned deposits for this venue. This
+  //     keeps the table-slot exclusion constraint honest in near-real-
+  //     time on Hobby tier (Vercel Cron is once-daily there). If the
+  //     sweep throws we don't block the booking — the daily cron is the
+  //     backstop.
+  try {
+    await sweepAbandonedDeposits({ venueId: parsed.data.venueId });
+  } catch (err) {
+    console.error("[app/api/v1/bookings] inline janitor sweep failed:", {
+      venueId: parsed.data.venueId,
+      message: err instanceof Error ? err.message : String(err),
+    });
   }
 
   // 5. Hand off to the same domain function the host flow uses.
