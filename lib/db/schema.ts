@@ -620,3 +620,56 @@ export const messages = pgTable(
       .where(sql`${t.status} in ('queued','sending')`),
   ],
 );
+
+// =============================================================================
+// Waitlist (walk-ins)
+// =============================================================================
+//
+// Single-row-per-walk-in entry. Status moves through:
+//   waiting -> seated      (host seats them; seated_booking_id set)
+//   waiting -> cancelled   (one-tap host action)
+//   waiting -> left        (guest gave up; host marks)
+// Constrained in the migration. organisation_id denormalised from the
+// parent venue via enforce_waitlists_org_id (matching the deposit_rules
+// pattern).
+
+export const waitlists = pgTable(
+  "waitlists",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    guestId: uuid("guest_id")
+      .notNull()
+      .references(() => guests.id),
+    partySize: integer("party_size").notNull(),
+    // 'waiting' | 'seated' | 'left' | 'cancelled'
+    status: text("status").notNull().default("waiting"),
+    // Set when status transitions to 'seated' — points at the booking
+    // we created for the walk-in (source='walk-in'). FK lets the
+    // dashboard link straight to the booking row.
+    seatedBookingId: uuid("seated_booking_id").references(() => bookings.id, {
+      onDelete: "set null",
+    }),
+    // Free-text per-row note hosts can add ("waiting at bar", "outside
+    // table only").
+    notes: text("notes"),
+    requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+    seatedAt: timestamp("seated_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("waitlists_venue_idx").on(t.venueId),
+    index("waitlists_org_idx").on(t.organisationId),
+    // Active-queue working set — the dashboard's primary read path.
+    index("waitlists_venue_active_idx")
+      .on(t.venueId, t.requestedAt)
+      .where(sql`${t.status} = 'waiting'`),
+  ],
+);

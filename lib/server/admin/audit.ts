@@ -65,6 +65,11 @@ export type AuditAction =
   | "message.bounced"
   | "guest.unsubscribed"
   | "guest.contact_invalidated"
+  // waitlist phase
+  | "waitlist.added"
+  | "waitlist.seated"
+  | "waitlist.cancelled"
+  | "waitlist.left"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
@@ -83,7 +88,8 @@ export type AuditTargetType =
   | "stripe_account"
   | "deposit_rule"
   | "payment"
-  | "message";
+  | "message"
+  | "waitlist";
 
 export type AuditInput = {
   organisationId: string;
