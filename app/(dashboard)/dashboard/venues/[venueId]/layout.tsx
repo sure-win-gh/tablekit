@@ -1,5 +1,5 @@
 import { asc, eq } from "drizzle-orm";
-import { Building2, ChevronRight, ShieldCheck } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -8,13 +8,16 @@ import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
 import { venues } from "@/lib/db/schema";
 
-import { VenueTabs } from "./nav-tabs";
-
 // Shared chrome for every route under /dashboard/venues/[venueId]:
-// venue name as h1, breadcrumb, and a tab nav across the venue's
-// surfaces. If the venue id doesn't resolve for the current user
-// (wrong org, deleted, bad id), we 404 here so the rest of the
-// subtree never has to handle the "what if it's gone" case.
+// venue name as h1 and a breadcrumb. The per-venue tab nav moved
+// into the dashboard sidebar (app/(dashboard)/sidebar-shell.tsx);
+// the org-level pills (Organisation, Privacy requests) live there
+// too. The VenueSwitcher pill stays inline so ⌘K hint discovery is
+// adjacent to the venue name.
+//
+// If the venue id doesn't resolve for the current user (wrong org,
+// deleted, bad id), we 404 here so the rest of the subtree never
+// has to handle the "what if it's gone" case.
 
 export default async function VenueLayout({
   children,
@@ -26,10 +29,6 @@ export default async function VenueLayout({
   await requireRole("host");
   const { venueId } = await params;
 
-  // Single round-trip — current venue (404 if not found) plus the
-  // sibling venue list for the switcher. RLS already gates the list
-  // to what this user can see, so a venue-scoped host gets a
-  // shorter list automatically.
   const { venue, siblings } = await withUser(async (db) => {
     const [v] = await db
       .select({ id: venues.id, name: venues.name, organisationId: venues.organisationId })
@@ -47,17 +46,6 @@ export default async function VenueLayout({
 
   if (!venue) notFound();
 
-  const tabs = [
-    { href: `/dashboard/venues/${venue.id}/floor-plan`, label: "Floor plan" },
-    { href: `/dashboard/venues/${venue.id}/bookings`, label: "Bookings" },
-    { href: `/dashboard/venues/${venue.id}/timeline`, label: "Timeline" },
-    { href: `/dashboard/venues/${venue.id}/waitlist`, label: "Waitlist" },
-    { href: `/dashboard/venues/${venue.id}/services`, label: "Services" },
-    { href: `/dashboard/venues/${venue.id}/deposits`, label: "Deposits" },
-    { href: `/dashboard/venues/${venue.id}/reports`, label: "Reports" },
-    { href: `/dashboard/venues/${venue.id}/settings`, label: "Settings" },
-  ];
-
   return (
     <div className="flex flex-1 flex-col p-6">
       <nav className="flex items-center justify-between gap-1.5 text-xs text-ash">
@@ -68,30 +56,11 @@ export default async function VenueLayout({
           <ChevronRight className="h-3.5 w-3.5 text-stone" aria-hidden />
           <span className="text-ink">{venue.name}</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <VenueSwitcher currentVenueId={venue.id} venues={siblings} />
-          <Link
-            href="/dashboard/organisation"
-            className="inline-flex items-center gap-1 rounded-pill border border-hairline bg-white px-2.5 py-1 text-xs font-semibold text-charcoal transition hover:border-ink hover:text-ink"
-          >
-            <Building2 className="h-3.5 w-3.5" aria-hidden />
-            Organisation
-          </Link>
-          <Link
-            href="/dashboard/privacy-requests"
-            className="inline-flex items-center gap-1 rounded-pill border border-hairline bg-white px-2.5 py-1 text-xs font-semibold text-charcoal transition hover:border-ink hover:text-ink"
-          >
-            <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-            Privacy requests
-          </Link>
-        </div>
+        <VenueSwitcher currentVenueId={venue.id} venues={siblings} />
       </nav>
 
-      <header className="mt-3 border-b border-hairline">
+      <header className="mt-3 border-b border-hairline pb-4">
         <h1 className="text-2xl font-bold tracking-tight text-ink">{venue.name}</h1>
-        <div className="mt-4">
-          <VenueTabs tabs={tabs} />
-        </div>
       </header>
 
       <div className="mt-6">{children}</div>

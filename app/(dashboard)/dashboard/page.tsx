@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import { Plus, ShieldCheck, Store } from "lucide-react";
+import { Plus, Store } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -9,8 +9,6 @@ import { withUser } from "@/lib/db/client";
 import { organisations, users, venues } from "@/lib/db/schema";
 import { supabaseServer } from "@/lib/db/supabase-server";
 
-import { signOut } from "../actions";
-
 // Middleware already guarantees an authed session for /dashboard/*.
 // We re-check here defensively — middleware runs first, but belts and
 // braces in case it's ever short-circuited or misconfigured.
@@ -19,6 +17,9 @@ import { signOut } from "../actions";
 //   0 venues  → render the empty-state on this page (create-first-venue)
 //   1 venue   → redirect to that venue's bookings page
 //   2+ venues → redirect to the group /dashboard/overview
+//
+// User chrome (org name, sign-out, privacy-requests link) lives in
+// the sidebar — this page is just the empty-state body.
 
 export default async function DashboardPage() {
   const supabase = await supabaseServer();
@@ -62,31 +63,11 @@ export default async function DashboardPage() {
   // Zero-venue state.
   return (
     <main className="flex flex-1 flex-col p-6">
-      <header className="flex flex-wrap items-baseline justify-between gap-3 border-b border-hairline pb-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink">{data.org.name}</h1>
-          <p className="mt-0.5 text-sm text-ash">
-            {data.org.plan} plan · slug <span className="font-mono">{data.org.slug}</span>
-          </p>
-        </div>
-        <div className="flex items-center gap-3 text-sm">
-          <Link
-            href="/dashboard/privacy-requests"
-            className="inline-flex items-center gap-1 rounded-pill border border-hairline bg-white px-2.5 py-1 text-xs font-semibold text-charcoal transition hover:border-ink hover:text-ink"
-          >
-            <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-            Privacy requests
-          </Link>
-          <span className="text-charcoal">{data.me.fullName ?? data.me.email}</span>
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="text-ash underline underline-offset-4 hover:text-ink"
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
+      <header className="border-b border-hairline pb-4">
+        <h1 className="text-2xl font-bold tracking-tight text-ink">{data.org.name}</h1>
+        <p className="mt-0.5 text-sm text-ash">
+          {data.org.plan} plan · slug <span className="font-mono">{data.org.slug}</span>
+        </p>
       </header>
 
       <section className="mt-10 flex flex-col items-center gap-4 rounded-card border border-dashed border-hairline p-12 text-center">
