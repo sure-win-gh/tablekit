@@ -19,24 +19,66 @@
 /*
  * Light-only until we do a proper dark-mode design pass. Every
  * component today uses hard-coded light-scheme Tailwind classes
- * (text-neutral-900, bg-white, etc.) with no dark: variants, so
- * flipping the body via prefers-color-scheme produces dark text on
- * dark backgrounds. color-scheme: light also tells the browser to
- * render native controls (scrollbars, date pickers) in the light
- * palette regardless of OS preference.
+ * (text-ink, bg-white, etc.) with no dark: variants, so flipping the
+ * body via prefers-color-scheme produces dark text on dark
+ * backgrounds. color-scheme: light also tells the browser to render
+ * native controls (scrollbars, date pickers) in the light palette
+ * regardless of OS preference.
  */
 :root {
   color-scheme: light;
-  --background: #ffffff;
-  --foreground: #171717;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+/*
+ * Design tokens. Inspired by Airbnb's Rausch / Cereal / Hairline
+ * system — adapted for a B2B operator dashboard rather than a
+ * photography-led marketplace. Every token here lives behind a
+ * Tailwind utility (e.g. `bg-coral`, `text-ink`, `rounded-card`,
+ * `shadow-panel`) so consumers don't hand-roll hex values.
+ */
+@theme {
+  /* Brand: single accent. Used only on primary CTAs + active states. */
+  --color-coral: #ff385c;
+  --color-coral-deep: #e00b41;
+
+  /* Neutral scale. Ink is the system near-black — never #000. */
+  --color-ink: #222222;
+  --color-charcoal: #3f3f3f;
+  --color-ash: #6a6a6a;
+  --color-mute: #929292;
+  --color-stone: #c1c1c1;
+  --color-hairline: #dddddd;
+  --color-cloud: #f7f7f7;
+
+  /* Semantic. */
+  --color-rose: #c13515;
+  --color-rose-deep: #b32505;
+
+  /* Radius scale — 4 / 8 / 14 / 20 / 32 / full. */
+  --radius-tag: 4px;
+  --radius-input: 8px;
+  --radius-card: 14px;
+  --radius-pill: 20px;
+  --radius-search: 32px;
+
+  /* Stacked-shadow elevation for panels + popovers. The signature
+   * three-layer lift (1px outline + soft mid + deeper drop) reads
+   * as one cohesive elevation but anti-aliases more cleanly than a
+   * single drop-shadow. */
+  --shadow-panel:
+    rgba(0, 0, 0, 0.02) 0 0 0 1px, rgba(0, 0, 0, 0.04) 0 2px 6px 0,
+    rgba(0, 0, 0, 0.1) 0 4px 8px 0;
+
+  /* Typography — Inter via next/font, exposed as --font-sans. */
+  --font-sans:
+    var(--font-sans), -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: #ffffff;
+  color: var(--color-ink);
+  /* Body weight 500 — the Airbnb tell. Default browser 400 reads
+   * thin against Inter's geometry; 500 gives the texture a touch
+   * more confidence without crossing into bold. */
+  font-weight: 500;
 }
