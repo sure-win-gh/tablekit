@@ -33,7 +33,11 @@ export async function getTopGuestsReport(
       guestId: guests.id,
       firstName: guests.firstName,
       visits: sql<number>`count(*)::int`.as("visits"),
-      lastVisit: sql<Date>`max(${bookings.startAt})`.as("lastVisit"),
+      // node-postgres returns max(timestamptz) as a string for raw
+      // sql expressions; drizzle's Date parser only fires on declared
+      // timestamp columns. Cast at the boundary below so consumers
+      // get a real Date and can call `.toLocaleDateString` etc.
+      lastVisit: sql<string>`max(${bookings.startAt})`.as("lastVisit"),
     })
     .from(bookings)
     .innerJoin(guests, eq(guests.id, bookings.guestId))
@@ -50,5 +54,5 @@ export async function getTopGuestsReport(
     .orderBy(desc(sql`count(*)`), desc(sql`max(${bookings.startAt})`))
     .limit(limit);
 
-  return rows;
+  return rows.map((r) => ({ ...r, lastVisit: new Date(r.lastVisit) }));
 }

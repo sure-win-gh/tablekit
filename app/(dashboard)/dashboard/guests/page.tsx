@@ -45,7 +45,11 @@ export default async function GuestsPage() {
         venuesVisited: sql<number>`coalesce(count(distinct ${bookings.venueId}), 0)::int`.as(
           "venuesVisited",
         ),
-        lastVisit: sql<Date | null>`max(${bookings.startAt}) filter (where ${bookings.status} in ('confirmed','seated','finished'))`.as(
+        // node-postgres returns max(timestamptz) as a string for raw
+        // sql expressions (drizzle's auto-parser only fires on
+        // declared timestamp columns). Cast at the application
+        // boundary below.
+        lastVisit: sql<string | null>`max(${bookings.startAt}) filter (where ${bookings.status} in ('confirmed','seated','finished'))`.as(
           "lastVisit",
         ),
       })
@@ -56,7 +60,13 @@ export default async function GuestsPage() {
       .orderBy(desc(sql`max(${bookings.startAt})`), desc(guests.createdAt))
       .limit(200);
 
-    return { org: o, rows: guestRows };
+    return {
+      org: o,
+      rows: guestRows.map((g) => ({
+        ...g,
+        lastVisit: g.lastVisit ? new Date(g.lastVisit) : null,
+      })),
+    };
   });
 
   if (!org) {
