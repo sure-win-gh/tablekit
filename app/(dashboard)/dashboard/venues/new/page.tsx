@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 
 import { requireRole } from "@/lib/auth/require-role";
@@ -14,17 +15,17 @@ export default async function NewVenuePage() {
 
   return (
     <main className="flex flex-1 flex-col p-6">
-      <nav className="text-sm">
-        <Link href="/dashboard/venues" className="text-neutral-500 hover:underline">
+      <nav className="flex items-center gap-1.5 text-xs text-ash">
+        <Link href="/dashboard/venues" className="hover:text-ink">
           Venues
         </Link>
-        <span className="text-neutral-400"> / </span>
-        <span className="text-neutral-900">New</span>
+        <ChevronRight className="h-3.5 w-3.5 text-stone" aria-hidden />
+        <span className="text-ink">New</span>
       </nav>
 
-      <header className="mt-4 border-b border-neutral-200 pb-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Create a venue</h1>
-        <p className="mt-1 text-sm text-neutral-500">
+      <header className="mt-3 border-b border-hairline pb-4">
+        <h1 className="text-2xl font-bold tracking-tight text-ink">Create a venue</h1>
+        <p className="mt-1 text-sm text-ash">
           We&apos;ll seed it with a starter floor plan and service schedule based on the type you
           pick. Everything&apos;s editable afterwards.
         </p>

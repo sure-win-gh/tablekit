@@ -9,11 +9,11 @@ import { cn } from "./cn";
 
 type FieldProps = {
   label: string;
-  htmlFor?: string;
-  hint?: string;
-  error?: string;
-  optional?: boolean;
-  className?: string;
+  htmlFor?: string | undefined;
+  hint?: string | undefined;
+  error?: string | undefined;
+  optional?: boolean | undefined;
+  className?: string | undefined;
   children: ReactNode;
 };
 

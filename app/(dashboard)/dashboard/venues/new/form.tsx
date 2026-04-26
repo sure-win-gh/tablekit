@@ -2,6 +2,8 @@
 
 import { useActionState } from "react";
 
+import { Button, Field, Input, Select } from "@/components/ui";
+
 import { createVenue, type CreateVenueState } from "./actions";
 
 const initial: CreateVenueState = { status: "idle" };
@@ -37,20 +39,26 @@ export function NewVenueForm() {
     <form action={formAction} className="flex flex-col gap-6">
       <Field
         label="Venue name"
-        name="name"
-        type="text"
-        autoComplete="organization"
-        required
+        htmlFor="venue-name"
         error={fieldErrors?.["name"]?.[0]}
-      />
+      >
+        <Input
+          id="venue-name"
+          name="name"
+          type="text"
+          autoComplete="organization"
+          required
+          invalid={Boolean(fieldErrors?.["name"]?.[0])}
+        />
+      </Field>
 
       <fieldset className="flex flex-col gap-2">
-        <legend className="text-sm font-medium text-neutral-900">Venue type</legend>
+        <legend className="text-xs font-semibold text-ink">Venue type</legend>
         <div className="flex flex-col gap-2">
           {TYPE_OPTIONS.map((opt) => (
             <label
               key={opt.value}
-              className="flex cursor-pointer items-start gap-3 rounded-md border border-neutral-300 p-3 has-checked:border-neutral-900 has-checked:bg-neutral-50"
+              className="flex cursor-pointer items-start gap-3 rounded-card border border-hairline p-3 transition has-checked:border-ink has-checked:bg-cloud"
             >
               <input
                 type="radio"
@@ -58,106 +66,54 @@ export function NewVenueForm() {
                 value={opt.value}
                 required
                 defaultChecked={opt.value === "cafe"}
-                className="mt-1"
+                className="mt-1 accent-ink"
               />
-              <span className="flex flex-col">
-                <span className="text-sm font-medium">{opt.label}</span>
-                <span className="text-xs text-neutral-500">{opt.hint}</span>
+              <span className="flex flex-col gap-0.5">
+                <span className="text-sm font-semibold text-ink">{opt.label}</span>
+                <span className="text-xs text-ash">{opt.hint}</span>
               </span>
             </label>
           ))}
         </div>
         {fieldErrors?.["venueType"] ? (
-          <span role="alert" className="text-xs text-red-600">
+          <span role="alert" className="text-[11px] text-rose">
             {fieldErrors["venueType"][0]}
           </span>
         ) : null}
       </fieldset>
 
       <div className="grid grid-cols-2 gap-4">
-        <Select
-          label="Timezone"
-          name="timezone"
-          defaultValue="Europe/London"
-          options={TZ_OPTIONS}
-        />
-        <Select label="Locale" name="locale" defaultValue="en-GB" options={LOCALE_OPTIONS} />
+        <Field label="Timezone" htmlFor="venue-tz">
+          <Select id="venue-tz" name="timezone" defaultValue="Europe/London">
+            {TZ_OPTIONS.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Locale" htmlFor="venue-locale">
+          <Select id="venue-locale" name="locale" defaultValue="en-GB">
+            {LOCALE_OPTIONS.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </Select>
+        </Field>
       </div>
 
       {state.status === "error" && !fieldErrors ? (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-rose">
           {state.message}
         </p>
       ) : null}
 
-      <div className="flex justify-end gap-3 border-t border-neutral-200 pt-4">
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-50"
-        >
+      <div className="flex justify-end gap-3 border-t border-hairline pt-4">
+        <Button type="submit" disabled={pending}>
           {pending ? "Creating…" : "Create venue"}
-        </button>
+        </Button>
       </div>
     </form>
-  );
-}
-
-type FieldProps = {
-  label: string;
-  name: string;
-  type: "text";
-  autoComplete?: string;
-  required?: boolean;
-  error?: string | undefined;
-};
-
-function Field({ label, name, type, autoComplete, required, error }: FieldProps) {
-  return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="font-medium text-neutral-900">{label}</span>
-      <input
-        name={name}
-        type={type}
-        required={required}
-        autoComplete={autoComplete}
-        aria-invalid={Boolean(error)}
-        className="rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
-      />
-      {error ? (
-        <span role="alert" className="text-xs text-red-600">
-          {error}
-        </span>
-      ) : null}
-    </label>
-  );
-}
-
-function Select({
-  label,
-  name,
-  defaultValue,
-  options,
-}: {
-  label: string;
-  name: string;
-  defaultValue: string;
-  options: readonly string[];
-}) {
-  return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="font-medium text-neutral-900">{label}</span>
-      <select
-        name={name}
-        defaultValue={defaultValue}
-        className="rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
-      >
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }

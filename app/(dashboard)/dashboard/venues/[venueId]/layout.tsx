@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -6,9 +7,11 @@ import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
 import { venues } from "@/lib/db/schema";
 
+import { VenueTabs } from "./nav-tabs";
+
 // Shared chrome for every route under /dashboard/venues/[venueId]:
-// venue name as h1, and a tab nav across to floor plan / services /
-// settings. If the venue id doesn't resolve for the current user
+// venue name as h1, breadcrumb, and a tab nav across the venue's
+// surfaces. If the venue id doesn't resolve for the current user
 // (wrong org, deleted, bad id), we 404 here so the rest of the
 // subtree never has to handle the "what if it's gone" case.
 
@@ -33,7 +36,7 @@ export default async function VenueLayout({
 
   if (!venue) notFound();
 
-  const tabs: Array<{ href: string; label: string }> = [
+  const tabs = [
     { href: `/dashboard/venues/${venue.id}/floor-plan`, label: "Floor plan" },
     { href: `/dashboard/venues/${venue.id}/bookings`, label: "Bookings" },
     { href: `/dashboard/venues/${venue.id}/waitlist`, label: "Waitlist" },
@@ -45,26 +48,18 @@ export default async function VenueLayout({
 
   return (
     <div className="flex flex-1 flex-col p-6">
-      <nav className="text-sm">
-        <Link href="/dashboard/venues" className="text-neutral-500 hover:underline">
+      <nav className="flex items-center gap-1.5 text-xs text-ash">
+        <Link href="/dashboard/venues" className="hover:text-ink">
           Venues
         </Link>
-        <span className="text-neutral-400"> / </span>
-        <span className="text-neutral-900">{venue.name}</span>
+        <ChevronRight className="h-3.5 w-3.5 text-stone" aria-hidden />
+        <span className="text-ink">{venue.name}</span>
       </nav>
 
-      <header className="mt-4 border-b border-neutral-200 pb-4">
-        <h1 className="text-2xl font-semibold tracking-tight">{venue.name}</h1>
-        <div className="mt-4 flex gap-1 text-sm">
-          {tabs.map((t) => (
-            <Link
-              key={t.href}
-              href={t.href}
-              className="rounded-md px-3 py-1.5 text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900"
-            >
-              {t.label}
-            </Link>
-          ))}
+      <header className="mt-3 border-b border-hairline">
+        <h1 className="text-2xl font-bold tracking-tight text-ink">{venue.name}</h1>
+        <div className="mt-4">
+          <VenueTabs tabs={tabs} />
         </div>
       </header>
 
