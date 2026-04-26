@@ -181,8 +181,21 @@ export default async function TimelinePage({
   }
 
   // Build hour-tick labels for the header row.
+  //
+  // Iterates [startHour, endHour) — *exclusive* of endHour. Including
+  // endHour as a tick would place a label at gridColumn (totalSlots
+  // + 2), past the explicit template's last column. CSS grid then
+  // auto-creates an implicit column to fit the label, sized via
+  // grid-auto-columns: auto, which steals width from the `1fr`
+  // columns and makes the header columns narrower than the body
+  // columns below — misaligning everything.
+  //
+  // The right edge of the grid implicitly = endHour:00; operators
+  // infer it from the last labelled hour. Label-at-the-right-edge
+  // is doable but needs absolute positioning that's not worth the
+  // complexity.
   const hourTicks: number[] = [];
-  for (let h = window.startHour; h <= window.endHour; h++) hourTicks.push(h);
+  for (let h = window.startHour; h < window.endHour; h++) hourTicks.push(h);
 
   // "Now" indicator — minutes from window-start in venue zone.
   const nowMinutes = (() => {
