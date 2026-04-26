@@ -673,3 +673,65 @@ export const waitlists = pgTable(
       .where(sql`${t.status} = 'waiting'`),
   ],
 );
+
+// =============================================================================
+// DSAR (data subject access / rectification / erasure) requests
+// =============================================================================
+//
+// The guest-facing /privacy/request form posts a row here. The
+// operator works through the inbox at /dashboard/privacy-requests.
+//
+// We hash the requester's email so an operator can find a matching
+// guest record without us decrypting plaintext at scrub time. The
+// requester's email is also stored encrypted (display only, after
+// the operator clicks into the request).
+//
+// `due_at` defaults to created_at + 30 days at insert (set in the
+// domain helper, not the schema, so the SLA clock follows the
+// `requested_at` semantics rather than `created_at`).
+
+export const dsarRequests = pgTable(
+  "dsar_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    // 'export' | 'rectify' | 'erase' — constrained in the migration.
+    kind: text("kind").notNull(),
+    // 'pending' | 'in_progress' | 'completed' | 'rejected'.
+    status: text("status").notNull().default("pending"),
+    // HMAC of the lowercased+trimmed requester email — same scheme as
+    // guests.email_hash. Lets the operator (or a future automated
+    // matcher) find the corresponding guest row without decrypting.
+    requesterEmailHash: text("requester_email_hash").notNull(),
+    // Encrypted requester email — versioned ciphertext envelope. Only
+    // decrypted on the request-detail page in the dashboard.
+    requesterEmailCipher: text("requester_email_cipher").notNull(),
+    // Free-text from the requester ("which booking", "what to correct").
+    // Encrypted because it can include PII the requester chose to share.
+    messageCipher: text("message_cipher"),
+    // Resolved-to guest record (operator action when they identify
+    // the matching profile). FK keeps the link if the guest is later
+    // erased (set null on delete).
+    guestId: uuid("guest_id").references(() => guests.id, { onDelete: "set null" }),
+    // Operator notes when actioning. Plaintext — operator-authored,
+    // intended audit trail rather than PII bucket.
+    resolutionNotes: text("resolution_notes"),
+    // requested_at + 30 days. Pre-computed so the dashboard can ORDER
+    // BY due_at without per-row arithmetic. Refreshed if the request
+    // is reopened.
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("dsar_requests_org_idx").on(t.organisationId),
+    // Active-queue working set — what the operator inbox needs.
+    index("dsar_requests_active_idx")
+      .on(t.organisationId, t.dueAt)
+      .where(sql`${t.status} in ('pending','in_progress')`),
+  ],
+);

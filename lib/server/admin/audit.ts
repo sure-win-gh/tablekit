@@ -70,6 +70,11 @@ export type AuditAction =
   | "waitlist.seated"
   | "waitlist.cancelled"
   | "waitlist.left"
+  // dsar phase
+  | "dsar.created"
+  | "dsar.in_progress"
+  | "dsar.completed"
+  | "dsar.rejected"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
@@ -89,7 +94,8 @@ export type AuditTargetType =
   | "deposit_rule"
   | "payment"
   | "message"
-  | "waitlist";
+  | "waitlist"
+  | "dsar_request";
 
 export type AuditInput = {
   organisationId: string;
