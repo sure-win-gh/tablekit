@@ -1,7 +1,6 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   createContext,
@@ -9,6 +8,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
   type DragEvent,
@@ -92,20 +92,34 @@ export type NewBookingDraft = {
   endSlot: number; // exclusive
 };
 
-type Selection = NewBookingDraft & { active: boolean };
+// Selection uses anchor + current rather than start/end so the user
+// can drag in either direction (forward or backward from where they
+// clicked). The visual range is [min(anchor,current), max+1].
+type Selection = {
+  tableId: string;
+  tableLabel: string;
+  areaId: string;
+  anchorSlot: number;
+  currentSlot: number;
+  active: boolean;
+};
 
 type DragCtx = {
   source: DragSource;
   setSource: (s: DragSource) => void;
 
   selection: Selection | null;
-  startSelection: (s: Omit<NewBookingDraft, "endSlot">) => void;
-  extendSelection: (endSlot: number) => void;
+  startSelection: (s: { tableId: string; tableLabel: string; areaId: string; anchorSlot: number }) => void;
+  extendSelection: (slot: number) => void;
   cancelSelection: () => void;
   commitSelection: () => void;
 
   modalDraft: NewBookingDraft | null;
   closeModal: () => void;
+
+  detailBlock: BookingDetailPayload | null;
+  openDetail: (block: BookingDetailPayload) => void;
+  closeDetail: () => void;
 };
 
 const DragSourceContext = createContext<DragCtx | null>(null);
@@ -114,13 +128,27 @@ export function TimelineDragProvider({ children }: { children: ReactNode }) {
   const [source, setSource] = useState<DragSource>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [modalDraft, setModalDraft] = useState<NewBookingDraft | null>(null);
+  const [detailBlock, setDetailBlock] = useState<BookingDetailPayload | null>(null);
 
-  const startSelection = useCallback((s: Omit<NewBookingDraft, "endSlot">) => {
-    setSelection({ ...s, endSlot: s.startSlot + 1, active: true });
-  }, []);
+  const startSelection = useCallback(
+    (s: { tableId: string; tableLabel: string; areaId: string; anchorSlot: number }) => {
+      setSelection({
+        ...s,
+        currentSlot: s.anchorSlot,
+        active: true,
+      });
+    },
+    [],
+  );
 
-  const extendSelection = useCallback((endSlot: number) => {
-    setSelection((prev) => (prev ? { ...prev, endSlot } : prev));
+  const extendSelection = useCallback((slot: number) => {
+    setSelection((prev) => {
+      if (!prev) return prev;
+      // Skip the state update if nothing changed — avoids a ghost
+      // re-render on every mousemove pixel within a single cell.
+      if (prev.currentSlot === slot) return prev;
+      return { ...prev, currentSlot: slot };
+    });
   }, []);
 
   const cancelSelection = useCallback(() => setSelection(null), []);
@@ -128,10 +156,11 @@ export function TimelineDragProvider({ children }: { children: ReactNode }) {
   const commitSelection = useCallback(() => {
     setSelection((prev) => {
       if (!prev) return null;
-      const lo = Math.min(prev.startSlot, prev.endSlot - 1);
-      const hi = Math.max(prev.startSlot + 1, prev.endSlot);
-      // Click-without-drag (single slot) → snap to 30 min default.
-      const span = hi - lo === 1 ? 2 : hi - lo;
+      const lo = Math.min(prev.anchorSlot, prev.currentSlot);
+      const hi = Math.max(prev.anchorSlot, prev.currentSlot);
+      // Single-slot click → snap to 30 min default; otherwise honour
+      // the dragged span.
+      const span = hi === lo ? 2 : hi - lo + 1;
       setModalDraft({
         tableId: prev.tableId,
         tableLabel: prev.tableLabel,
@@ -142,6 +171,9 @@ export function TimelineDragProvider({ children }: { children: ReactNode }) {
       return null;
     });
   }, []);
+
+  const openDetail = useCallback((b: BookingDetailPayload) => setDetailBlock(b), []);
+  const closeDetail = useCallback(() => setDetailBlock(null), []);
 
   const closeModal = useCallback(() => setModalDraft(null), []);
 
@@ -156,6 +188,9 @@ export function TimelineDragProvider({ children }: { children: ReactNode }) {
       commitSelection,
       modalDraft,
       closeModal,
+      detailBlock,
+      openDetail,
+      closeDetail,
     }),
     [
       source,
@@ -166,6 +201,9 @@ export function TimelineDragProvider({ children }: { children: ReactNode }) {
       commitSelection,
       modalDraft,
       closeModal,
+      detailBlock,
+      openDetail,
+      closeDetail,
     ],
   );
 
@@ -195,14 +233,23 @@ export type TimelineBookingBlock = {
   span: number;
   status: BookingStatus;
   wallStart: string;
+  wallEnd: string;
   guestFirstName: string;
   partySize: number;
   notes: string | null;
+  serviceName: string;
+};
+
+// Detail-modal payload — derived from a TimelineBookingBlock + the
+// row's table label (the block doesn't carry it because it's owned by
+// the row that renders it).
+export type BookingDetailPayload = TimelineBookingBlock & {
+  tableLabel: string;
+  areaId: string;
 };
 
 export function TimelineRow({
   venueId,
-  date,
   tableId,
   tableLabel,
   areaId,
@@ -219,10 +266,19 @@ export function TimelineRow({
 }) {
   const router = useRouter();
   const ctx = useTimelineCtx();
-  const { source, setSource, selection, startSelection, extendSelection, commitSelection } = ctx;
+  const {
+    source,
+    setSource,
+    selection,
+    startSelection,
+    extendSelection,
+    commitSelection,
+    cancelSelection,
+  } = ctx;
   const [pending, startTransition] = useTransition();
   const [isOver, setOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
 
   const sameArea = source && source.fromAreaId === areaId;
   const sameTable = source?.fromTableId === tableId;
@@ -266,9 +322,10 @@ export function TimelineRow({
     [canDrop, source, venueId, tableId, setSource, router],
   );
 
-  // Slot indices that are blocked by an existing booking on this
-  // row. Used to (a) refuse selection-start over a block, (b) clamp
-  // the selection's end so it doesn't run through one.
+  // Slot indices blocked by existing bookings on this row. Used to:
+  // (a) refuse selection-start over a block;
+  // (b) clamp the selection to not run through an occupied slot in
+  //     either direction (forward or backward from the anchor).
   const occupied = useMemo(() => {
     const set = new Set<number>();
     for (const b of bookings) {
@@ -280,59 +337,109 @@ export function TimelineRow({
     return set;
   }, [bookings]);
 
+  // Mousedown on a cell starts a selection anchored to that slot.
+  // Block-drag-active short-circuits.
   const onCellMouseDown = useCallback(
     (e: MouseEvent<HTMLDivElement>, slot: number) => {
-      // Left button only; ignore if a block drag is active.
       if (e.button !== 0 || source) return;
       if (occupied.has(slot)) return;
       e.preventDefault();
-      startSelection({ tableId, tableLabel, areaId, startSlot: slot });
+      startSelection({ tableId, tableLabel, areaId, anchorSlot: slot });
     },
     [source, occupied, startSelection, tableId, tableLabel, areaId],
   );
 
-  const onCellMouseEnter = useCallback(
-    (slot: number) => {
-      if (!selection || !selection.active) return;
-      if (selection.tableId !== tableId) return;
-      // Clamp the selection end so it doesn't extend through an
-      // occupied slot. Find the nearest occupied slot at or after
-      // the start; cap there.
-      let cap = totalSlots;
-      for (let i = selection.startSlot + 1; i < totalSlots; i++) {
-        if (occupied.has(i)) {
-          cap = i;
-          break;
-        }
-      }
-      const target = Math.min(slot + 1, cap);
-      extendSelection(target);
-    },
-    [selection, tableId, totalSlots, occupied, extendSelection],
-  );
+  // Window-level mousemove + mouseup while a selection is active on
+  // this row — gives smooth dragging in both directions and survives
+  // the cursor leaving the row's own area. We compute the slot from
+  // the mouse's clientX vs the row's bounding rect so there's no
+  // dependency on per-cell mouseenter (which flickered when the
+  // ghost overlapped the cells).
+  const isMyDrag = selection?.active && selection.tableId === tableId;
+  useEffect(() => {
+    if (!isMyDrag) return;
+    const node = rowRef.current;
+    if (!node) return;
 
-  // Render the selection ghost on this row only when the active
-  // selection belongs to this table.
+    // Walk outwards from the anchor to find the bounds the selection
+    // can't cross — the next occupied slot in each direction.
+    const anchor = selection!.anchorSlot;
+    let leftCap = 0;
+    for (let i = anchor - 1; i >= 0; i--) {
+      if (occupied.has(i)) {
+        leftCap = i + 1;
+        break;
+      }
+    }
+    let rightCap = totalSlots - 1;
+    for (let i = anchor + 1; i < totalSlots; i++) {
+      if (occupied.has(i)) {
+        rightCap = i - 1;
+        break;
+      }
+    }
+
+    function slotAt(clientX: number): number {
+      const rect = node!.getBoundingClientRect();
+      const xInGrid = clientX - rect.left - 120; // 120px = label col
+      const cellWidth = (rect.width - 120) / totalSlots;
+      if (cellWidth <= 0) return anchor;
+      const raw = Math.floor(xInGrid / cellWidth);
+      return Math.max(leftCap, Math.min(rightCap, raw));
+    }
+
+    function onMove(e: globalThis.MouseEvent) {
+      extendSelection(slotAt(e.clientX));
+    }
+    function onUp() {
+      commitSelection();
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") cancelSelection();
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [isMyDrag, selection, occupied, totalSlots, extendSelection, commitSelection, cancelSelection]);
+
+  // Selection ghost — visible on this row only when the active
+  // selection started here.
   const ghost =
     selection && selection.active && selection.tableId === tableId
-      ? {
-          startCol: Math.min(selection.startSlot, selection.endSlot - 1) + 2,
-          span: Math.max(1, Math.abs(selection.endSlot - selection.startSlot)),
-        }
+      ? (() => {
+          const lo = Math.min(selection.anchorSlot, selection.currentSlot);
+          const hi = Math.max(selection.anchorSlot, selection.currentSlot);
+          return {
+            startCol: lo + 2,
+            span: hi - lo + 1,
+          };
+        })()
       : null;
+
+  // While our drag is active, suppress text-selection so the browser
+  // doesn't paint a blue highlight under the ghost.
+  const userSelectClass = isMyDrag ? "select-none" : "";
 
   return (
     <div
+      ref={rowRef}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
-      onMouseUp={() => {
-        if (selection?.active) commitSelection();
-      }}
       className={cn(
         "grid border-b border-hairline transition-colors last:border-b-0",
         isOver && canDrop && "bg-coral/5",
         source && !canDrop && !sameTable && "opacity-60",
+        // Crosshair on the row (not per-cell) so the cursor stays
+        // steady when the ghost overlaps a cell — fixes the
+        // flickering reported in wave 1.
+        !source && "cursor-crosshair",
+        userSelectClass,
       )}
       style={{
         gridTemplateColumns: `120px repeat(${totalSlots}, minmax(0,1fr))`,
@@ -347,10 +454,9 @@ export function TimelineRow({
         <div
           key={i}
           onMouseDown={(e) => onCellMouseDown(e, i)}
-          onMouseEnter={() => onCellMouseEnter(i)}
           className={cn(
             i % 4 === 3 ? "border-r border-hairline" : "border-r border-hairline/40",
-            !occupied.has(i) && !source && "cursor-crosshair",
+            occupied.has(i) && "cursor-default",
           )}
         />
       ))}
@@ -367,9 +473,8 @@ export function TimelineRow({
       {bookings.map((b) => (
         <BookingBlock
           key={b.id}
-          venueId={venueId}
-          date={date}
           tableId={tableId}
+          tableLabel={tableLabel}
           areaId={areaId}
           block={b}
         />
@@ -379,28 +484,27 @@ export function TimelineRow({
 }
 
 function BookingBlock({
-  venueId,
-  date,
   tableId,
+  tableLabel,
   areaId,
   block,
 }: {
-  venueId: string;
-  date: string;
   tableId: string;
+  tableLabel: string;
   areaId: string;
   block: TimelineBookingBlock;
 }) {
-  const { setSource } = useTimelineCtx();
+  const { setSource, openDetail } = useTimelineCtx();
   // Cancelled / no_show / finished blocks aren't draggable — they're
   // already off the floor.
   const draggable =
     block.status !== "cancelled" && block.status !== "no_show" && block.status !== "finished";
 
   return (
-    <Link
-      href={`/dashboard/venues/${venueId}/bookings?date=${date}`}
+    <button
+      type="button"
       draggable={draggable}
+      onClick={() => openDetail({ ...block, tableLabel, areaId })}
       onDragStart={(e) => {
         if (!draggable) {
           e.preventDefault();
@@ -415,13 +519,21 @@ function BookingBlock({
         });
       }}
       onDragEnd={() => setSource(null)}
+      onMouseDown={(e) => {
+        // Stop the row's selection-start from firing when the user
+        // mouses down on a block. Without this the row sees the
+        // mousedown on its background (the click is on the block,
+        // but bubbles up).
+        e.stopPropagation();
+      }}
       style={{
         gridColumn: `${block.startCol} / span ${block.span}`,
         gridRow: 1,
       }}
       className={cn(
-        "m-0.5 flex flex-col justify-center overflow-hidden rounded-input border px-2 py-1 text-[11px] leading-tight transition",
-        draggable && "cursor-grab active:cursor-grabbing hover:shadow-sm",
+        "m-0.5 flex flex-col justify-center overflow-hidden rounded-input border px-2 py-1 text-left text-[11px] leading-tight transition",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-1",
+        draggable ? "cursor-grab active:cursor-grabbing hover:shadow-sm" : "cursor-pointer hover:shadow-sm",
         STATUS_FILL[block.status],
       )}
     >
@@ -432,7 +544,7 @@ function BookingBlock({
         party {block.partySize}
         {block.notes ? ` · ${block.notes}` : ""}
       </span>
-    </Link>
+    </button>
   );
 }
 
@@ -661,6 +773,116 @@ function ModalBody({
         </form>
       )}
     </>
+  );
+}
+
+// ===========================================================================
+// Booking detail modal — opened by clicking a booking block.
+//
+// Read-only summary today (time, table, party, status, notes,
+// service). Action buttons (status transitions, refund) defer to the
+// /bookings list page via a "Manage" deep link — embedding them here
+// would require fetching payment + assignment shape which the timeline
+// query intentionally skips.
+// ===========================================================================
+
+const STATUS_LABEL: Record<BookingStatus, string> = {
+  requested: "Requested",
+  confirmed: "Confirmed",
+  seated: "Seated",
+  finished: "Finished",
+  cancelled: "Cancelled",
+  no_show: "No-show",
+};
+
+export function BookingDetailModal({ venueId, date }: { venueId: string; date: string }) {
+  const { detailBlock, closeDetail } = useTimelineCtx();
+
+  useEffect(() => {
+    if (!detailBlock) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeDetail();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [detailBlock, closeDetail]);
+
+  if (!detailBlock) return null;
+
+  const manageHref = `/dashboard/venues/${venueId}/bookings?date=${date}`;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Booking detail"
+      onClick={closeDetail}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md rounded-card border border-hairline bg-white shadow-panel"
+      >
+        <header className="flex items-start justify-between gap-2 border-b border-hairline px-5 py-4">
+          <div>
+            <h3 className="text-base font-bold tracking-tight text-ink">
+              {detailBlock.guestFirstName}
+            </h3>
+            <p className="mt-0.5 text-xs text-ash">
+              {detailBlock.wallStart}–{detailBlock.wallEnd} · {detailBlock.tableLabel} ·{" "}
+              {detailBlock.serviceName}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={closeDetail}
+            aria-label="Close"
+            className="-mr-1 -mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-ash transition hover:bg-cloud hover:text-ink"
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        </header>
+
+        <div className="flex flex-col gap-3 px-5 py-4 text-sm text-charcoal">
+          <DetailRow label="Status">
+            <span
+              className={cn(
+                "inline-flex items-center rounded-pill border px-2 py-0.5 text-[11px] font-semibold",
+                STATUS_FILL[detailBlock.status],
+              )}
+            >
+              {STATUS_LABEL[detailBlock.status]}
+            </span>
+          </DetailRow>
+          <DetailRow label="Party size">
+            <span className="font-mono tabular-nums">{detailBlock.partySize}</span>
+          </DetailRow>
+          {detailBlock.notes ? (
+            <DetailRow label="Notes">
+              <span className="whitespace-pre-line">{detailBlock.notes}</span>
+            </DetailRow>
+          ) : null}
+        </div>
+
+        <footer className="flex items-center justify-end gap-2 border-t border-hairline px-5 py-3">
+          <Button variant="secondary" size="sm" onClick={closeDetail}>
+            Close
+          </Button>
+          <a href={manageHref}>
+            <Button size="sm">Manage</Button>
+          </a>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function DetailRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-ash">{label}</span>
+      <span className="text-sm text-ink">{children}</span>
+    </div>
   );
 }
 

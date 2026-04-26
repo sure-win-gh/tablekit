@@ -25,6 +25,7 @@ import {
 import { formatInTimeZone } from "date-fns-tz";
 
 import {
+  BookingDetailModal,
   NewBookingModal,
   TimelineDateNav,
   TimelineDragProvider,
@@ -277,6 +278,7 @@ export default async function TimelinePage({
                   windowStartHour={window.startHour}
                   services={svcRows as unknown as TimelineService[]}
                 />
+                <BookingDetailModal venueId={venueId} date={date} />
                 {areaOrder.map((areaId) => {
                   const areaTables = tablesByArea.get(areaId) ?? [];
                   const areaName = areaTables[0]?.areaName ?? "";
@@ -300,9 +302,13 @@ export default async function TimelinePage({
                               wallStart: formatVenueTime(b.startAt, {
                                 timezone: venue.timezone,
                               }),
+                              wallEnd: formatVenueTime(b.endAt, {
+                                timezone: venue.timezone,
+                              }),
                               guestFirstName: b.guestFirstName,
                               partySize: b.partySize,
                               notes: b.notes,
+                              serviceName: b.serviceName,
                             },
                           ];
                         });
