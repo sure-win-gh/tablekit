@@ -1,7 +1,17 @@
 "use client";
 
+import { Download } from "lucide-react";
 import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 
+import {
+  Card,
+  CardBody,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+} from "@/components/ui";
 import { formatVenueDateLong } from "@/lib/bookings/time";
 import type {
   CoversRow,
@@ -32,22 +42,24 @@ export function DateRangeNav({
   };
   return (
     <div className="flex items-center gap-2 text-xs">
-      <label className="flex items-center gap-1 text-neutral-600">
+      <label className="flex items-center gap-1.5 text-ash">
         From
-        <input
+        <Input
           type="date"
           value={fromDate}
           onChange={(e) => setRange({ from: e.target.value })}
-          className="rounded-md border border-neutral-300 px-2 py-1 text-neutral-900"
+          size="sm"
+          className="w-auto"
         />
       </label>
-      <label className="flex items-center gap-1 text-neutral-600">
+      <label className="flex items-center gap-1.5 text-ash">
         To
-        <input
+        <Input
           type="date"
           value={toDate}
           onChange={(e) => setRange({ to: e.target.value })}
-          className="rounded-md border border-neutral-300 px-2 py-1 text-neutral-900"
+          size="sm"
+          className="w-auto"
         />
       </label>
     </div>
@@ -55,9 +67,9 @@ export function DateRangeNav({
 }
 
 // ---------------------------------------------------------------------------
-// Card chrome.
+// Local helpers — report-card chrome + fmt utilities.
 // ---------------------------------------------------------------------------
-function Card({
+function ReportCard({
   title,
   description,
   downloadHref,
@@ -66,31 +78,45 @@ function Card({
   title: string;
   description: string;
   downloadHref: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <div className="rounded-md border border-neutral-200 bg-white">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 px-4 py-3">
+    <Card>
+      <CardHeader>
         <div>
-          <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
-          <p className="text-xs text-neutral-500">{description}</p>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{description}</CardDescription>
         </div>
         <a
           href={downloadHref}
-          className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-700 transition hover:border-neutral-400 hover:text-neutral-900"
+          className="inline-flex items-center gap-1.5 rounded-pill border border-hairline bg-white px-3 py-1 text-xs font-semibold text-ink transition hover:border-ink"
         >
-          Download CSV
+          <Download className="h-3.5 w-3.5" aria-hidden />
+          CSV
         </a>
-      </header>
-      <div className="px-4 py-3 text-sm text-neutral-900">{children}</div>
+      </CardHeader>
+      <CardBody>{children}</CardBody>
+    </Card>
+  );
+}
+
+function Empty({ message }: { message: string }) {
+  return <p className="text-xs text-ash">{message}</p>;
+}
+
+function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-card border border-hairline bg-white px-3 py-2">
+      <div className="text-xs text-ash">{label}</div>
+      <div className="text-lg font-bold tabular-nums tracking-tight text-ink">{value}</div>
+      {sub ? <div className="text-[11px] tabular-nums text-ash">{sub}</div> : null}
     </div>
   );
 }
 
-// Empty-state row. Identical pattern across cards.
-function Empty({ message }: { message: string }) {
-  return <p className="text-xs text-neutral-500">{message}</p>;
-}
+const TABLE = "w-full text-xs";
+const THEAD = "text-left text-ash";
+const TBODY = "divide-y divide-hairline";
 
 // Format minor units → "£12.50". GBP-only for MVP — every UK
 // operator is GBP. Multi-currency will need a venue.currency lookup.
@@ -109,7 +135,7 @@ function pct(rate: number): string {
 // ---------------------------------------------------------------------------
 export function CoversCard({ rows, downloadHref }: { rows: CoversRow[]; downloadHref: string }) {
   return (
-    <Card
+    <ReportCard
       title="Covers"
       description="Bookings + party size by day and service. Realised excludes cancellations and no-shows."
       downloadHref={downloadHref}
@@ -117,8 +143,8 @@ export function CoversCard({ rows, downloadHref }: { rows: CoversRow[]; download
       {rows.length === 0 ? (
         <Empty message="No bookings in this range." />
       ) : (
-        <table className="w-full text-xs">
-          <thead className="text-left text-neutral-500">
+        <table className={TABLE}>
+          <thead className={THEAD}>
             <tr>
               <th className="py-1">Day</th>
               <th>Service</th>
@@ -127,7 +153,7 @@ export function CoversCard({ rows, downloadHref }: { rows: CoversRow[]; download
               <th className="text-right">Covers realised</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-100">
+          <tbody className={TBODY}>
             {rows.map((r) => (
               <tr key={`${r.day}-${r.serviceId}`}>
                 <td className="py-1 font-mono tabular-nums">{r.day}</td>
@@ -140,7 +166,7 @@ export function CoversCard({ rows, downloadHref }: { rows: CoversRow[]; download
           </tbody>
         </table>
       )}
-    </Card>
+    </ReportCard>
   );
 }
 
@@ -155,7 +181,7 @@ export function NoShowCard({
   downloadHref: string;
 }) {
   return (
-    <Card
+    <ReportCard
       title="No-show rate"
       description="Of bookings the operator showed up to (confirmed/seated/finished/no-show), how many no-showed."
       downloadHref={downloadHref}
@@ -180,8 +206,8 @@ export function NoShowCard({
         />
       </div>
       {summary.byService.length > 0 ? (
-        <table className="mt-4 w-full text-xs">
-          <thead className="text-left text-neutral-500">
+        <table className={`mt-4 ${TABLE}`}>
+          <thead className={THEAD}>
             <tr>
               <th className="py-1">Service</th>
               <th className="text-right">Eligible</th>
@@ -189,7 +215,7 @@ export function NoShowCard({
               <th className="text-right">Rate</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-100">
+          <tbody className={TBODY}>
             {summary.byService.map((s) => (
               <tr key={s.serviceId}>
                 <td className="py-1">{s.serviceName}</td>
@@ -201,17 +227,7 @@ export function NoShowCard({
           </tbody>
         </table>
       ) : null}
-    </Card>
-  );
-}
-
-function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {
-  return (
-    <div className="rounded-md border border-neutral-200 px-3 py-2">
-      <div className="text-xs text-neutral-500">{label}</div>
-      <div className="text-lg font-semibold text-neutral-900 tabular-nums">{value}</div>
-      <div className="text-[11px] text-neutral-500 tabular-nums">{sub}</div>
-    </div>
+    </ReportCard>
   );
 }
 
@@ -244,20 +260,20 @@ export function DepositsCard({
     { collected: 0, noShow: 0, refunded: 0, net: 0 },
   );
   return (
-    <Card
+    <ReportCard
       title="Deposit revenue"
       description="Bucketed by booking day. Net = deposits + no-show captures − refunds."
       downloadHref={downloadHref}
     >
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Stat label="Deposits collected" value={gbp(total.collected)} sub="" />
-        <Stat label="No-show captures" value={gbp(total.noShow)} sub="" />
-        <Stat label="Refunded" value={gbp(total.refunded)} sub="" />
-        <Stat label="Net" value={gbp(total.net)} sub="" />
+        <Stat label="Deposits collected" value={gbp(total.collected)} />
+        <Stat label="No-show captures" value={gbp(total.noShow)} />
+        <Stat label="Refunded" value={gbp(total.refunded)} />
+        <Stat label="Net" value={gbp(total.net)} />
       </div>
       {rows.length > 0 ? (
-        <table className="mt-4 w-full text-xs">
-          <thead className="text-left text-neutral-500">
+        <table className={`mt-4 ${TABLE}`}>
+          <thead className={THEAD}>
             <tr>
               <th className="py-1">Day</th>
               <th className="text-right">Deposits</th>
@@ -266,7 +282,7 @@ export function DepositsCard({
               <th className="text-right">Net</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-100">
+          <tbody className={TBODY}>
             {rows.map((r) => (
               <tr key={r.day}>
                 <td className="py-1 font-mono tabular-nums">{r.day}</td>
@@ -281,7 +297,7 @@ export function DepositsCard({
       ) : (
         <Empty message="No payment activity in this range." />
       )}
-    </Card>
+    </ReportCard>
   );
 }
 
@@ -297,7 +313,7 @@ export function SourcesCard({
 }) {
   const total = rows.reduce((acc, r) => acc + r.bookings, 0);
   return (
-    <Card
+    <ReportCard
       title="Source mix"
       description="Where bookings came from. Cancellations included — top-of-funnel signal."
       downloadHref={downloadHref}
@@ -305,8 +321,8 @@ export function SourcesCard({
       {rows.length === 0 ? (
         <Empty message="No bookings in this range." />
       ) : (
-        <table className="w-full text-xs">
-          <thead className="text-left text-neutral-500">
+        <table className={TABLE}>
+          <thead className={THEAD}>
             <tr>
               <th className="py-1">Source</th>
               <th className="text-right">Bookings</th>
@@ -314,7 +330,7 @@ export function SourcesCard({
               <th className="text-right">% of bookings</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-100">
+          <tbody className={TBODY}>
             {rows.map((r) => (
               <tr key={r.source}>
                 <td className="py-1">{r.source}</td>
@@ -328,7 +344,7 @@ export function SourcesCard({
           </tbody>
         </table>
       )}
-    </Card>
+    </ReportCard>
   );
 }
 
@@ -345,7 +361,7 @@ export function TopGuestsCard({
   downloadHref: string;
 }) {
   return (
-    <Card
+    <ReportCard
       title="Top returning guests"
       description="Realised visits in the range, minimum two. First name only — open the guest record for the full profile."
       downloadHref={downloadHref}
@@ -353,15 +369,15 @@ export function TopGuestsCard({
       {rows.length === 0 ? (
         <Empty message="No guests with two or more visits in this range." />
       ) : (
-        <table className="w-full text-xs">
-          <thead className="text-left text-neutral-500">
+        <table className={TABLE}>
+          <thead className={THEAD}>
             <tr>
               <th className="py-1">Guest</th>
               <th className="text-right">Visits</th>
               <th>Last visit</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-100">
+          <tbody className={TBODY}>
             {rows.map((r) => (
               <tr key={r.guestId}>
                 <td className="py-1">{r.firstName}</td>
@@ -372,6 +388,6 @@ export function TopGuestsCard({
           </tbody>
         </table>
       )}
-    </Card>
+    </ReportCard>
   );
 }
