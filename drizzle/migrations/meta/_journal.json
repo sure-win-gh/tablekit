@@ -85,6 +85,13 @@
       "when": 1777232531306,
       "tag": "0011_marvelous_grey_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1777235253243,
+      "tag": "0012_powerful_madame_masque",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { ChevronRight, ShieldCheck } from "lucide-react";
+import { Building2, ChevronRight, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -56,13 +56,22 @@ export default async function VenueLayout({
           <ChevronRight className="h-3.5 w-3.5 text-stone" aria-hidden />
           <span className="text-ink">{venue.name}</span>
         </div>
-        <Link
-          href="/dashboard/privacy-requests"
-          className="inline-flex items-center gap-1 rounded-pill border border-hairline bg-white px-2.5 py-1 text-xs font-semibold text-charcoal transition hover:border-ink hover:text-ink"
-        >
-          <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-          Privacy requests
-        </Link>
+        <div className="flex items-center gap-1.5">
+          <Link
+            href="/dashboard/organisation"
+            className="inline-flex items-center gap-1 rounded-pill border border-hairline bg-white px-2.5 py-1 text-xs font-semibold text-charcoal transition hover:border-ink hover:text-ink"
+          >
+            <Building2 className="h-3.5 w-3.5" aria-hidden />
+            Organisation
+          </Link>
+          <Link
+            href="/dashboard/privacy-requests"
+            className="inline-flex items-center gap-1 rounded-pill border border-hairline bg-white px-2.5 py-1 text-xs font-semibold text-charcoal transition hover:border-ink hover:text-ink"
+          >
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+            Privacy requests
+          </Link>
+        </div>
       </nav>
 
       <header className="mt-3 border-b border-hairline">

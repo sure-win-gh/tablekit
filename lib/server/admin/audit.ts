@@ -75,6 +75,9 @@ export type AuditAction =
   | "dsar.in_progress"
   | "dsar.completed"
   | "dsar.rejected"
+  // multi-venue phase
+  | "org.group_crm.enabled"
+  | "org.group_crm.disabled"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"

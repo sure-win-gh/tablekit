@@ -1,5 +1,12 @@
 import { asc, eq } from "drizzle-orm";
-import { ArrowRight, ChevronRight, LayoutDashboard, ShieldCheck } from "lucide-react";
+import {
+  ArrowRight,
+  Building2,
+  ChevronRight,
+  LayoutDashboard,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -31,7 +38,11 @@ export default async function OverviewPage() {
 
   const { org, venueRows } = await withUser(async (db) => {
     const [o] = await db
-      .select({ id: organisations.id, name: organisations.name })
+      .select({
+        id: organisations.id,
+        name: organisations.name,
+        groupCrmEnabled: organisations.groupCrmEnabled,
+      })
       .from(organisations)
       .where(eq(organisations.id, activeOrgId))
       .limit(1);
@@ -103,13 +114,31 @@ export default async function OverviewPage() {
           <ChevronRight className="h-3.5 w-3.5 text-stone" aria-hidden />
           <span className="text-ink">Overview</span>
         </div>
-        <Link
-          href="/dashboard/privacy-requests"
-          className="inline-flex items-center gap-1 rounded-pill border border-hairline bg-white px-2.5 py-1 text-xs font-semibold text-charcoal transition hover:border-ink hover:text-ink"
-        >
-          <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-          Privacy requests
-        </Link>
+        <div className="flex items-center gap-1.5">
+          {org.groupCrmEnabled ? (
+            <Link
+              href="/dashboard/guests"
+              className="inline-flex items-center gap-1 rounded-pill border border-hairline bg-white px-2.5 py-1 text-xs font-semibold text-charcoal transition hover:border-ink hover:text-ink"
+            >
+              <Users className="h-3.5 w-3.5" aria-hidden />
+              Guests
+            </Link>
+          ) : null}
+          <Link
+            href="/dashboard/organisation"
+            className="inline-flex items-center gap-1 rounded-pill border border-hairline bg-white px-2.5 py-1 text-xs font-semibold text-charcoal transition hover:border-ink hover:text-ink"
+          >
+            <Building2 className="h-3.5 w-3.5" aria-hidden />
+            Organisation
+          </Link>
+          <Link
+            href="/dashboard/privacy-requests"
+            className="inline-flex items-center gap-1 rounded-pill border border-hairline bg-white px-2.5 py-1 text-xs font-semibold text-charcoal transition hover:border-ink hover:text-ink"
+          >
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+            Privacy requests
+          </Link>
+        </div>
       </nav>
 
       <header className="mt-3 border-b border-hairline pb-4">

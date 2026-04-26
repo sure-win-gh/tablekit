@@ -68,6 +68,12 @@ export const organisations = pgTable("organisations", {
   // rotation — only `1` exists today.
   wrappedDek: bytea("wrapped_dek"),
   dekVersion: integer("dek_version").notNull().default(1),
+  // Plus-tier opt-in for cross-venue guest visibility. Default off so
+  // existing single-venue orgs don't surprise-aggregate. Toggled by
+  // owners on /dashboard/organisation. Storage on guests is already
+  // org-scoped; the flag controls UI surfaces (group-wide guests
+  // list, "also visited at" hints) rather than the data model.
+  groupCrmEnabled: boolean("group_crm_enabled").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

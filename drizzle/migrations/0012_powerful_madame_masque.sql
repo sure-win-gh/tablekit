@@ -1,0 +1,1 @@
+ALTER TABLE "organisations" ADD COLUMN "group_crm_enabled" boolean DEFAULT false NOT NULL;
