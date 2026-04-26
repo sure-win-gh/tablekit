@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { requireRole } from "@/lib/auth/require-role";
 import { createBooking } from "@/lib/bookings/create";
+import { reassignBookingTable } from "@/lib/bookings/reassign";
 import { BOOKING_STATUSES, type BookingStatus } from "@/lib/bookings/state";
 import { transitionBooking } from "@/lib/bookings/transition";
 import { upsertGuestInput } from "@/lib/guests/schema";
@@ -190,4 +191,54 @@ export async function refundBookingAction(
 
   revalidatePath(`/dashboard/venues/${parsed.data.venueId}/bookings`);
   return { status: "done", refundId: r.refundId };
+}
+
+// ---------------------------------------------------------------------------
+// Reassign table — single-table swap within the same area.
+// ---------------------------------------------------------------------------
+
+const ReassignForm = z.object({
+  venueId: z.uuid(),
+  bookingId: z.uuid(),
+  fromTableId: z.uuid(),
+  toTableId: z.uuid(),
+});
+
+export type ReassignTableActionState =
+  | { status: "idle" }
+  | { status: "error"; message: string }
+  | { status: "done" };
+
+export async function reassignTableAction(
+  _prev: ReassignTableActionState,
+  formData: FormData,
+): Promise<ReassignTableActionState> {
+  const parsed = ReassignForm.safeParse({
+    venueId: formData.get("venueId"),
+    bookingId: formData.get("bookingId"),
+    fromTableId: formData.get("fromTableId"),
+    toTableId: formData.get("toTableId"),
+  });
+  if (!parsed.success) return { status: "error", message: "Pick a target table." };
+  if (parsed.data.fromTableId === parsed.data.toTableId) return { status: "done" };
+
+  const { orgId, userId } = await requireRole("host");
+  const r = await reassignBookingTable({
+    organisationId: orgId,
+    actorUserId: userId,
+    bookingId: parsed.data.bookingId,
+    fromTableId: parsed.data.fromTableId,
+    toTableId: parsed.data.toTableId,
+  });
+  if (!r.ok) {
+    const message = {
+      "not-found": "Booking or table not found.",
+      "wrong-area": "Tables in another area aren't supported yet — cancel + recreate.",
+      "slot-taken": "That table is already taken at this time — pick another.",
+    }[r.reason];
+    return { status: "error", message };
+  }
+
+  revalidatePath(`/dashboard/venues/${parsed.data.venueId}/bookings`);
+  return { status: "done" };
 }

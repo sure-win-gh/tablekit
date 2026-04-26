@@ -6,8 +6,10 @@ import { useActionState, useState } from "react";
 import { type BookingStatus } from "@/lib/bookings/state";
 
 import {
+  reassignTableAction,
   refundBookingAction,
   transitionBookingAction,
+  type ReassignTableActionState,
   type RefundActionState,
   type TransitionActionState,
 } from "./actions";
@@ -39,6 +41,23 @@ const ACTION_LABEL: Record<BookingStatus, string> = {
   no_show: "No-show",
 };
 
+type BookingRowProps = {
+  venueId: string;
+  bookingId: string;
+  wallStart: string;
+  wallEnd: string;
+  partySize: number;
+  status: BookingStatus;
+  actions: BookingStatus[];
+  guestFirstName: string;
+  notes: string | null;
+  refundable: boolean;
+  cardHold: boolean;
+  noShowOutcome: "captured" | "failed" | null;
+  assignedTables: Array<{ id: string; label: string; areaName: string }>;
+  moveTargets: Array<{ id: string; label: string; areaName: string }>;
+};
+
 export function BookingRow({
   venueId,
   bookingId,
@@ -52,20 +71,9 @@ export function BookingRow({
   refundable,
   cardHold,
   noShowOutcome,
-}: {
-  venueId: string;
-  bookingId: string;
-  wallStart: string;
-  wallEnd: string;
-  partySize: number;
-  status: BookingStatus;
-  actions: BookingStatus[];
-  guestFirstName: string;
-  notes: string | null;
-  refundable: boolean;
-  cardHold: boolean;
-  noShowOutcome: "captured" | "failed" | null;
-}) {
+  assignedTables,
+  moveTargets,
+}: BookingRowProps) {
   return (
     <li className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-4">
@@ -78,13 +86,26 @@ export function BookingRow({
           <span className="text-sm font-medium text-neutral-900">
             {guestFirstName} · party of {partySize}
           </span>
-          {notes ? <span className="text-xs text-neutral-500">{notes}</span> : null}
+          <span className="text-xs text-neutral-500">
+            {assignedTables.length === 0
+              ? "No table"
+              : assignedTables.map((t) => `${t.areaName} · ${t.label}`).join(", ")}
+            {notes ? ` · ${notes}` : ""}
+          </span>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_TINT[status]}`}>
           {STATUS_LABEL[status]}
         </span>
+        {assignedTables.length === 1 && moveTargets.length > 0 ? (
+          <MoveTableControl
+            venueId={venueId}
+            bookingId={bookingId}
+            fromTableId={assignedTables[0]!.id}
+            targets={moveTargets}
+          />
+        ) : null}
         {cardHold && !noShowOutcome ? (
           <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">
             Card on file
@@ -274,6 +295,58 @@ function RefundButton({ venueId, bookingId }: { venueId: string; bookingId: stri
         className="text-xs text-neutral-500 hover:underline"
       >
         Cancel
+      </button>
+      {state.status === "error" ? (
+        <span className="text-xs text-rose-600">{state.message}</span>
+      ) : null}
+    </form>
+  );
+}
+
+// Move-table control. Two-step interaction: dropdown picks the target;
+// submitting the form fires reassignTableAction. Same-area only — the
+// enforce_booking_tables_denorm trigger rejects cross-area moves and
+// the action returns 'wrong-area' if the host somehow forces it.
+function MoveTableControl({
+  venueId,
+  bookingId,
+  fromTableId,
+  targets,
+}: {
+  venueId: string;
+  bookingId: string;
+  fromTableId: string;
+  targets: Array<{ id: string; label: string; areaName: string }>;
+}) {
+  const [state, action, pending] = useActionState<ReassignTableActionState, FormData>(
+    reassignTableAction,
+    { status: "idle" },
+  );
+  const [toTableId, setToTableId] = useState("");
+  return (
+    <form action={action} className="flex items-center gap-1.5">
+      <input type="hidden" name="venueId" value={venueId} />
+      <input type="hidden" name="bookingId" value={bookingId} />
+      <input type="hidden" name="fromTableId" value={fromTableId} />
+      <select
+        name="toTableId"
+        value={toTableId}
+        onChange={(e) => setToTableId(e.target.value)}
+        className="rounded-md border border-neutral-300 px-2 py-0.5 text-xs text-neutral-900"
+      >
+        <option value="">Move to…</option>
+        {targets.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.areaName} · {t.label}
+          </option>
+        ))}
+      </select>
+      <button
+        type="submit"
+        disabled={pending || !toTableId}
+        className="rounded-md border border-neutral-300 px-2 py-0.5 text-xs font-medium text-neutral-700 transition hover:border-neutral-400 disabled:opacity-50"
+      >
+        {pending ? "…" : "Move"}
       </button>
       {state.status === "error" ? (
         <span className="text-xs text-rose-600">{state.message}</span>

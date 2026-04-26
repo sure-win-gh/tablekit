@@ -11,7 +11,16 @@ import {
 } from "@/lib/bookings/time";
 import { nextActions, type BookingStatus } from "@/lib/bookings/state";
 import { withUser } from "@/lib/db/client";
-import { bookings, guests, payments, services, venues } from "@/lib/db/schema";
+import {
+  areas,
+  bookingTables,
+  bookings,
+  guests,
+  payments,
+  services,
+  venueTables,
+  venues,
+} from "@/lib/db/schema";
 import { processNextBatch } from "@/lib/messaging/dispatch";
 import { sweepDueNoShowCaptures } from "@/lib/payments/no-show";
 
@@ -79,6 +88,7 @@ export default async function BookingsPage({
         partySize: bookings.partySize,
         status: bookings.status,
         notes: bookings.notes,
+        areaId: bookings.areaId,
         serviceName: services.name,
         guestFirstName: guests.firstName,
       })
@@ -126,6 +136,55 @@ export default async function BookingsPage({
     }
   }
 
+  // Per-booking table assignments + the venue's full table list (for
+  // the move-table dropdown). Both are venue-scoped reads.
+  const [tableAssignments, allVenueTables] = await withUser(async (db) =>
+    Promise.all([
+      bookingIds.length === 0
+        ? Promise.resolve(
+            [] as Array<{
+              bookingId: string;
+              tableId: string;
+              label: string;
+              areaId: string;
+              areaName: string;
+            }>,
+          )
+        : db
+            .select({
+              bookingId: bookingTables.bookingId,
+              tableId: bookingTables.tableId,
+              label: venueTables.label,
+              areaId: venueTables.areaId,
+              areaName: areas.name,
+            })
+            .from(bookingTables)
+            .innerJoin(venueTables, eq(venueTables.id, bookingTables.tableId))
+            .innerJoin(areas, eq(areas.id, venueTables.areaId))
+            .where(inArray(bookingTables.bookingId, bookingIds)),
+      db
+        .select({
+          id: venueTables.id,
+          label: venueTables.label,
+          areaId: venueTables.areaId,
+          areaName: areas.name,
+          maxCover: venueTables.maxCover,
+        })
+        .from(venueTables)
+        .innerJoin(areas, eq(areas.id, venueTables.areaId))
+        .where(eq(venueTables.venueId, venueId))
+        .orderBy(asc(areas.name), asc(venueTables.label)),
+    ]),
+  );
+
+  type AssignedTable = { id: string; label: string; areaName: string };
+  const tablesByBooking = new Map<string, AssignedTable[]>();
+  for (const a of tableAssignments) {
+    const list = tablesByBooking.get(a.bookingId) ?? [];
+    list.push({ id: a.tableId, label: a.label, areaName: a.areaName });
+    tablesByBooking.set(a.bookingId, list);
+  }
+
   // Group by service for the day view (lunch / dinner etc.). Empty
   // groups are hidden.
   const byService = new Map<string, typeof rows>();
@@ -169,23 +228,35 @@ export default async function BookingsPage({
             <div key={svc}>
               <h3 className="text-sm font-semibold tracking-tight text-neutral-700">{svc}</h3>
               <ul className="mt-2 divide-y divide-neutral-200 rounded-md border border-neutral-200">
-                {list.map((b) => (
-                  <BookingRow
-                    key={b.id}
-                    venueId={venueId}
-                    bookingId={b.id}
-                    wallStart={formatVenueTime(b.startAt, { timezone: venue.timezone })}
-                    wallEnd={formatVenueTime(b.endAt, { timezone: venue.timezone })}
-                    partySize={b.partySize}
-                    status={b.status as BookingStatus}
-                    actions={nextActions(b.status as BookingStatus)}
-                    guestFirstName={b.guestFirstName}
-                    notes={b.notes}
-                    refundable={refundableSet.has(b.id)}
-                    cardHold={cardHoldSet.has(b.id)}
-                    noShowOutcome={noShowOutcomes.get(b.id) ?? null}
-                  />
-                ))}
+                {list.map((b) => {
+                  const assignedTables = tablesByBooking.get(b.id) ?? [];
+                  // Move-target candidates: same area, capacity ≥ party,
+                  // not already assigned to this booking.
+                  const assignedIds = new Set(assignedTables.map((t) => t.id));
+                  const moveTargets = allVenueTables.filter(
+                    (t) =>
+                      t.areaId === b.areaId && t.maxCover >= b.partySize && !assignedIds.has(t.id),
+                  );
+                  return (
+                    <BookingRow
+                      key={b.id}
+                      venueId={venueId}
+                      bookingId={b.id}
+                      wallStart={formatVenueTime(b.startAt, { timezone: venue.timezone })}
+                      wallEnd={formatVenueTime(b.endAt, { timezone: venue.timezone })}
+                      partySize={b.partySize}
+                      status={b.status as BookingStatus}
+                      actions={nextActions(b.status as BookingStatus)}
+                      guestFirstName={b.guestFirstName}
+                      notes={b.notes}
+                      refundable={refundableSet.has(b.id)}
+                      cardHold={cardHoldSet.has(b.id)}
+                      noShowOutcome={noShowOutcomes.get(b.id) ?? null}
+                      assignedTables={assignedTables}
+                      moveTargets={moveTargets}
+                    />
+                  );
+                })}
               </ul>
             </div>
           ))}
