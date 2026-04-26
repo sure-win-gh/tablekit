@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { Building2, ChevronRight, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { VenueSwitcher } from "@/components/venue-switcher";
 import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
 import { venues } from "@/lib/db/schema";
@@ -25,13 +26,23 @@ export default async function VenueLayout({
   await requireRole("host");
   const { venueId } = await params;
 
-  const venue = await withUser(async (db) => {
-    const rows = await db
-      .select({ id: venues.id, name: venues.name })
+  // Single round-trip — current venue (404 if not found) plus the
+  // sibling venue list for the switcher. RLS already gates the list
+  // to what this user can see, so a venue-scoped host gets a
+  // shorter list automatically.
+  const { venue, siblings } = await withUser(async (db) => {
+    const [v] = await db
+      .select({ id: venues.id, name: venues.name, organisationId: venues.organisationId })
       .from(venues)
       .where(eq(venues.id, venueId))
       .limit(1);
-    return rows[0];
+    if (!v) return { venue: null, siblings: [] as Array<{ id: string; name: string }> };
+    const all = await db
+      .select({ id: venues.id, name: venues.name })
+      .from(venues)
+      .where(eq(venues.organisationId, v.organisationId))
+      .orderBy(asc(venues.name));
+    return { venue: v, siblings: all };
   });
 
   if (!venue) notFound();
@@ -57,6 +68,7 @@ export default async function VenueLayout({
           <span className="text-ink">{venue.name}</span>
         </div>
         <div className="flex items-center gap-1.5">
+          <VenueSwitcher currentVenueId={venue.id} venues={siblings} />
           <Link
             href="/dashboard/organisation"
             className="inline-flex items-center gap-1 rounded-pill border border-hairline bg-white px-2.5 py-1 text-xs font-semibold text-charcoal transition hover:border-ink hover:text-ink"
