@@ -1,7 +1,9 @@
 import { and, asc, eq, gte, inArray, lt } from "drizzle-orm";
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { Button } from "@/components/ui";
 import { requireRole } from "@/lib/auth/require-role";
 import {
   formatVenueDateLong,
@@ -198,10 +200,10 @@ export default async function BookingsPage({
     <section className="flex flex-col gap-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-medium">
+          <h2 className="text-xl font-bold tracking-tight text-ink">
             {formatVenueDateLong(startUtc, { timezone: venue.timezone })}
           </h2>
-          <p className="text-xs text-neutral-500">
+          <p className="mt-0.5 text-xs text-ash">
             {rows.length === 0
               ? "No bookings yet."
               : `${rows.length} booking${rows.length === 1 ? "" : "s"}`}
@@ -209,25 +211,25 @@ export default async function BookingsPage({
         </div>
         <div className="flex items-center gap-3">
           <DateNav venueId={venueId} date={date} />
-          <Link
-            href={`/dashboard/venues/${venueId}/bookings/new`}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-800"
-          >
-            + New booking
+          <Link href={`/dashboard/venues/${venueId}/bookings/new`}>
+            <Button size="sm">
+              <Plus className="h-4 w-4" aria-hidden />
+              New booking
+            </Button>
           </Link>
         </div>
       </header>
 
       {rows.length === 0 ? (
-        <p className="rounded-md border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-500">
+        <p className="rounded-card border border-dashed border-hairline p-8 text-center text-sm text-ash">
           Nothing on the books for this day. Click &ldquo;New booking&rdquo; to add one.
         </p>
       ) : (
         <div className="flex flex-col gap-6">
           {[...byService.entries()].map(([svc, list]) => (
             <div key={svc}>
-              <h3 className="text-sm font-semibold tracking-tight text-neutral-700">{svc}</h3>
-              <ul className="mt-2 divide-y divide-neutral-200 rounded-md border border-neutral-200">
+              <h3 className="text-sm font-semibold tracking-tight text-ink">{svc}</h3>
+              <ul className="mt-2 divide-y divide-hairline rounded-card border border-hairline bg-white">
                 {list.map((b) => {
                   const assignedTables = tablesByBooking.get(b.id) ?? [];
                   // Move-target candidates: same area, capacity ≥ party,

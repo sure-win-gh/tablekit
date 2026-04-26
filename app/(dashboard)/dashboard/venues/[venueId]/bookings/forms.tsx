@@ -1,8 +1,10 @@
 "use client";
 
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useActionState, useState } from "react";
 
+import { Badge, Button, IconButton, Input, Select } from "@/components/ui";
 import { type BookingStatus } from "@/lib/bookings/state";
 
 import {
@@ -23,13 +25,17 @@ const STATUS_LABEL: Record<BookingStatus, string> = {
   no_show: "No-show",
 };
 
-const STATUS_TINT: Record<BookingStatus, string> = {
-  requested: "bg-amber-100 text-amber-800",
-  confirmed: "bg-blue-100 text-blue-800",
-  seated: "bg-emerald-100 text-emerald-800",
-  finished: "bg-neutral-100 text-neutral-700",
-  cancelled: "bg-neutral-100 text-neutral-500 line-through",
-  no_show: "bg-rose-100 text-rose-800",
+// Each booking-status maps to one of Badge's semantic tones. Picked
+// to match how operators read the row at a glance: amber for
+// "needs attention", emerald for "good news", rose for "bad news",
+// muted for "history".
+const STATUS_TONE: Record<BookingStatus, "warning" | "info" | "success" | "neutral" | "muted" | "danger"> = {
+  requested: "warning",
+  confirmed: "info",
+  seated: "success",
+  finished: "neutral",
+  cancelled: "muted",
+  no_show: "danger",
 };
 
 const ACTION_LABEL: Record<BookingStatus, string> = {
@@ -77,16 +83,16 @@ export function BookingRow({
   return (
     <li className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-4">
-        <div className="w-24 font-mono text-sm text-neutral-900 tabular-nums">
+        <div className="w-24 font-mono text-sm tabular-nums text-ink">
           {wallStart}
-          <span className="text-neutral-400"> – </span>
+          <span className="text-stone"> – </span>
           {wallEnd}
         </div>
         <div className="flex flex-col">
-          <span className="text-sm font-medium text-neutral-900">
+          <span className="text-sm font-semibold text-ink">
             {guestFirstName} · party of {partySize}
           </span>
-          <span className="text-xs text-neutral-500">
+          <span className="text-xs text-ash">
             {assignedTables.length === 0
               ? "No table"
               : assignedTables.map((t) => `${t.areaName} · ${t.label}`).join(", ")}
@@ -95,9 +101,7 @@ export function BookingRow({
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_TINT[status]}`}>
-          {STATUS_LABEL[status]}
-        </span>
+        <Badge tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</Badge>
         {assignedTables.length === 1 && moveTargets.length > 0 ? (
           <MoveTableControl
             venueId={venueId}
@@ -106,21 +110,9 @@ export function BookingRow({
             targets={moveTargets}
           />
         ) : null}
-        {cardHold && !noShowOutcome ? (
-          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">
-            Card on file
-          </span>
-        ) : null}
-        {noShowOutcome === "captured" ? (
-          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
-            No-show charged
-          </span>
-        ) : null}
-        {noShowOutcome === "failed" ? (
-          <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-800">
-            Capture failed
-          </span>
-        ) : null}
+        {cardHold && !noShowOutcome ? <Badge tone="info">Card on file</Badge> : null}
+        {noShowOutcome === "captured" ? <Badge tone="success">No-show charged</Badge> : null}
+        {noShowOutcome === "failed" ? <Badge tone="danger">Capture failed</Badge> : null}
         {actions.map((to) => (
           <TransitionButton
             key={to}
@@ -153,6 +145,9 @@ function TransitionButton({
   );
   const [reason, setReason] = useState("");
   const needsReason = to === "cancelled";
+  // Cancel is the only "destructive" transition; the rest are
+  // forward-flow and use the safe secondary look.
+  const variant = to === "cancelled" ? "destructive" : "secondary";
 
   return (
     <form action={formAction} className="flex items-center gap-1.5">
@@ -160,24 +155,21 @@ function TransitionButton({
       <input type="hidden" name="bookingId" value={bookingId} />
       <input type="hidden" name="to" value={to} />
       {needsReason ? (
-        <input
+        <Input
           type="text"
           name="cancelledReason"
           placeholder="Reason (optional)"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          className="w-40 rounded-md border border-neutral-300 px-2 py-0.5 text-xs text-neutral-900"
+          size="sm"
+          className="w-40"
         />
       ) : null}
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-md border border-neutral-300 px-2 py-0.5 text-xs font-medium text-neutral-700 transition hover:border-neutral-400 hover:text-neutral-900 disabled:opacity-50"
-      >
+      <Button type="submit" variant={variant} size="sm" disabled={pending}>
         {pending ? "…" : label}
-      </button>
+      </Button>
       {state.status === "error" ? (
-        <span className="text-xs text-rose-600">{state.message}</span>
+        <span className="text-xs text-rose">{state.message}</span>
       ) : null}
     </form>
   );
@@ -197,36 +189,27 @@ export function DateNav({ venueId, date }: { venueId: string; date: string }) {
   };
   return (
     <div className="flex items-center gap-1.5">
-      <button
-        type="button"
-        onClick={() => shift(-1)}
-        className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-700 hover:border-neutral-400"
-        aria-label="Previous day"
-      >
-        ←
-      </button>
-      <button
-        type="button"
+      <IconButton aria-label="Previous day" size="sm" onClick={() => shift(-1)}>
+        <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+      </IconButton>
+      <Button
+        variant="secondary"
+        size="sm"
         onClick={() => setDate(today)}
         disabled={date === today}
-        className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-700 hover:border-neutral-400 disabled:opacity-40"
       >
         Today
-      </button>
-      <input
+      </Button>
+      <Input
         type="date"
         value={date}
         onChange={(e) => setDate(e.target.value)}
-        className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-900"
+        size="sm"
+        className="w-auto"
       />
-      <button
-        type="button"
-        onClick={() => shift(1)}
-        className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-700 hover:border-neutral-400"
-        aria-label="Next day"
-      >
-        →
-      </button>
+      <IconButton aria-label="Next day" size="sm" onClick={() => shift(1)}>
+        <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+      </IconButton>
     </div>
   );
 }
@@ -245,22 +228,14 @@ function RefundButton({ venueId, bookingId }: { venueId: string; bookingId: stri
   const [reason, setReason] = useState("");
 
   if (state.status === "done") {
-    return (
-      <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800">
-        Refunded · {state.refundId}
-      </span>
-    );
+    return <Badge tone="success">Refunded · {state.refundId}</Badge>;
   }
 
   if (!armed) {
     return (
-      <button
-        type="button"
-        onClick={() => setArmed(true)}
-        className="rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 transition hover:border-rose-300 hover:text-rose-900"
-      >
+      <Button variant="destructive" size="sm" onClick={() => setArmed(true)}>
         Refund
-      </button>
+      </Button>
     );
   }
 
@@ -268,7 +243,7 @@ function RefundButton({ venueId, bookingId }: { venueId: string; bookingId: stri
     <form action={formAction} className="flex flex-wrap items-center gap-1.5">
       <input type="hidden" name="venueId" value={venueId} />
       <input type="hidden" name="bookingId" value={bookingId} />
-      <input
+      <Input
         type="text"
         name="reason"
         value={reason}
@@ -277,27 +252,29 @@ function RefundButton({ venueId, bookingId }: { venueId: string; bookingId: stri
         minLength={3}
         maxLength={200}
         required
-        className="w-48 rounded-md border border-neutral-300 px-2 py-0.5 text-xs text-neutral-900"
+        size="sm"
+        className="w-48"
       />
-      <button
+      <Button
         type="submit"
+        variant="destructive"
+        size="sm"
         disabled={pending || reason.trim().length < 3}
-        className="rounded-md border border-rose-300 bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-800 transition hover:border-rose-400 disabled:opacity-50"
       >
         {pending ? "Refunding…" : "Confirm refund"}
-      </button>
-      <button
-        type="button"
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={() => {
           setArmed(false);
           setReason("");
         }}
-        className="text-xs text-neutral-500 hover:underline"
       >
         Cancel
-      </button>
+      </Button>
       {state.status === "error" ? (
-        <span className="text-xs text-rose-600">{state.message}</span>
+        <span className="text-xs text-rose">{state.message}</span>
       ) : null}
     </form>
   );
@@ -328,11 +305,11 @@ function MoveTableControl({
       <input type="hidden" name="venueId" value={venueId} />
       <input type="hidden" name="bookingId" value={bookingId} />
       <input type="hidden" name="fromTableId" value={fromTableId} />
-      <select
+      <Select
         name="toTableId"
         value={toTableId}
         onChange={(e) => setToTableId(e.target.value)}
-        className="rounded-md border border-neutral-300 px-2 py-0.5 text-xs text-neutral-900"
+        size="sm"
       >
         <option value="">Move to…</option>
         {targets.map((t) => (
@@ -340,16 +317,12 @@ function MoveTableControl({
             {t.areaName} · {t.label}
           </option>
         ))}
-      </select>
-      <button
-        type="submit"
-        disabled={pending || !toTableId}
-        className="rounded-md border border-neutral-300 px-2 py-0.5 text-xs font-medium text-neutral-700 transition hover:border-neutral-400 disabled:opacity-50"
-      >
+      </Select>
+      <Button type="submit" variant="secondary" size="sm" disabled={pending || !toTableId}>
         {pending ? "…" : "Move"}
-      </button>
+      </Button>
       {state.status === "error" ? (
-        <span className="text-xs text-rose-600">{state.message}</span>
+        <span className="text-xs text-rose">{state.message}</span>
       ) : null}
     </form>
   );

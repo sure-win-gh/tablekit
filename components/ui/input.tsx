@@ -34,7 +34,9 @@ function controlClasses(invalid: boolean | undefined, size: Size): string {
   );
 }
 
-type InputProps = InputHTMLAttributes<HTMLInputElement> & Common;
+// Omit native `size` (column width number) so our visual `size`
+// "sm" | "md" doesn't collide with the HTML attribute typing.
+type InputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & Common;
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   { invalid, size, className, type = "text", ...rest },
@@ -50,7 +52,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   );
 });
 
-type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & Common;
+type SelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, "size"> & Common;
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
   { invalid, size, className, children, ...rest },
