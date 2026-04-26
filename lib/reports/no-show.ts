@@ -28,8 +28,6 @@ export async function getNoShowReport(
   venueId: string,
   bounds: Bounds,
 ): Promise<NoShowSummary> {
-  const eligibleArray = sql.raw(`array['confirmed','seated','finished','no_show']::text[]`);
-
   // One pass for overall + by-service. Two CTEs (overall, byService)
   // produce a single result set the JS side splits.
   const byServiceRows = await db
@@ -79,7 +77,7 @@ export async function getNoShowReport(
         eq(bookings.venueId, venueId),
         gte(bookings.startAt, bounds.startUtc),
         lt(bookings.startAt, bounds.endUtc),
-        sql`${bookings.status} = ANY(${eligibleArray})`,
+        inArray(bookings.status, [...ELIGIBLE]),
         sql`${payments.kind} in ('deposit','hold')`,
         eq(payments.status, "succeeded"),
       ),

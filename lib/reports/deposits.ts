@@ -9,9 +9,10 @@
 // caught from would-be no-shows" distinctly from "money we collected
 // at booking".
 //
-// Refunds are stored as positive integers in the `refund` payment kind
-// (the `amount_minor` schema CHECK enforces sign). Net revenue subtracts
-// them.
+// Refunds are stored with NEGATIVE `amount_minor` (the
+// `payments_amount_sign_check` enforces it). For the report we negate
+// at the DB so `refundedMinor` is a positive number for display, and
+// `net = deposits + captures − refunded` reads naturally.
 
 import "server-only";
 
@@ -42,7 +43,7 @@ export async function getDepositRevenueReport(
           "noShowCapturedMinor",
         ),
       refundedMinor:
-        sql<number>`coalesce(sum(${payments.amountMinor}) filter (where ${payments.kind} = 'refund' and ${payments.status} = 'succeeded'), 0)::int`.as(
+        sql<number>`coalesce(sum(-${payments.amountMinor}) filter (where ${payments.kind} = 'refund' and ${payments.status} = 'succeeded'), 0)::int`.as(
           "refundedMinor",
         ),
     })
