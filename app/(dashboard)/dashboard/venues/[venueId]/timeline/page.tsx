@@ -308,8 +308,11 @@ export default async function TimelinePage({
                           return [
                             {
                               id: b.id,
-                              // +1 because the table-label column eats the first grid track.
-                              startCol: span.startCol + 1,
+                              // +2 to convert a 0-indexed slot into its 1-indexed
+                              // grid column AND skip past the table-label column
+                              // at col 1. (The +1 we used previously was off-by-
+                              // one — 11:00 bookings rendered at the 10:45 column.)
+                              startCol: span.startCol + 2,
                               span: span.span,
                               status: b.status as BookingStatus,
                               wallStart: formatVenueTime(b.startAt, {
@@ -334,6 +337,7 @@ export default async function TimelinePage({
                             tableLabel={t.label}
                             areaId={t.areaId}
                             totalSlots={totalSlots}
+                            windowStartHour={window.startHour}
                             bookings={blocks}
                           />
                         );

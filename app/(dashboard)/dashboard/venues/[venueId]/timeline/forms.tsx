@@ -19,7 +19,7 @@ import {
 import { Button, Field, IconButton, Input, Textarea, cn } from "@/components/ui";
 import type { BookingStatus } from "@/lib/bookings/state";
 
-import { createFromTimeline, reassignFromTimeline } from "./actions";
+import { createFromTimeline, reassignFromTimeline, shiftFromTimeline } from "./actions";
 
 // ===========================================================================
 // Date navigator (unchanged from wave 1).
@@ -250,10 +250,12 @@ export type BookingDetailPayload = TimelineBookingBlock & {
 
 export function TimelineRow({
   venueId,
+  date,
   tableId,
   tableLabel,
   areaId,
   totalSlots,
+  windowStartHour,
   bookings,
 }: {
   venueId: string;
@@ -262,6 +264,7 @@ export function TimelineRow({
   tableLabel: string;
   areaId: string;
   totalSlots: number;
+  windowStartHour: number;
   bookings: TimelineBookingBlock[];
 }) {
   const router = useRouter();
@@ -282,7 +285,11 @@ export function TimelineRow({
 
   const sameArea = source && source.fromAreaId === areaId;
   const sameTable = source?.fromTableId === tableId;
-  const canDrop = Boolean(source) && sameArea && !sameTable;
+  // Drops accepted when:
+  //   * same area + different table → reassignFromTimeline (existing)
+  //   * same table → shiftFromTimeline (new — drag horizontally to
+  //     change the booking's start time, preserving duration)
+  const canDrop = Boolean(source) && (sameArea || sameTable === true);
 
   const onDragOver = useCallback(
     (e: DragEvent<HTMLDivElement>) => {
@@ -296,21 +303,62 @@ export function TimelineRow({
 
   const onDragLeave = useCallback(() => setOver(false), []);
 
+  // Compute the slot under the cursor at drop time. Same math as the
+  // selection useEffect — bounding-rect of the row minus the 120px
+  // table-label column, divided by per-slot width.
+  const slotFromClientX = useCallback(
+    (clientX: number): number | null => {
+      const node = rowRef.current;
+      if (!node) return null;
+      const rect = node.getBoundingClientRect();
+      const xInGrid = clientX - rect.left - 120;
+      const cellWidth = (rect.width - 120) / totalSlots;
+      if (cellWidth <= 0) return null;
+      const raw = Math.floor(xInGrid / cellWidth);
+      return Math.max(0, Math.min(totalSlots - 1, raw));
+    },
+    [totalSlots],
+  );
+
   const onDrop = useCallback(
     (e: DragEvent<HTMLDivElement>) => {
       setOver(false);
       if (!canDrop || !source) return;
       e.preventDefault();
-      const target = {
-        venueId,
-        bookingId: source.bookingId,
-        fromTableId: source.fromTableId,
-        toTableId: tableId,
-      };
+      const isShift = source.fromTableId === tableId;
+      const targetTableId = tableId;
+      const dropClientX = e.clientX;
       setSource(null);
       setError(null);
+
       startTransition(async () => {
-        const r = await reassignFromTimeline(target);
+        if (isShift) {
+          const slot = slotFromClientX(dropClientX);
+          if (slot === null) return;
+          const totalMin = windowStartHour * 60 + slot * 15;
+          const wallStart = `${String(Math.floor(totalMin / 60)).padStart(2, "0")}:${String(
+            totalMin % 60,
+          ).padStart(2, "0")}`;
+          const r = await shiftFromTimeline({
+            venueId,
+            bookingId: source.bookingId,
+            date,
+            wallStart,
+          });
+          if (!r.ok) {
+            setError(shiftErrorMessage(r.reason));
+            setTimeout(() => setError(null), 4000);
+            return;
+          }
+          router.refresh();
+          return;
+        }
+        const r = await reassignFromTimeline({
+          venueId,
+          bookingId: source.bookingId,
+          fromTableId: source.fromTableId,
+          toTableId: targetTableId,
+        });
         if (!r.ok) {
           setError(reassignErrorMessage(r.reason));
           setTimeout(() => setError(null), 4000);
@@ -319,7 +367,7 @@ export function TimelineRow({
         router.refresh();
       });
     },
-    [canDrop, source, venueId, tableId, setSource, router],
+    [canDrop, source, venueId, tableId, date, windowStartHour, setSource, slotFromClientX, router],
   );
 
   // Slot indices blocked by existing bookings on this row. Used to:
@@ -563,6 +611,20 @@ function reassignErrorMessage(reason: string): string {
     case "slot-taken":
       return "Slot taken";
     case "not-found":
+      return "Not found";
+    default:
+      return "Failed";
+  }
+}
+
+function shiftErrorMessage(reason: string): string {
+  switch (reason) {
+    case "slot-taken":
+      return "Time taken";
+    case "terminal-status":
+      return "Already closed";
+    case "not-found":
+    case "venue-not-found":
       return "Not found";
     default:
       return "Failed";

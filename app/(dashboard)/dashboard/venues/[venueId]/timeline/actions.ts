@@ -1,12 +1,17 @@
 "use server";
 
+import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { requireRole } from "@/lib/auth/require-role";
 import { createBooking } from "@/lib/bookings/create";
 import { reassignBookingTable } from "@/lib/bookings/reassign";
+import { shiftBookingTime } from "@/lib/bookings/shift";
+import { zonedWallToUtc } from "@/lib/bookings/time";
+import { venues } from "@/lib/db/schema";
 import { upsertGuestInput } from "@/lib/guests/schema";
+import { adminDb } from "@/lib/server/admin/db";
 
 // ---------------------------------------------------------------------------
 // Reassign — drag-and-drop reassignment.
@@ -41,6 +46,57 @@ export async function reassignFromTimeline(
     bookingId: parsed.data.bookingId,
     fromTableId: parsed.data.fromTableId,
     toTableId: parsed.data.toTableId,
+  });
+
+  if (!r.ok) return { ok: false, reason: r.reason };
+
+  revalidatePath(`/dashboard/venues/${parsed.data.venueId}/timeline`);
+  revalidatePath(`/dashboard/venues/${parsed.data.venueId}/bookings`);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Shift — drag a booking horizontally on its row to change its time.
+//
+// Receives the new wall-start (HH:MM) + the visible date; resolves
+// the venue's IANA zone server-side via the venues table so we don't
+// trust a client-supplied tz. shiftBookingTime preserves duration and
+// the EXCLUDE constraint catches an overlap → mapped to slot-taken.
+// ---------------------------------------------------------------------------
+
+const ShiftArgs = z.object({
+  venueId: z.uuid(),
+  bookingId: z.uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  wallStart: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
+});
+
+export type ShiftFromTimelineState =
+  | { ok: true }
+  | { ok: false; reason: "invalid" | "venue-not-found" | "not-found" | "slot-taken" | "terminal-status" };
+
+export async function shiftFromTimeline(raw: unknown): Promise<ShiftFromTimelineState> {
+  const parsed = ShiftArgs.safeParse(raw);
+  if (!parsed.success) return { ok: false, reason: "invalid" };
+
+  const { orgId, userId } = await requireRole("host");
+
+  const [venue] = await adminDb()
+    .select({ id: venues.id, timezone: venues.timezone, organisationId: venues.organisationId })
+    .from(venues)
+    .where(eq(venues.id, parsed.data.venueId))
+    .limit(1);
+  if (!venue || venue.organisationId !== orgId) {
+    return { ok: false, reason: "venue-not-found" };
+  }
+
+  const newStartAt = zonedWallToUtc(parsed.data.date, parsed.data.wallStart, venue.timezone);
+
+  const r = await shiftBookingTime({
+    organisationId: orgId,
+    actorUserId: userId,
+    bookingId: parsed.data.bookingId,
+    newStartAt,
   });
 
   if (!r.ok) return { ok: false, reason: r.reason };
