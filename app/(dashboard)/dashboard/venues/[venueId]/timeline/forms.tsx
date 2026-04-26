@@ -453,6 +453,14 @@ export function TimelineRow({
       {Array.from({ length: totalSlots }, (_, i) => (
         <div
           key={i}
+          // Pin every cell to its own grid column. Without this,
+          // auto-placement shoves cells past explicitly-positioned
+          // booking blocks — so on a row with a booking at cols 3–5,
+          // cells 3/4/5 quietly relocate to cols 6/7/8 and clicks
+          // on what looked like slot 7 actually fire onMouseDown on
+          // cell-4, anchoring the selection in the wrong place.
+          // +2 because col 1 is the table-label.
+          style={{ gridColumn: i + 2, gridRow: 1 }}
           onMouseDown={(e) => onCellMouseDown(e, i)}
           className={cn(
             i % 4 === 3 ? "border-r border-hairline" : "border-r border-hairline/40",
