@@ -24,7 +24,7 @@ This folder holds the source of truth for every feature. Claude should read the 
 
 | # | Spec                                | Notes |
 |---|-------------------------------------|-------|
-|11 | [`multi-venue.md`](multi-venue.md)   | Group dashboard |
+|11 | [`multi-venue.md`](multi-venue.md)   | shipped — group overview + cross-venue guests + venue-scoped RLS + ⌘K switcher |
 |12 | [`ai-enquiry.md`](ai-enquiry.md)     | LLM-assisted natural-language bookings |
 |13 | [`import-export.md`](import-export.md) | Migration from ResDiary / OpenTable / CSV |
 |14 | [`public-api.md`](public-api.md)     | REST API + webhooks |
