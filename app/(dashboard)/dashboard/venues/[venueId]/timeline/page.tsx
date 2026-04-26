@@ -24,7 +24,12 @@ import {
 } from "@/lib/db/schema";
 import { formatInTimeZone } from "date-fns-tz";
 
-import { TimelineDateNav } from "./forms";
+import {
+  TimelineDateNav,
+  TimelineDragProvider,
+  TimelineRow,
+  type TimelineBookingBlock,
+} from "./forms";
 
 export const metadata = { title: "Timeline · TableKit" };
 
@@ -259,72 +264,53 @@ export default async function TimelinePage({
                 />
               ) : null}
 
-              {areaOrder.map((areaId) => {
-                const areaTables = tablesByArea.get(areaId) ?? [];
-                const areaName = areaTables[0]?.areaName ?? "";
-                return (
-                  <div key={areaId}>
-                    <div className="border-b border-hairline bg-cloud px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ash">
-                      {areaName}
+              <TimelineDragProvider>
+                {areaOrder.map((areaId) => {
+                  const areaTables = tablesByArea.get(areaId) ?? [];
+                  const areaName = areaTables[0]?.areaName ?? "";
+                  return (
+                    <div key={areaId}>
+                      <div className="border-b border-hairline bg-cloud px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ash">
+                        {areaName}
+                      </div>
+                      {areaTables.map((t) => {
+                        const tableBookings = bookingsByTable.get(t.id) ?? [];
+                        const blocks: TimelineBookingBlock[] = tableBookings.flatMap((b) => {
+                          const span = bookingSpan(b.startAt, b.endAt, venue.timezone, window);
+                          if (!span) return [];
+                          return [
+                            {
+                              id: b.id,
+                              // +1 because the table-label column eats the first grid track.
+                              startCol: span.startCol + 1,
+                              span: span.span,
+                              status: b.status as BookingStatus,
+                              wallStart: formatVenueTime(b.startAt, {
+                                timezone: venue.timezone,
+                              }),
+                              guestFirstName: b.guestFirstName,
+                              partySize: b.partySize,
+                              notes: b.notes,
+                            },
+                          ];
+                        });
+                        return (
+                          <TimelineRow
+                            key={t.id}
+                            venueId={venueId}
+                            date={date}
+                            tableId={t.id}
+                            tableLabel={t.label}
+                            areaId={t.areaId}
+                            totalSlots={totalSlots}
+                            bookings={blocks}
+                          />
+                        );
+                      })}
                     </div>
-                    {areaTables.map((t) => {
-                      const tableBookings = bookingsByTable.get(t.id) ?? [];
-                      return (
-                        <div
-                          key={t.id}
-                          className="grid border-b border-hairline last:border-b-0"
-                          style={{
-                            gridTemplateColumns: `120px repeat(${totalSlots}, minmax(0,1fr))`,
-                          }}
-                        >
-                          <div className="flex items-center gap-1.5 border-r border-hairline px-3 py-2 text-sm font-semibold text-ink">
-                            {t.label}
-                          </div>
-                          {/* Empty slot cells render the gridlines */}
-                          {Array.from({ length: totalSlots }, (_, i) => (
-                            <div
-                              key={i}
-                              className={
-                                i % 4 === 3
-                                  ? "border-r border-hairline"
-                                  : "border-r border-hairline/40"
-                              }
-                            />
-                          ))}
-                          {/* Bookings overlay the empty cells via grid-column */}
-                          {tableBookings.map((b) => {
-                            const span = bookingSpan(b.startAt, b.endAt, venue.timezone, window);
-                            if (!span) return null;
-                            const wallStart = formatVenueTime(b.startAt, {
-                              timezone: venue.timezone,
-                            });
-                            return (
-                              <Link
-                                key={b.id}
-                                href={`/dashboard/venues/${venueId}/bookings?date=${date}`}
-                                style={{
-                                  // +1 because the table-label column eats the first grid track.
-                                  gridColumn: `${span.startCol + 1} / span ${span.span}`,
-                                  gridRow: 1,
-                                }}
-                                className={`m-0.5 flex flex-col justify-center overflow-hidden rounded-input border px-2 py-1 text-[11px] leading-tight transition hover:shadow-sm ${STATUS_FILL[b.status as BookingStatus]}`}
-                              >
-                                <span className="truncate font-semibold">
-                                  {wallStart} {b.guestFirstName}
-                                </span>
-                                <span className="truncate">
-                                  party {b.partySize}
-                                  {b.notes ? ` · ${b.notes}` : ""}
-                                </span>
-                              </Link>
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </TimelineDragProvider>
             </div>
           </div>
         </div>
