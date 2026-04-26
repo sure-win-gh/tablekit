@@ -37,8 +37,9 @@ export async function getNoShowReport(
       serviceId: bookings.serviceId,
       serviceName: services.name,
       eligible: sql<number>`count(*)::int`.as("eligible"),
-      noShows:
-        sql<number>`count(*) filter (where ${bookings.status} = 'no_show')::int`.as("noShows"),
+      noShows: sql<number>`count(*) filter (where ${bookings.status} = 'no_show')::int`.as(
+        "noShows",
+      ),
     })
     .from(bookings)
     .innerJoin(services, eq(services.id, bookings.serviceId))

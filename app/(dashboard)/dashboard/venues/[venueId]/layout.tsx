@@ -39,6 +39,7 @@ export default async function VenueLayout({
     { href: `/dashboard/venues/${venue.id}/waitlist`, label: "Waitlist" },
     { href: `/dashboard/venues/${venue.id}/services`, label: "Services" },
     { href: `/dashboard/venues/${venue.id}/deposits`, label: "Deposits" },
+    { href: `/dashboard/venues/${venue.id}/reports`, label: "Reports" },
     { href: `/dashboard/venues/${venue.id}/settings`, label: "Settings" },
   ];
 

@@ -8,10 +8,13 @@ const BOM = "﻿";
 
 describe("toCsv", () => {
   it("emits BOM + CRLF + header + rows + trailing CRLF", () => {
-    const out = toCsv([{ a: 1, b: 2 }], [
-      { header: "a", value: (r) => r.a },
-      { header: "b", value: (r) => r.b },
-    ]);
+    const out = toCsv(
+      [{ a: 1, b: 2 }],
+      [
+        { header: "a", value: (r) => r.a },
+        { header: "b", value: (r) => r.b },
+      ],
+    );
     expect(out).toBe(BOM + "a,b\r\n1,2\r\n");
   });
 
