@@ -1,16 +1,18 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   useTransition,
   type DragEvent,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 
@@ -60,15 +62,19 @@ export function TimelineDateNav({ venueId, date }: { venueId: string; date: stri
 }
 
 // ===========================================================================
-// Drag-to-reassign — per-row interactivity.
+// Timeline interaction state.
 //
-// HTML5 native drag (no @dnd-kit dep). The DragSourceContext lets each
-// row know what area the active drag started in, so cross-area rows
-// can grey-out instead of accepting an invalid drop.
+// Two interactions share one context:
 //
-// The block is the drag source; the row is the drop target. Dropping
-// fires the reassignFromTimeline server action and router.refresh()
-// to repaint with the new placement.
+//   1. Block drag-to-reassign (existing): pick up a booking block
+//      and drop on another row in the same area.
+//
+//   2. Click-and-drag-to-create (new): mouse-down on an empty cell,
+//      drag across slots, release to open the new-booking modal.
+//
+// Sharing one context lets each surface know about the other — e.g.
+// the row dims if a different drag is active, the new-booking
+// selection refuses to start if a block is being dragged.
 // ===========================================================================
 
 type DragSource = {
@@ -77,22 +83,98 @@ type DragSource = {
   fromAreaId: string;
 } | null;
 
+export type NewBookingDraft = {
+  tableId: string;
+  tableLabel: string;
+  areaId: string;
+  // 0-indexed slot in the timeline window.
+  startSlot: number;
+  endSlot: number; // exclusive
+};
+
+type Selection = NewBookingDraft & { active: boolean };
+
 type DragCtx = {
   source: DragSource;
   setSource: (s: DragSource) => void;
+
+  selection: Selection | null;
+  startSelection: (s: Omit<NewBookingDraft, "endSlot">) => void;
+  extendSelection: (endSlot: number) => void;
+  cancelSelection: () => void;
+  commitSelection: () => void;
+
+  modalDraft: NewBookingDraft | null;
+  closeModal: () => void;
 };
 
 const DragSourceContext = createContext<DragCtx | null>(null);
 
 export function TimelineDragProvider({ children }: { children: ReactNode }) {
   const [source, setSource] = useState<DragSource>(null);
-  const value = useMemo(() => ({ source, setSource }), [source]);
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const [modalDraft, setModalDraft] = useState<NewBookingDraft | null>(null);
+
+  const startSelection = useCallback((s: Omit<NewBookingDraft, "endSlot">) => {
+    setSelection({ ...s, endSlot: s.startSlot + 1, active: true });
+  }, []);
+
+  const extendSelection = useCallback((endSlot: number) => {
+    setSelection((prev) => (prev ? { ...prev, endSlot } : prev));
+  }, []);
+
+  const cancelSelection = useCallback(() => setSelection(null), []);
+
+  const commitSelection = useCallback(() => {
+    setSelection((prev) => {
+      if (!prev) return null;
+      const lo = Math.min(prev.startSlot, prev.endSlot - 1);
+      const hi = Math.max(prev.startSlot + 1, prev.endSlot);
+      // Click-without-drag (single slot) → snap to 30 min default.
+      const span = hi - lo === 1 ? 2 : hi - lo;
+      setModalDraft({
+        tableId: prev.tableId,
+        tableLabel: prev.tableLabel,
+        areaId: prev.areaId,
+        startSlot: lo,
+        endSlot: lo + span,
+      });
+      return null;
+    });
+  }, []);
+
+  const closeModal = useCallback(() => setModalDraft(null), []);
+
+  const value = useMemo(
+    () => ({
+      source,
+      setSource,
+      selection,
+      startSelection,
+      extendSelection,
+      cancelSelection,
+      commitSelection,
+      modalDraft,
+      closeModal,
+    }),
+    [
+      source,
+      selection,
+      startSelection,
+      extendSelection,
+      cancelSelection,
+      commitSelection,
+      modalDraft,
+      closeModal,
+    ],
+  );
+
   return <DragSourceContext.Provider value={value}>{children}</DragSourceContext.Provider>;
 }
 
-function useDragSource(): DragCtx {
+function useTimelineCtx(): DragCtx {
   const ctx = useContext(DragSourceContext);
-  if (!ctx) throw new Error("useDragSource: missing TimelineDragProvider");
+  if (!ctx) throw new Error("useTimelineCtx: missing TimelineDragProvider");
   return ctx;
 }
 
@@ -136,7 +218,8 @@ export function TimelineRow({
   bookings: TimelineBookingBlock[];
 }) {
   const router = useRouter();
-  const { source, setSource } = useDragSource();
+  const ctx = useTimelineCtx();
+  const { source, setSource, selection, startSelection, extendSelection, commitSelection } = ctx;
   const [pending, startTransition] = useTransition();
   const [isOver, setOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -174,8 +257,6 @@ export function TimelineRow({
         const r = await reassignFromTimeline(target);
         if (!r.ok) {
           setError(reassignErrorMessage(r.reason));
-          // Auto-clear the error after a few seconds — matches the
-          // booking-list refund UX.
           setTimeout(() => setError(null), 4000);
           return;
         }
@@ -185,11 +266,69 @@ export function TimelineRow({
     [canDrop, source, venueId, tableId, setSource, router],
   );
 
+  // Slot indices that are blocked by an existing booking on this
+  // row. Used to (a) refuse selection-start over a block, (b) clamp
+  // the selection's end so it doesn't run through one.
+  const occupied = useMemo(() => {
+    const set = new Set<number>();
+    for (const b of bookings) {
+      // block.startCol is 1-indexed grid col; subtract the +1 offset
+      // for the label, and another +1 to re-zero into slot space.
+      const slotStart = b.startCol - 2;
+      for (let i = 0; i < b.span; i++) set.add(slotStart + i);
+    }
+    return set;
+  }, [bookings]);
+
+  const onCellMouseDown = useCallback(
+    (e: MouseEvent<HTMLDivElement>, slot: number) => {
+      // Left button only; ignore if a block drag is active.
+      if (e.button !== 0 || source) return;
+      if (occupied.has(slot)) return;
+      e.preventDefault();
+      startSelection({ tableId, tableLabel, areaId, startSlot: slot });
+    },
+    [source, occupied, startSelection, tableId, tableLabel, areaId],
+  );
+
+  const onCellMouseEnter = useCallback(
+    (slot: number) => {
+      if (!selection || !selection.active) return;
+      if (selection.tableId !== tableId) return;
+      // Clamp the selection end so it doesn't extend through an
+      // occupied slot. Find the nearest occupied slot at or after
+      // the start; cap there.
+      let cap = totalSlots;
+      for (let i = selection.startSlot + 1; i < totalSlots; i++) {
+        if (occupied.has(i)) {
+          cap = i;
+          break;
+        }
+      }
+      const target = Math.min(slot + 1, cap);
+      extendSelection(target);
+    },
+    [selection, tableId, totalSlots, occupied, extendSelection],
+  );
+
+  // Render the selection ghost on this row only when the active
+  // selection belongs to this table.
+  const ghost =
+    selection && selection.active && selection.tableId === tableId
+      ? {
+          startCol: Math.min(selection.startSlot, selection.endSlot - 1) + 2,
+          span: Math.max(1, Math.abs(selection.endSlot - selection.startSlot)),
+        }
+      : null;
+
   return (
     <div
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
+      onMouseUp={() => {
+        if (selection?.active) commitSelection();
+      }}
       className={cn(
         "grid border-b border-hairline transition-colors last:border-b-0",
         isOver && canDrop && "bg-coral/5",
@@ -207,11 +346,24 @@ export function TimelineRow({
       {Array.from({ length: totalSlots }, (_, i) => (
         <div
           key={i}
-          className={
-            i % 4 === 3 ? "border-r border-hairline" : "border-r border-hairline/40"
-          }
+          onMouseDown={(e) => onCellMouseDown(e, i)}
+          onMouseEnter={() => onCellMouseEnter(i)}
+          className={cn(
+            i % 4 === 3 ? "border-r border-hairline" : "border-r border-hairline/40",
+            !occupied.has(i) && !source && "cursor-crosshair",
+          )}
         />
       ))}
+      {ghost ? (
+        <div
+          aria-hidden
+          style={{
+            gridColumn: `${ghost.startCol} / span ${ghost.span}`,
+            gridRow: 1,
+          }}
+          className="pointer-events-none m-0.5 rounded-input border border-coral/60 bg-coral/10"
+        />
+      ) : null}
       {bookings.map((b) => (
         <BookingBlock
           key={b.id}
@@ -239,9 +391,11 @@ function BookingBlock({
   areaId: string;
   block: TimelineBookingBlock;
 }) {
-  const { setSource } = useDragSource();
-  // Cancelled bookings aren't draggable — they're already off the floor.
-  const draggable = block.status !== "cancelled" && block.status !== "no_show" && block.status !== "finished";
+  const { setSource } = useTimelineCtx();
+  // Cancelled / no_show / finished blocks aren't draggable — they're
+  // already off the floor.
+  const draggable =
+    block.status !== "cancelled" && block.status !== "no_show" && block.status !== "finished";
 
   return (
     <Link
@@ -252,9 +406,6 @@ function BookingBlock({
           e.preventDefault();
           return;
         }
-        // dataTransfer payload is unused (we read everything from the
-        // context) but setting *some* data is required for Firefox to
-        // start a drag at all.
         e.dataTransfer.setData("text/plain", block.id);
         e.dataTransfer.effectAllowed = "move";
         setSource({
@@ -296,4 +447,140 @@ function reassignErrorMessage(reason: string): string {
     default:
       return "Failed";
   }
+}
+
+// ===========================================================================
+// New-booking modal — opens after a click-and-drag selection commits.
+//
+// Wave 1: scaffold only — shows the resolved time + table + service,
+// has a "Continue to /bookings/new" link as the fallback, plus
+// Close. Wave 2 wires an inline form + submit.
+// ===========================================================================
+
+export type TimelineService = {
+  id: string;
+  name: string;
+  // jsonb: { days: string[], start: "HH:MM", end: "HH:MM" }. Trusted
+  // shape — already validated at the server-action boundary.
+  schedule: unknown;
+  turnMinutes: number;
+};
+
+export function NewBookingModal({
+  venueId,
+  date,
+  windowStartHour,
+  services,
+}: {
+  venueId: string;
+  date: string;
+  windowStartHour: number;
+  services: TimelineService[];
+}) {
+  const { modalDraft, closeModal } = useTimelineCtx();
+
+  // Esc to close.
+  useEffect(() => {
+    if (!modalDraft) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeModal();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [modalDraft, closeModal]);
+
+  if (!modalDraft) return null;
+
+  const startMin = (windowStartHour * 60) + (modalDraft.startSlot * 15);
+  const endMin = (windowStartHour * 60) + (modalDraft.endSlot * 15);
+  const wallStart = formatHHMM(startMin);
+  const wallEnd = formatHHMM(endMin);
+  const service = pickService(services, startMin);
+
+  // Direct deep-link into the existing /bookings/new page with the
+  // picked slot pre-filled — wave 2 replaces this with an inline
+  // form that creates the booking + reassigns to the picked table.
+  const fallbackHref = service
+    ? `/dashboard/venues/${venueId}/bookings/new?date=${date}&serviceId=${service.id}&wallStart=${encodeURIComponent(wallStart)}&party=2`
+    : `/dashboard/venues/${venueId}/bookings/new?date=${date}`;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="New booking"
+      onClick={closeModal}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md rounded-card border border-hairline bg-white shadow-panel"
+      >
+        <header className="flex items-start justify-between gap-2 border-b border-hairline px-5 py-4">
+          <div>
+            <h3 className="text-base font-bold tracking-tight text-ink">New booking</h3>
+            <p className="mt-0.5 text-xs text-ash">
+              {wallStart}–{wallEnd} · {modalDraft.tableLabel}
+              {service ? ` · ${service.name}` : ""}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={closeModal}
+            aria-label="Close"
+            className="-mr-1 -mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-ash transition hover:bg-cloud hover:text-ink"
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        </header>
+
+        <div className="flex flex-col gap-3 px-5 py-4 text-sm text-charcoal">
+          {!service ? (
+            <p className="rounded-card border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+              No service is open at {wallStart}. Pick a different time, or set up a service that
+              covers it.
+            </p>
+          ) : (
+            <p className="text-xs text-ash">
+              Inline booking form lands in the next iteration. For now, continue to the new-booking
+              page with this slot pre-filled.
+            </p>
+          )}
+        </div>
+
+        <footer className="flex items-center justify-end gap-2 border-t border-hairline px-5 py-3">
+          <Button variant="secondary" size="sm" onClick={closeModal}>
+            Cancel
+          </Button>
+          <Link href={fallbackHref}>
+            <Button size="sm" disabled={!service}>
+              Continue
+            </Button>
+          </Link>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function formatHHMM(totalMinutes: number): string {
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function pickService(services: TimelineService[], startMin: number): TimelineService | null {
+  for (const s of services) {
+    const sched = s.schedule as { start?: string; end?: string } | null;
+    if (!sched?.start || !sched?.end) continue;
+    const sMin = parseHHMM(sched.start);
+    const eMin = parseHHMM(sched.end);
+    if (startMin >= sMin && startMin < eMin) return s;
+  }
+  return null;
+}
+
+function parseHHMM(s: string): number {
+  const [hh = "0", mm = "0"] = s.split(":");
+  return Number(hh) * 60 + Number(mm);
 }

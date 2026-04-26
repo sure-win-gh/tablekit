@@ -25,10 +25,12 @@ import {
 import { formatInTimeZone } from "date-fns-tz";
 
 import {
+  NewBookingModal,
   TimelineDateNav,
   TimelineDragProvider,
   TimelineRow,
   type TimelineBookingBlock,
+  type TimelineService,
 } from "./forms";
 
 export const metadata = { title: "Timeline · TableKit" };
@@ -92,6 +94,7 @@ export default async function TimelinePage({
           label: venueTables.label,
           areaId: venueTables.areaId,
           areaName: areas.name,
+          maxCover: venueTables.maxCover,
         })
         .from(venueTables)
         .innerJoin(areas, eq(areas.id, venueTables.areaId))
@@ -120,7 +123,10 @@ export default async function TimelinePage({
         ),
       db
         .select({
+          id: services.id,
+          name: services.name,
           schedule: services.schedule,
+          turnMinutes: services.turnMinutes,
         })
         .from(services)
         .where(eq(services.venueId, venueId)),
@@ -265,6 +271,12 @@ export default async function TimelinePage({
               ) : null}
 
               <TimelineDragProvider>
+                <NewBookingModal
+                  venueId={venueId}
+                  date={date}
+                  windowStartHour={window.startHour}
+                  services={svcRows as unknown as TimelineService[]}
+                />
                 {areaOrder.map((areaId) => {
                   const areaTables = tablesByArea.get(areaId) ?? [];
                   const areaName = areaTables[0]?.areaName ?? "";
