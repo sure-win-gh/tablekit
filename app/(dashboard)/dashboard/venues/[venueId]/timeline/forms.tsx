@@ -16,10 +16,10 @@ import {
   type ReactNode,
 } from "react";
 
-import { Button, IconButton, Input, cn } from "@/components/ui";
+import { Button, Field, IconButton, Input, Textarea, cn } from "@/components/ui";
 import type { BookingStatus } from "@/lib/bookings/state";
 
-import { reassignFromTimeline } from "./actions";
+import { createFromTimeline, reassignFromTimeline } from "./actions";
 
 // ===========================================================================
 // Date navigator (unchanged from wave 1).
@@ -491,19 +491,6 @@ export function NewBookingModal({
 
   if (!modalDraft) return null;
 
-  const startMin = (windowStartHour * 60) + (modalDraft.startSlot * 15);
-  const endMin = (windowStartHour * 60) + (modalDraft.endSlot * 15);
-  const wallStart = formatHHMM(startMin);
-  const wallEnd = formatHHMM(endMin);
-  const service = pickService(services, startMin);
-
-  // Direct deep-link into the existing /bookings/new page with the
-  // picked slot pre-filled — wave 2 replaces this with an inline
-  // form that creates the booking + reassigns to the picked table.
-  const fallbackHref = service
-    ? `/dashboard/venues/${venueId}/bookings/new?date=${date}&serviceId=${service.id}&wallStart=${encodeURIComponent(wallStart)}&party=2`
-    : `/dashboard/venues/${venueId}/bookings/new?date=${date}`;
-
   return (
     <div
       role="dialog"
@@ -516,52 +503,189 @@ export function NewBookingModal({
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-md rounded-card border border-hairline bg-white shadow-panel"
       >
-        <header className="flex items-start justify-between gap-2 border-b border-hairline px-5 py-4">
-          <div>
-            <h3 className="text-base font-bold tracking-tight text-ink">New booking</h3>
-            <p className="mt-0.5 text-xs text-ash">
-              {wallStart}–{wallEnd} · {modalDraft.tableLabel}
-              {service ? ` · ${service.name}` : ""}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={closeModal}
-            aria-label="Close"
-            className="-mr-1 -mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-ash transition hover:bg-cloud hover:text-ink"
-          >
-            <X className="h-4 w-4" aria-hidden />
-          </button>
-        </header>
-
-        <div className="flex flex-col gap-3 px-5 py-4 text-sm text-charcoal">
-          {!service ? (
-            <p className="rounded-card border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-              No service is open at {wallStart}. Pick a different time, or set up a service that
-              covers it.
-            </p>
-          ) : (
-            <p className="text-xs text-ash">
-              Inline booking form lands in the next iteration. For now, continue to the new-booking
-              page with this slot pre-filled.
-            </p>
-          )}
-        </div>
-
-        <footer className="flex items-center justify-end gap-2 border-t border-hairline px-5 py-3">
-          <Button variant="secondary" size="sm" onClick={closeModal}>
-            Cancel
-          </Button>
-          <Link href={fallbackHref}>
-            <Button size="sm" disabled={!service}>
-              Continue
-            </Button>
-          </Link>
-        </footer>
+        {/* Keyed by the draft so transient form state (party size,
+            error message) resets cleanly when a new selection opens
+            the modal. Avoids the react-hooks/set-state-in-effect
+            rule that fires when we'd otherwise reset state in a
+            useEffect on draft change. */}
+        <ModalBody
+          key={`${modalDraft.tableId}:${modalDraft.startSlot}:${modalDraft.endSlot}`}
+          venueId={venueId}
+          date={date}
+          windowStartHour={windowStartHour}
+          services={services}
+          draft={modalDraft}
+        />
       </div>
     </div>
   );
 }
+
+function ModalBody({
+  venueId,
+  date,
+  windowStartHour,
+  services,
+  draft,
+}: {
+  venueId: string;
+  date: string;
+  windowStartHour: number;
+  services: TimelineService[];
+  draft: NewBookingDraft;
+}) {
+  const router = useRouter();
+  const { closeModal } = useTimelineCtx();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [partySize, setPartySize] = useState(2);
+
+  const startMin = windowStartHour * 60 + draft.startSlot * 15;
+  const endMin = windowStartHour * 60 + draft.endSlot * 15;
+  const wallStart = formatHHMM(startMin);
+  const wallEnd = formatHHMM(endMin);
+  const service = pickService(services, startMin);
+
+  function onSubmit(e: ReactFormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!service) return;
+    const form = new FormData(e.currentTarget);
+    const payload = {
+      venueId,
+      serviceId: service.id,
+      date,
+      wallStart,
+      partySize,
+      preferredTableId: draft.tableId,
+      notes: (form.get("notes") as string) || undefined,
+      guest: {
+        firstName: form.get("firstName"),
+        lastName: form.get("lastName") ?? "",
+        email: form.get("email"),
+        phone: (form.get("phone") as string) || undefined,
+      },
+    };
+    setError(null);
+    startTransition(async () => {
+      const r = await createFromTimeline(payload);
+      if (!r.ok) {
+        setError(createErrorMessage(r));
+        return;
+      }
+      if (r.landedOn === "elsewhere") {
+        setError(
+          "Booked, but availability put it on a different table. Drag-reassign on the timeline to move it.",
+        );
+        setTimeout(() => {
+          closeModal();
+          router.refresh();
+        }, 3000);
+        return;
+      }
+      closeModal();
+      router.refresh();
+    });
+  }
+
+  return (
+    <>
+      <header className="flex items-start justify-between gap-2 border-b border-hairline px-5 py-4">
+        <div>
+          <h3 className="text-base font-bold tracking-tight text-ink">New booking</h3>
+          <p className="mt-0.5 text-xs text-ash">
+            {wallStart}–{wallEnd} · {draft.tableLabel}
+            {service ? ` · ${service.name}` : ""}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={closeModal}
+          aria-label="Close"
+          className="-mr-1 -mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-ash transition hover:bg-cloud hover:text-ink"
+        >
+          <X className="h-4 w-4" aria-hidden />
+        </button>
+      </header>
+
+      {!service ? (
+        <div className="px-5 py-4">
+          <p className="rounded-card border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            No service is open at {wallStart}. Pick a different time, or set up a service that
+            covers it.
+          </p>
+        </div>
+      ) : (
+        <form onSubmit={onSubmit} className="flex flex-col gap-4 px-5 py-4">
+          <Field label="Party size" htmlFor="nbm-party">
+            <Input
+              id="nbm-party"
+              type="number"
+              min={1}
+              max={20}
+              value={partySize}
+              onChange={(e) => setPartySize(Math.max(1, Math.min(20, Number(e.target.value))))}
+              size="sm"
+              className="w-24"
+            />
+          </Field>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="First name" htmlFor="nbm-fn">
+              <Input id="nbm-fn" name="firstName" required autoComplete="given-name" />
+            </Field>
+            <Field label="Last name" htmlFor="nbm-ln" optional>
+              <Input id="nbm-ln" name="lastName" autoComplete="family-name" />
+            </Field>
+            <Field label="Email" htmlFor="nbm-email">
+              <Input id="nbm-email" name="email" type="email" required autoComplete="email" />
+            </Field>
+            <Field label="Phone" htmlFor="nbm-phone" optional>
+              <Input id="nbm-phone" name="phone" type="tel" autoComplete="tel" />
+            </Field>
+          </div>
+
+          <Field label="Notes" htmlFor="nbm-notes" optional>
+            <Textarea id="nbm-notes" name="notes" rows={2} maxLength={500} />
+          </Field>
+
+          {error ? <p className="text-xs text-rose">{error}</p> : null}
+
+          <footer className="-mx-5 -mb-4 mt-2 flex items-center justify-end gap-2 border-t border-hairline px-5 py-3">
+            <Button type="button" variant="secondary" size="sm" onClick={closeModal}>
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" disabled={pending}>
+              {pending ? "Creating…" : "Create booking"}
+            </Button>
+          </footer>
+        </form>
+      )}
+    </>
+  );
+}
+
+function createErrorMessage(r: { reason: string; message?: string | undefined }): string {
+  switch (r.reason) {
+    case "slot-taken":
+      return "Someone else just took that slot — try another time or table.";
+    case "no-availability":
+      return "That slot is no longer available.";
+    case "venue-not-found":
+      return "Venue not found.";
+    case "guest-invalid":
+      return r.message ? `Guest details: ${r.message}` : "Check the guest details.";
+    case "invalid-input":
+      return r.message ? `Check: ${r.message}` : "Check the form.";
+    case "deposit-failed":
+      return "Unexpected payment error — try again.";
+    default:
+      return "Couldn't create the booking. Try again.";
+  }
+}
+
+// React's FormEvent type without importing React.FormEvent into the
+// existing `react` import set above.
+type ReactFormEvent<T> = import("react").FormEvent<T>;
 
 function formatHHMM(totalMinutes: number): string {
   const h = Math.floor(totalMinutes / 60);
