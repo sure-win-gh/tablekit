@@ -96,6 +96,12 @@ export const memberships = pgTable(
       .notNull()
       .references(() => organisations.id, { onDelete: "cascade" }),
     role: orgRole("role").notNull(),
+    // Per-venue scoping for managers / hosts. NULL means "all venues
+    // in the org" (the legacy behaviour, also the default when an
+    // owner promotes a member without specifying). A non-NULL array
+    // restricts the caller's RLS-visible scope to those venues; the
+    // user_can_access_venue() helper consumes this.
+    venueIds: uuid("venue_ids").array(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
