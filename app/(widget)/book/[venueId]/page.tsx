@@ -54,13 +54,13 @@ export default async function PublicBookingPage({
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-6">
       <header>
-        <p className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+        <p className="text-xs font-semibold uppercase tracking-wider text-coral">
           Book a table
         </p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight text-neutral-900">
+        <h1 className="mt-2 text-4xl font-bold tracking-tight text-ink">
           {venue.name}
         </h1>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-ash">
           {formatVenueDateLong(dateLongUtc, { timezone: venue.timezone })}
         </p>
       </header>

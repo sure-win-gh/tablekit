@@ -2,6 +2,8 @@
 
 import { useActionState } from "react";
 
+import { Button, Field, Input } from "@/components/ui";
+
 import { signUp, type SignupState } from "./actions";
 
 const initial: SignupState = { status: "idle" };
@@ -11,8 +13,8 @@ export function SignupForm() {
 
   if (state.status === "needs_confirm") {
     return (
-      <div className="rounded-md border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
-        <p className="font-medium text-neutral-900">Check your inbox.</p>
+      <div className="rounded-card border border-hairline bg-cloud p-4 text-sm text-charcoal">
+        <p className="font-semibold text-ink">Check your inbox.</p>
         <p className="mt-1">
           We sent a confirmation link to <span className="font-mono">{state.email}</span>. Click it
           and you&apos;ll be taken to your dashboard.
@@ -25,89 +27,66 @@ export function SignupForm() {
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
-      <Field
-        label="Your name"
-        name="full_name"
-        type="text"
-        autoComplete="name"
-        required
-        error={fieldErrors?.["fullName"]?.[0]}
-      />
+      <Field label="Your name" htmlFor="su-name" error={fieldErrors?.["fullName"]?.[0]}>
+        <Input
+          id="su-name"
+          name="full_name"
+          type="text"
+          autoComplete="name"
+          required
+          invalid={Boolean(fieldErrors?.["fullName"]?.[0])}
+        />
+      </Field>
       <Field
         label="Restaurant / café name"
-        name="org_name"
-        type="text"
-        autoComplete="organization"
-        required
+        htmlFor="su-org"
         error={fieldErrors?.["orgName"]?.[0]}
-      />
-      <Field
-        label="Work email"
-        name="email"
-        type="email"
-        autoComplete="email"
-        required
-        error={fieldErrors?.["email"]?.[0]}
-      />
+      >
+        <Input
+          id="su-org"
+          name="org_name"
+          type="text"
+          autoComplete="organization"
+          required
+          invalid={Boolean(fieldErrors?.["orgName"]?.[0])}
+        />
+      </Field>
+      <Field label="Work email" htmlFor="su-email" error={fieldErrors?.["email"]?.[0]}>
+        <Input
+          id="su-email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+          invalid={Boolean(fieldErrors?.["email"]?.[0])}
+        />
+      </Field>
       <Field
         label="Password"
-        name="password"
-        type="password"
-        autoComplete="new-password"
-        required
-        minLength={12}
+        htmlFor="su-pw"
         hint="At least 12 characters."
         error={fieldErrors?.["password"]?.[0]}
-      />
+      >
+        <Input
+          id="su-pw"
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          required
+          minLength={12}
+          invalid={Boolean(fieldErrors?.["password"]?.[0])}
+        />
+      </Field>
 
       {state.status === "error" && !fieldErrors ? (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-rose">
           {state.message}
         </p>
       ) : null}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="mt-2 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-50"
-      >
+      <Button type="submit" disabled={pending} className="mt-2">
         {pending ? "Creating account…" : "Create account"}
-      </button>
+      </Button>
     </form>
-  );
-}
-
-type FieldProps = {
-  label: string;
-  name: string;
-  type: "text" | "email" | "password";
-  autoComplete?: string;
-  required?: boolean;
-  minLength?: number;
-  hint?: string;
-  error?: string | undefined;
-};
-
-function Field({ label, name, type, autoComplete, required, minLength, hint, error }: FieldProps) {
-  return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="font-medium text-neutral-900">{label}</span>
-      <input
-        name={name}
-        type={type}
-        required={required}
-        minLength={minLength}
-        autoComplete={autoComplete}
-        aria-invalid={Boolean(error)}
-        className="rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
-      />
-      {error ? (
-        <span role="alert" className="text-xs text-red-600">
-          {error}
-        </span>
-      ) : hint ? (
-        <span className="text-xs text-neutral-500">{hint}</span>
-      ) : null}
-    </label>
   );
 }

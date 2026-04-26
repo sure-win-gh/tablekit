@@ -1,9 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+
+import { Button, Field, Input, Textarea, cn } from "@/components/ui";
 
 type SlotLite = { serviceId: string; serviceName: string; wallStart: string };
 
@@ -47,37 +49,39 @@ export function SlotPicker({
   return (
     <section className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-4">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-neutral-700">Date</span>
-          <input
+        <Field label="Date" htmlFor="bk-date">
+          <Input
+            id="bk-date"
             type="date"
             value={date}
             onChange={(e) => navigate({ date: e.target.value })}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-neutral-900"
+            size="sm"
+            className="w-auto"
           />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-neutral-700">Party size</span>
-          <input
+        </Field>
+        <Field label="Party size" htmlFor="bk-party">
+          <Input
+            id="bk-party"
             type="number"
             min={1}
             max={20}
             value={partySize}
             onChange={(e) => navigate({ party: Number(e.target.value) })}
-            className="w-20 rounded-md border border-neutral-300 px-2 py-1 text-neutral-900"
+            size="sm"
+            className="w-20"
           />
-        </label>
+        </Field>
       </div>
 
       {slots.length === 0 ? (
-        <p className="rounded-md border border-dashed border-neutral-300 p-4 text-sm text-neutral-500">
+        <p className="rounded-card border border-dashed border-hairline p-4 text-sm text-ash">
           Sorry, nothing available at that date and party size. Try another date or a smaller party.
         </p>
       ) : (
         <div className="flex flex-col gap-3">
           {[...byService.entries()].map(([svcName, list]) => (
             <div key={svcName}>
-              <h3 className="text-sm font-semibold tracking-tight text-neutral-700">{svcName}</h3>
+              <h3 className="text-sm font-semibold tracking-tight text-ink">{svcName}</h3>
               <div className="mt-2 flex flex-wrap gap-2">
                 {list.map((s) => {
                   const isPicked =
@@ -87,11 +91,13 @@ export function SlotPicker({
                       key={`${s.serviceId}-${s.wallStart}`}
                       type="button"
                       onClick={() => navigate({ serviceId: s.serviceId, wallStart: s.wallStart })}
-                      className={`rounded-md border px-3 py-1.5 text-sm font-medium tabular-nums transition ${
+                      className={cn(
+                        "rounded-input border px-3 py-1.5 text-sm font-semibold tabular-nums transition",
+                        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2",
                         isPicked
-                          ? "border-neutral-900 bg-neutral-900 text-white"
-                          : "border-neutral-300 text-neutral-700 hover:border-neutral-400 hover:text-neutral-900"
-                      }`}
+                          ? "border-ink bg-ink text-white"
+                          : "border-hairline text-ink hover:border-ink",
+                      )}
                     >
                       {s.wallStart}
                     </button>
@@ -251,8 +257,8 @@ export function BookingForm({
 
   if (state.status === "success") {
     return (
-      <section className="flex flex-col gap-3 rounded-md border border-emerald-200 bg-emerald-50 p-6 text-emerald-900">
-        <h2 className="text-lg font-semibold">You&apos;re booked.</h2>
+      <section className="flex flex-col gap-3 rounded-card border border-emerald-300 bg-emerald-50 p-6 text-emerald-900">
+        <h2 className="text-lg font-bold tracking-tight">You&apos;re booked.</h2>
         <p className="text-sm">
           Your reference is <span className="font-mono font-semibold">{state.reference}</span>.
           We&apos;ve got you down for {state.time} on {date}, party of {partySize}.
@@ -275,32 +281,39 @@ export function BookingForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="flex flex-col gap-4 rounded-md border border-neutral-200 p-6"
+      className="flex flex-col gap-4 rounded-card border border-hairline bg-white p-6 shadow-panel"
     >
       <header>
-        <h2 className="text-lg font-semibold tracking-tight text-neutral-900">Your details</h2>
-        <p className="text-sm text-neutral-500">
+        <h2 className="text-lg font-bold tracking-tight text-ink">Your details</h2>
+        <p className="text-sm text-ash">
           {wallStart} on {date} · party of {partySize}
         </p>
       </header>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="First name" name="firstName" required autoComplete="given-name" />
-        <Field label="Last name" name="lastName" autoComplete="family-name" />
-        <Field label="Email" name="email" type="email" required autoComplete="email" />
-        <Field label="Phone (optional)" name="phone" type="tel" autoComplete="tel" />
+        <Field label="First name" htmlFor="bk-fn">
+          <Input id="bk-fn" name="firstName" required autoComplete="given-name" />
+        </Field>
+        <Field label="Last name" htmlFor="bk-ln" optional>
+          <Input id="bk-ln" name="lastName" autoComplete="family-name" />
+        </Field>
+        <Field label="Email" htmlFor="bk-email">
+          <Input id="bk-email" name="email" type="email" required autoComplete="email" />
+        </Field>
+        <Field label="Phone" htmlFor="bk-phone" optional>
+          <Input id="bk-phone" name="phone" type="tel" autoComplete="tel" />
+        </Field>
       </div>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-neutral-700">Notes (optional)</span>
-        <textarea
+      <Field label="Notes" htmlFor="bk-notes" optional>
+        <Textarea
+          id="bk-notes"
           name="notes"
           maxLength={500}
           rows={2}
           placeholder="Allergies, pushchair, etc."
-          className="rounded-md border border-neutral-300 px-2 py-1 text-neutral-900"
         />
-      </label>
+      </Field>
 
       {captchaSitekey ? (
         <HCaptchaWidget sitekey={captchaSitekey} onVerify={setCaptchaToken} />
@@ -308,47 +321,13 @@ export function BookingForm({
 
       <div className="flex items-center justify-end gap-3">
         {state.status === "error" ? (
-          <span className="text-sm text-rose-600">{state.message}</span>
+          <span className="text-sm text-rose">{state.message}</span>
         ) : null}
-        <button
-          type="submit"
-          disabled={state.status === "submitting"}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-50"
-        >
+        <Button type="submit" disabled={state.status === "submitting"}>
           {state.status === "submitting" ? "Booking…" : "Confirm booking"}
-        </button>
+        </Button>
       </div>
     </form>
-  );
-}
-
-function Field({
-  label,
-  name,
-  type = "text",
-  required = false,
-  autoComplete,
-}: {
-  label: string;
-  name: string;
-  type?: string;
-  required?: boolean;
-  autoComplete?: string;
-}) {
-  return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="text-neutral-700">
-        {label}
-        {required ? <span className="ml-0.5 text-rose-600">*</span> : null}
-      </span>
-      <input
-        type={type}
-        name={name}
-        required={required}
-        autoComplete={autoComplete}
-        className="rounded-md border border-neutral-300 px-2 py-1 text-neutral-900"
-      />
-    </label>
   );
 }
 
@@ -411,12 +390,12 @@ function DepositStep({
   const stripe = useMemo(() => getStripe(handoff.stripeAccount), [handoff.stripeAccount]);
   const isHold = handoff.kind === "setup_intent";
   return (
-    <section className="flex flex-col gap-4 rounded-md border border-neutral-200 p-6">
+    <section className="flex flex-col gap-4 rounded-card border border-hairline bg-white p-6 shadow-panel">
       <header>
-        <h2 className="text-lg font-semibold tracking-tight text-neutral-900">
+        <h2 className="text-lg font-bold tracking-tight text-ink">
           {isHold ? "Card required" : "Deposit required"}
         </h2>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-ash">
           {time} on {date} ·{" "}
           {isHold
             ? `we'll only charge ${formatGbp(handoff.amountMinor)} if you don't show up.`
@@ -498,14 +477,10 @@ function DepositPaymentForm({
   return (
     <form onSubmit={pay} className="flex flex-col gap-4">
       <PaymentElement options={{ layout: "tabs" }} />
-      {state.status === "error" ? <p className="text-sm text-rose-600">{state.message}</p> : null}
-      <button
-        type="submit"
-        disabled={!stripe || state.status === "confirming"}
-        className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-50"
-      >
+      {state.status === "error" ? <p className="text-sm text-rose">{state.message}</p> : null}
+      <Button type="submit" disabled={!stripe || state.status === "confirming"}>
         {state.status === "confirming" ? "Processing…" : isHold ? "Save card" : "Pay deposit"}
-      </button>
+      </Button>
     </form>
   );
 }
