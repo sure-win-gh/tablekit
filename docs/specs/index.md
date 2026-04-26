@@ -17,6 +17,8 @@ This folder holds the source of truth for every feature. Claude should read the 
 | 8 | [`waitlist.md`](waitlist.md) | shipped | Walk-in + waitlist |
 | 9 | [`reserve-with-google.md`](reserve-with-google.md) | paused | Blocked on Google partner onboarding + spec needs fleshing out — see file |
 |10 | [`reporting.md`](reporting.md) | shipped | Covers, no-show rate, deposits, source mix, top guests + CSV export |
+|11 | [`timeline.md`](timeline.md) | draft | Per-table time-blocks Gantt-style view (gap in bookings.md) |
+|12 | [`floor-plan-visual.md`](floor-plan-visual.md) | draft | SVG floor-plan with booking overlay (gap in bookings.md) |
 
 ## Plus-tier features (weeks 13–24)
 
