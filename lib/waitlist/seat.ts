@@ -123,9 +123,12 @@ export async function seatWaitlist(
       return booking.id;
     });
   } catch (err: unknown) {
-    if (err && typeof err === "object" && (err as { code?: string }).code === "23P01") {
-      return { ok: false, reason: "slot-taken" };
-    }
+    // Drizzle 0.45 wraps pg errors in DrizzleQueryError; the pg
+    // error code lives on err.cause. Walk both so the exclusion-
+    // violation (23P01 — same table double-booked across an
+    // overlapping range) is mapped cleanly to slot-taken rather
+    // than bubbling up.
+    if (isExclusionViolation(err)) return { ok: false, reason: "slot-taken" };
     throw err;
   }
 
@@ -158,4 +161,18 @@ export async function seatWaitlist(
   })();
 
   return { ok: true, bookingId };
+}
+
+// Recognises Postgres 23P01 (exclusion_violation) on either the bare
+// node-postgres error or a Drizzle 0.45 DrizzleQueryError (which puts
+// the original on `err.cause`).
+function isExclusionViolation(err: unknown): boolean {
+  if (err === null || typeof err !== "object") return false;
+  const direct = (err as { code?: unknown }).code;
+  if (direct === "23P01") return true;
+  const cause = (err as { cause?: unknown }).cause;
+  if (cause && typeof cause === "object" && (cause as { code?: unknown }).code === "23P01") {
+    return true;
+  }
+  return false;
 }

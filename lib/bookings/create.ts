@@ -425,6 +425,14 @@ export async function createBooking(
 
 function isExclusionViolation(err: unknown): boolean {
   if (err === null || typeof err !== "object") return false;
-  const code = (err as { code?: unknown }).code;
-  return code === "23P01";
+  // Drizzle 0.45 wraps pg errors in DrizzleQueryError; the pg `code`
+  // ends up on err.cause. Check both so a fresh Drizzle release can't
+  // silently break the slot-taken mapping.
+  const direct = (err as { code?: unknown }).code;
+  if (direct === "23P01") return true;
+  const cause = (err as { cause?: unknown }).cause;
+  if (cause && typeof cause === "object" && (cause as { code?: unknown }).code === "23P01") {
+    return true;
+  }
+  return false;
 }
