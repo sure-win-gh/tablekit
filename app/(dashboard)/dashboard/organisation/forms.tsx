@@ -1,17 +1,26 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useOptimistic, useTransition } from "react";
 
-import { Button, cn } from "@/components/ui";
+import { cn } from "@/components/ui";
 
 import { toggleGroupCrm, type ToggleGroupCrmState } from "./actions";
 
 const initial: ToggleGroupCrmState = { status: "idle" };
 
-// Toggle for organisations.group_crm_enabled. Optimistic UI on the
-// switch state so the click reads as instant; the server action
-// confirms (or reverts) when it returns. Submit happens on click;
-// no separate "Save" button — the switch is the action.
+// Toggle for organisations.group_crm_enabled.
+//
+// Two React 19 idioms in play:
+//   1. The action is dispatched inside a transition (Next 16 + React
+//      19 require useActionState calls to live inside one).
+//   2. Optimistic UI via useOptimistic — the switch flips instantly
+//      on click; React reverts the optimistic value automatically
+//      when the transition settles, then the action's confirmed
+//      state takes over.
+//
+// On error, the optimistic flip auto-reverts when the transition
+// resolves (since useOptimistic snaps back to the base state) and
+// the error message renders below.
 
 export function GroupCrmToggle({
   initialEnabled,
@@ -23,20 +32,25 @@ export function GroupCrmToggle({
   ownerOnlyHint?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(toggleGroupCrm, initial);
-  const [enabled, setEnabled] = useState(initialEnabled);
+  const [, startTransition] = useTransition();
+
+  // Source of truth: latest server-confirmed value if we have one,
+  // otherwise the initial prop the server rendered with.
+  const baseEnabled = state.status === "saved" ? state.enabled : initialEnabled;
+  const [enabled, setOptimistic] = useOptimistic(
+    baseEnabled,
+    (_current: boolean, next: boolean) => next,
+  );
 
   function onClick() {
     if (disabled || pending) return;
-    setEnabled((v) => !v);
+    const next = !enabled;
     const fd = new FormData();
-    if (!enabled) fd.set("groupCrmEnabled", "on");
-    formAction(fd);
-  }
-
-  // Sync from server state if it differs (e.g. user double-clicks
-  // and the server resolves the older value last).
-  if (state.status === "saved" && state.enabled !== enabled) {
-    setEnabled(state.enabled);
+    if (next) fd.set("groupCrmEnabled", "on");
+    startTransition(() => {
+      setOptimistic(next);
+      formAction(fd);
+    });
   }
 
   return (
@@ -71,15 +85,13 @@ export function GroupCrmToggle({
       {ownerOnlyHint ? (
         <p className="text-[11px] text-ash">Only owners can change this setting.</p>
       ) : null}
+      {pending ? <p className="text-xs text-ash">Saving…</p> : null}
       {state.status === "error" ? (
         <p className="text-xs text-rose">{state.message}</p>
       ) : null}
-      {state.status === "saved" ? (
+      {state.status === "saved" && !pending ? (
         <p className="text-xs text-emerald-700">Saved.</p>
       ) : null}
-      <Button type="button" variant="link" className="self-start text-xs" disabled>
-        {pending ? "Saving…" : null}
-      </Button>
     </div>
   );
 }
