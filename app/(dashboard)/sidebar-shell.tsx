@@ -114,11 +114,29 @@ export function SidebarShell({
           drawerOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
         )}
       >
+        {/* Edge handle — always visible on desktop. Half-pokes out of
+            the right edge of the rail at vertical center, so it's
+            obvious in both expanded + collapsed states. Replaces the
+            old in-header collapse button + footer-stuck expand button
+            which were too easy to miss. */}
+        <button
+          type="button"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={() => toggleFlag(COLLAPSE_KEY)}
+          className="absolute right-0 top-1/2 z-40 hidden h-7 w-7 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full border border-hairline bg-white text-ash shadow-sm transition hover:border-ink hover:text-ink md:inline-flex"
+        >
+          {collapsed ? (
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          ) : (
+            <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+          )}
+        </button>
+
         {/* Brand header */}
         <div
           className={cn(
-            "flex items-center justify-between border-b border-hairline px-4 py-4",
-            collapsed && "px-3",
+            "flex items-center border-b border-hairline px-4 py-4",
+            collapsed ? "justify-center px-3" : "justify-start",
           )}
         >
           <Link href="/dashboard" className="flex items-center gap-2">
@@ -134,16 +152,6 @@ export function SidebarShell({
               </div>
             ) : null}
           </Link>
-          {!collapsed ? (
-            <button
-              type="button"
-              aria-label="Collapse sidebar"
-              onClick={() => toggleFlag(COLLAPSE_KEY)}
-              className="hidden h-7 w-7 items-center justify-center rounded-full text-ash transition hover:bg-cloud hover:text-ink md:inline-flex"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
-            </button>
-          ) : null}
         </div>
 
         {/* Nav */}
@@ -184,16 +192,6 @@ export function SidebarShell({
               {!collapsed ? "Sign out" : null}
             </button>
           </form>
-          {collapsed ? (
-            <button
-              type="button"
-              aria-label="Expand sidebar"
-              onClick={() => toggleFlag(COLLAPSE_KEY)}
-              className="mt-1 hidden h-7 w-full items-center justify-center rounded-full text-ash transition hover:bg-cloud hover:text-ink md:inline-flex"
-            >
-              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-            </button>
-          ) : null}
         </div>
       </aside>
 
