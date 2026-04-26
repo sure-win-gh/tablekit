@@ -14,6 +14,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { createBooking } from "@/lib/bookings/create";
+import { bookingsReadOnly, widgetDisabled } from "@/lib/feature-flags";
 import { upsertGuestInput } from "@/lib/guests/schema";
 import { sweepAbandonedDeposits } from "@/lib/payments/janitor";
 import { bookingReference, verifyCaptcha } from "@/lib/public/captcha";
@@ -32,6 +33,16 @@ const Body = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  // 0. Kill switches. Cheaper than the rate-limit fetch + we want
+  //    the same 503 shape across both flags so monitoring can match
+  //    on { error: "widget-disabled" | "bookings-read-only" }.
+  if (widgetDisabled()) {
+    return NextResponse.json({ error: "widget-disabled" }, { status: 503 });
+  }
+  if (bookingsReadOnly()) {
+    return NextResponse.json({ error: "bookings-read-only" }, { status: 503 });
+  }
+
   // 1. Rate limit by IP before we do any DB work.
   const ip = ipFromHeaders(req.headers);
   const rl = await rateLimit(`bookings:${ip}`, 5, 10 * 60);

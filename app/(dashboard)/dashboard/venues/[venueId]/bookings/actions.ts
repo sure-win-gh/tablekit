@@ -8,6 +8,7 @@ import { createBooking } from "@/lib/bookings/create";
 import { reassignBookingTable } from "@/lib/bookings/reassign";
 import { BOOKING_STATUSES, type BookingStatus } from "@/lib/bookings/state";
 import { transitionBooking } from "@/lib/bookings/transition";
+import { bookingsReadOnly } from "@/lib/feature-flags";
 import { upsertGuestInput } from "@/lib/guests/schema";
 import { refundBooking } from "@/lib/payments/refunds";
 
@@ -33,6 +34,16 @@ export async function createBookingAction(
   formData: FormData,
 ): Promise<CreateBookingActionState> {
   const { userId, orgId } = await requireRole("host");
+
+  // Kill switch — gates host bookings the same way the public widget
+  // is gated by /api/v1/bookings's BOOKINGS_READ_ONLY check. Existing
+  // bookings remain editable; only new creates are stopped.
+  if (bookingsReadOnly()) {
+    return {
+      status: "error",
+      message: "New bookings are temporarily disabled by an operator. Try again shortly.",
+    };
+  }
 
   // FormData → nested shape. The guest subfields arrive flat.
   const raw = {

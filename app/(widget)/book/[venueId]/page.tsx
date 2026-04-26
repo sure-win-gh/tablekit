@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { formatVenueDateLong, todayInZone } from "@/lib/bookings/time";
+import { widgetDisabled } from "@/lib/feature-flags";
 import { captchaEnabled } from "@/lib/public/captcha";
 import { loadPublicAvailability, loadPublicVenue } from "@/lib/public/venue";
 
@@ -38,6 +39,26 @@ export default async function PublicBookingPage({
   const sp = await searchParams;
   const venue = await loadPublicVenue(venueId);
   if (!venue) notFound();
+
+  // Kill switch — operator-facing emergency halt. Renders a venue-
+  // specific maintenance message so a guest mid-booking knows it's
+  // not them. POST /api/v1/bookings also rejects in this state.
+  if (widgetDisabled()) {
+    return (
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 p-6">
+        <header>
+          <p className="text-xs font-semibold uppercase tracking-wider text-coral">
+            Online booking
+          </p>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">{venue.name}</h1>
+        </header>
+        <p className="rounded-card border border-hairline bg-cloud p-6 text-sm text-charcoal">
+          Online booking is temporarily unavailable. Please call or email the venue directly to make
+          a reservation. We&apos;ll have this back up shortly.
+        </p>
+      </main>
+    );
+  }
 
   const date = sp.date ?? todayInZone(venue.timezone);
   const partySize = sp.party ? Math.max(1, Math.min(20, Number(sp.party))) : 2;
