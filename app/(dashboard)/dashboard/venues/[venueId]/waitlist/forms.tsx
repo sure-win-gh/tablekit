@@ -12,8 +12,8 @@ export function NewWalkInForm({ venueId }: { venueId: string }) {
     status: "idle",
   });
   return (
-    <form action={action} className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
-      <h3 className="text-sm font-semibold tracking-tight text-neutral-900">Add walk-in</h3>
+    <form action={action} className="flex flex-col gap-3 rounded-md border border-hairline p-4">
+      <h3 className="text-sm font-semibold tracking-tight text-ink">Add walk-in</h3>
       <input type="hidden" name="venue_id" value={venueId} />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Field label="First name" name="first_name" required />
@@ -31,12 +31,12 @@ export function NewWalkInForm({ venueId }: { venueId: string }) {
       </div>
       <div className="flex items-center justify-end gap-3">
         {state.status === "error" ? (
-          <span className="text-xs text-rose-600">{state.message}</span>
+          <span className="text-xs text-rose">{state.message}</span>
         ) : null}
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-50"
+          className="rounded-md bg-ink px-3 py-1.5 text-sm font-medium text-white transition hover:bg-charcoal disabled:opacity-50"
         >
           {pending ? "Adding…" : "Add to waitlist"}
         </button>
@@ -64,7 +64,7 @@ function Field({
 }) {
   return (
     <label className="flex flex-col gap-1 text-xs">
-      <span className="text-neutral-700">{label}</span>
+      <span className="text-charcoal">{label}</span>
       <input
         type={type}
         name={name}
@@ -72,7 +72,7 @@ function Field({
         defaultValue={defaultValue}
         min={min}
         max={max}
-        className="rounded-md border border-neutral-300 px-2 py-1 text-sm text-neutral-900"
+        className="rounded-md border border-hairline px-2 py-1 text-sm text-ink"
       />
     </label>
   );
@@ -99,10 +99,10 @@ export function WaitlistEntryRow({
   return (
     <li className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-col text-sm">
-        <span className="font-medium text-neutral-900">
+        <span className="font-medium text-ink">
           {entry.guestFirstName} · party of {entry.partySize}
         </span>
-        <span className="text-xs text-neutral-500">
+        <span className="text-xs text-ash">
           Waiting {minutesSince(entry.requestedAt)} min · est. wait {waitMinutes} min
           {entry.notes ? ` · ${entry.notes}` : ""}
         </span>
@@ -130,7 +130,7 @@ function SeatNowControl({
   });
   const [tableId, setTableId] = useState("");
   if (tables.length === 0) {
-    return <span className="text-xs text-neutral-400">No table fits</span>;
+    return <span className="text-xs text-mute">No table fits</span>;
   }
   return (
     <form action={action} className="flex items-center gap-1.5">
@@ -140,7 +140,7 @@ function SeatNowControl({
         name="table_id"
         value={tableId}
         onChange={(e) => setTableId(e.target.value)}
-        className="rounded-md border border-neutral-300 px-2 py-0.5 text-xs text-neutral-900"
+        className="rounded-md border border-hairline px-2 py-0.5 text-xs text-ink"
       >
         <option value="">Pick table…</option>
         {tables.map((t) => (
@@ -157,7 +157,7 @@ function SeatNowControl({
         {pending ? "Seating…" : "Seat now"}
       </button>
       {state.status === "error" ? (
-        <span className="text-xs text-rose-600">{state.message}</span>
+        <span className="text-xs text-rose">{state.message}</span>
       ) : null}
     </form>
   );
@@ -185,7 +185,7 @@ function CancelControl({
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 hover:border-neutral-400 disabled:opacity-50"
+        className="rounded-md border border-hairline px-2 py-0.5 text-xs text-charcoal hover:border-ink disabled:opacity-50"
       >
         {pending ? "…" : label}
       </button>

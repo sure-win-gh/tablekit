@@ -49,8 +49,8 @@ export default async function VenueSettingsPage({
   return (
     <section className="flex flex-col gap-8">
       <div>
-        <p className="mb-6 text-sm text-neutral-500">
-          Venue type is <span className="font-mono text-neutral-700">{venue.venueType}</span> —
+        <p className="mb-6 text-sm text-ash">
+          Venue type is <span className="font-mono text-charcoal">{venue.venueType}</span> —
           changing type isn&apos;t supported yet.
         </p>
 

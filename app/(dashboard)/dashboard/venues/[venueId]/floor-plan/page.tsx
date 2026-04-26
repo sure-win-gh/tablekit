@@ -52,20 +52,20 @@ export default async function FloorPlanPage({ params }: { params: Promise<{ venu
   return (
     <section className="flex flex-col gap-6">
       {areaRows.length === 0 ? (
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-ash">
           No areas yet. Add one below to start laying out tables.
         </p>
       ) : (
         areaRows.map((area) => {
           const tables = tablesByArea.get(area.id) ?? [];
           return (
-            <div key={area.id} className="rounded-md border border-neutral-200">
-              <div className="border-b border-neutral-200 px-4 pt-4 pb-3">
+            <div key={area.id} className="rounded-md border border-hairline">
+              <div className="border-b border-hairline px-4 pt-4 pb-3">
                 <AreaHeader areaId={area.id} name={area.name} />
               </div>
               <div className="px-4 py-2">
                 {tables.length === 0 ? (
-                  <p className="py-2 text-xs text-neutral-500">No tables yet.</p>
+                  <p className="py-2 text-xs text-ash">No tables yet.</p>
                 ) : (
                   tables.map((t) => {
                     const pos = t.position as { x: number; y: number; w: number; h: number };

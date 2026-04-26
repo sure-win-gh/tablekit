@@ -57,8 +57,8 @@ export default async function DepositsPage({ params }: { params: Promise<{ venue
   return (
     <section className="flex flex-col gap-6">
       <div>
-        <h2 className="text-lg font-medium tracking-tight text-neutral-900">Deposit rules</h2>
-        <p className="text-sm text-neutral-500">
+        <h2 className="text-lg font-medium tracking-tight text-ink">Deposit rules</h2>
+        <p className="text-sm text-ash">
           The most-specific matching rule wins — a service-specific rule beats a wildcard, narrower
           day-of-week beats broader, narrower party range beats open, most recently created breaks
           ties. Bookings that match a rule collect a deposit via the widget; host-created bookings
@@ -68,7 +68,7 @@ export default async function DepositsPage({ params }: { params: Promise<{ venue
 
       <div className="flex flex-col">
         {rules.length === 0 ? (
-          <p className="rounded-md border border-dashed border-neutral-300 p-4 text-sm text-neutral-500">
+          <p className="rounded-md border border-dashed border-hairline p-4 text-sm text-ash">
             No rules yet. Add one below to start collecting deposits on widget bookings.
           </p>
         ) : (

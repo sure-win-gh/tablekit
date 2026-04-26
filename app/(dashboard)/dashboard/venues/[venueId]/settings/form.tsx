@@ -63,11 +63,11 @@ export function VenueSettingsForm({ venueId, name, timezone, locale }: Props) {
         </p>
       ) : null}
 
-      <div className="flex justify-end border-t border-neutral-200 pt-4">
+      <div className="flex justify-end border-t border-hairline pt-4">
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-50"
+          className="rounded-md bg-ink px-4 py-2 text-sm font-medium text-white transition hover:bg-charcoal disabled:opacity-50"
         >
           {pending ? "Saving…" : "Save changes"}
         </button>
@@ -89,14 +89,14 @@ function Field({
 }) {
   return (
     <label className="flex flex-col gap-1 text-sm">
-      <span className="font-medium text-neutral-900">{label}</span>
+      <span className="font-medium text-ink">{label}</span>
       <input
         name={name}
         type="text"
         defaultValue={defaultValue}
         required
         aria-invalid={Boolean(error)}
-        className="rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+        className="rounded-md border border-hairline px-3 py-2 text-sm outline-none focus:border-neutral-900"
       />
       {error ? (
         <span role="alert" className="text-xs text-red-600">
@@ -120,11 +120,11 @@ function Select({
 }) {
   return (
     <label className="flex flex-col gap-1 text-sm">
-      <span className="font-medium text-neutral-900">{label}</span>
+      <span className="font-medium text-ink">{label}</span>
       <select
         name={name}
         defaultValue={defaultValue}
-        className="rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+        className="rounded-md border border-hairline px-3 py-2 text-sm outline-none focus:border-neutral-900"
       >
         {options.map((o) => (
           <option key={o} value={o}>

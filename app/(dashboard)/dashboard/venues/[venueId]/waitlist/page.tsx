@@ -60,8 +60,8 @@ export default async function WaitlistPage({ params }: { params: Promise<{ venue
   return (
     <section className="flex flex-col gap-6">
       <div>
-        <h2 className="text-lg font-medium tracking-tight text-neutral-900">Waitlist</h2>
-        <p className="text-sm text-neutral-500">
+        <h2 className="text-lg font-medium tracking-tight text-ink">Waitlist</h2>
+        <p className="text-sm text-ash">
           Walk-ins waiting for a table. Add a new entry below; tap &ldquo;Seat now&rdquo; with a
           free table when one&apos;s ready and the guest gets an SMS. Estimated wait is position
           times average turn, capped at 90 min.
@@ -69,11 +69,11 @@ export default async function WaitlistPage({ params }: { params: Promise<{ venue
       </div>
 
       {entries.length === 0 ? (
-        <p className="rounded-md border border-dashed border-neutral-300 p-4 text-sm text-neutral-500">
+        <p className="rounded-md border border-dashed border-hairline p-4 text-sm text-ash">
           Nobody waiting. Add a walk-in below.
         </p>
       ) : (
-        <ul className="divide-y divide-neutral-200 rounded-md border border-neutral-200">
+        <ul className="divide-y divide-hairline rounded-md border border-hairline">
           {entries.map((e, i) => (
             <WaitlistEntryRow
               key={e.id}

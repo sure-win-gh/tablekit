@@ -35,24 +35,24 @@ export function NewAreaForm({ venueId }: { venueId: string }) {
   return (
     <form
       action={action}
-      className="flex flex-wrap items-end gap-3 rounded-md border border-dashed border-neutral-300 p-4"
+      className="flex flex-wrap items-end gap-3 rounded-md border border-dashed border-hairline p-4"
     >
       <input type="hidden" name="venue_id" value={venueId} />
       <label className="flex flex-1 flex-col gap-1 text-sm">
-        <span className="font-medium text-neutral-900">New area</span>
+        <span className="font-medium text-ink">New area</span>
         <input
           name="name"
           type="text"
           required
           maxLength={60}
           placeholder="Terrace"
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+          className="rounded-md border border-hairline px-3 py-2 text-sm outline-none focus:border-neutral-900"
         />
       </label>
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-neutral-900 transition hover:bg-neutral-50 disabled:opacity-50"
+        className="rounded-md border border-hairline bg-white px-3 py-2 text-sm font-medium text-ink transition hover:bg-cloud disabled:opacity-50"
       >
         {pending ? "Adding…" : "Add area"}
       </button>
@@ -74,12 +74,12 @@ export function AreaHeader({ areaId, name }: { areaId: string; name: string }) {
           defaultValue={name}
           required
           maxLength={60}
-          className="flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-lg font-medium text-neutral-900 hover:border-neutral-300 focus:border-neutral-900 focus:bg-white focus:outline-none"
+          className="flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-lg font-medium text-ink hover:border-hairline focus:border-neutral-900 focus:bg-white focus:outline-none"
         />
         <button
           type="submit"
           disabled={updatePending}
-          className="text-xs text-neutral-500 hover:text-neutral-900 disabled:opacity-50"
+          className="text-xs text-ash hover:text-ink disabled:opacity-50"
         >
           {updatePending ? "…" : "Save"}
         </button>
@@ -108,7 +108,7 @@ export function NewTableForm({ areaId }: { areaId: string }) {
   return (
     <form
       action={action}
-      className="flex flex-wrap items-end gap-2 rounded-md border border-dashed border-neutral-300 px-3 py-2 text-sm"
+      className="flex flex-wrap items-end gap-2 rounded-md border border-dashed border-hairline px-3 py-2 text-sm"
     >
       <input type="hidden" name="area_id" value={areaId} />
       <NumField label="label" name="label" type="text" defaultValue="" required maxLength={30} />
@@ -122,7 +122,7 @@ export function NewTableForm({ areaId }: { areaId: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-neutral-900 transition hover:bg-neutral-50 disabled:opacity-50"
+        className="rounded-md border border-hairline bg-white px-3 py-2 text-sm font-medium text-ink transition hover:bg-cloud disabled:opacity-50"
       >
         {pending ? "Adding…" : "Add table"}
       </button>
@@ -213,7 +213,7 @@ export function TableRow({
         <button
           type="submit"
           disabled={updatePending}
-          className="text-xs text-neutral-500 hover:text-neutral-900 disabled:opacity-50"
+          className="text-xs text-ash hover:text-ink disabled:opacity-50"
         >
           {updatePending ? "…" : "Save"}
         </button>
@@ -259,7 +259,7 @@ function NumField({
   maxLength,
 }: NumFieldProps) {
   return (
-    <label className="flex flex-col gap-0.5 text-xs text-neutral-500">
+    <label className="flex flex-col gap-0.5 text-xs text-ash">
       <span>{label}</span>
       <input
         name={name}
@@ -269,7 +269,7 @@ function NumField({
         {...(min !== undefined ? { min } : {})}
         {...(max !== undefined ? { max } : {})}
         {...(maxLength !== undefined ? { maxLength } : {})}
-        className={`rounded-md border border-neutral-300 px-2 py-1 text-sm text-neutral-900 outline-none focus:border-neutral-900 ${type === "number" ? "w-16" : "w-24"}`}
+        className={`rounded-md border border-hairline px-2 py-1 text-sm text-ink outline-none focus:border-neutral-900 ${type === "number" ? "w-16" : "w-24"}`}
       />
     </label>
   );
@@ -277,12 +277,12 @@ function NumField({
 
 function ShapeField({ defaultValue = "rect" }: { defaultValue?: string }) {
   return (
-    <label className="flex flex-col gap-0.5 text-xs text-neutral-500">
+    <label className="flex flex-col gap-0.5 text-xs text-ash">
       <span>shape</span>
       <select
         name="shape"
         defaultValue={defaultValue}
-        className="rounded-md border border-neutral-300 px-2 py-1 text-sm text-neutral-900 outline-none focus:border-neutral-900"
+        className="rounded-md border border-hairline px-2 py-1 text-sm text-ink outline-none focus:border-neutral-900"
       >
         <option value="rect">rect</option>
         <option value="circle">circle</option>
