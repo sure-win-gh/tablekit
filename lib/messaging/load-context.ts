@@ -37,7 +37,14 @@ export type LoadContextInput = {
 
 export type LoadContextResult =
   | { ok: true; ctx: MessageBookingContext; recipient: string }
-  | { ok: false; reason: "booking-not-found" | "missing-recipient" | "decrypt-failed" };
+  | {
+      ok: false;
+      reason:
+        | "booking-not-found"
+        | "missing-recipient"
+        | "decrypt-failed"
+        | "review-response-missing";
+    };
 
 export async function loadMessageContext(input: LoadContextInput): Promise<LoadContextResult> {
   const db = adminDb();
@@ -127,21 +134,37 @@ export async function loadMessageContext(input: LoadContextInput): Promise<LoadC
   // Per-template extra loads. Kept in load-context (rather than the
   // template render step) so the whole context is final by the time
   // renderForChannel runs and templates stay pure.
+  //
+  // Suppression note: the per-venue email unsubscribe check above
+  // (line 75-78) already short-circuits before this branch runs, so
+  // the operator-reply template honours the same per-venue opt-out as
+  // every other email — load-bearing for our LIA in gdpr.md.
   if (input.template === "review.operator_reply") {
+    // Lookup keyed on bookingId because Phase 2 has the
+    // reviews_booking_id_unique constraint. If we ever support
+    // multiple reviews per booking, thread the review id through
+    // enqueue metadata.
     const [rev] = await db
       .select({ responseCipher: reviews.responseCipher })
       .from(reviews)
       .where(eq(reviews.bookingId, input.bookingId))
       .limit(1);
-    if (rev?.responseCipher) {
-      try {
-        ctx.operatorReplyText = await decryptPii(
-          row.organisationId,
-          rev.responseCipher as Ciphertext,
-        );
-      } catch {
-        return { ok: false, reason: "decrypt-failed" };
-      }
+    // Refuse to send a stub email — if the cipher is gone (review
+    // deleted or never written), mark the message failed instead of
+    // mailing the guest with an empty body.
+    if (!rev?.responseCipher) {
+      return { ok: false, reason: "review-response-missing" };
+    }
+    try {
+      ctx.operatorReplyText = await decryptPii(
+        row.organisationId,
+        rev.responseCipher as Ciphertext,
+      );
+    } catch {
+      // Bare catch is deliberate — node-crypto error messages can
+      // include base64 cipher fragments and we don't want those in
+      // logs/audit.
+      return { ok: false, reason: "decrypt-failed" };
     }
   }
 

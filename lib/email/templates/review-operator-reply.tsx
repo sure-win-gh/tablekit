@@ -5,9 +5,9 @@ import type { MessageBookingContext, RenderedEmail } from "@/lib/messaging/conte
 import { EmailLayout, P } from "./_layout";
 
 function ReviewOperatorReplyEmail({ ctx }: { ctx: MessageBookingContext }) {
-  // Defensive — the dispatcher only enqueues this template when the
-  // review row has a non-null response, but render-time the prop is
-  // optional so a missing value won't crash the worker.
+  // Defensive — load-context refuses to build a context when the
+  // cipher is missing, so this fallback should never render. Belt and
+  // braces in case a future caller relaxes that.
   const reply = ctx.operatorReplyText ?? "";
   return (
     <EmailLayout
@@ -16,10 +16,23 @@ function ReviewOperatorReplyEmail({ ctx }: { ctx: MessageBookingContext }) {
       venueName={ctx.venueName}
     >
       <P>Hi {ctx.guestFirstName},</P>
-      <P>Thanks again for your feedback after your visit to {ctx.venueName}. The team wanted to reply directly:</P>
-      {reply.split("\n").map((line, i) => (
-        <P key={i}>{line || " "}</P>
-      ))}
+      <P>
+        Thanks again for your feedback after your visit to {ctx.venueName}. The team wanted to
+        reply directly:
+      </P>
+      {/* whiteSpace: pre-line preserves the operator's line breaks
+          without spawning empty <P> elements that Outlook collapses. */}
+      <p
+        style={{
+          fontSize: "15px",
+          lineHeight: "22px",
+          margin: "0 0 12px 0",
+          color: "#111111",
+          whiteSpace: "pre-line",
+        }}
+      >
+        {reply}
+      </p>
       <P>If you&apos;d like to talk further, just reply to this email.</P>
     </EmailLayout>
   );

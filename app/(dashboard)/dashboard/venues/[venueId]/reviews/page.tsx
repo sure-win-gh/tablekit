@@ -134,6 +134,11 @@ export default async function ReviewsPage({
           display.map((r) => <ReviewRow key={r.id} venueId={venueId} review={r} />)
         )}
       </ul>
+      {display.length === 100 ? (
+        <p className="text-center text-xs text-ash">
+          Showing the 100 most recent reviews. Pagination lands in a later phase.
+        </p>
+      ) : null}
     </section>
   );
 }

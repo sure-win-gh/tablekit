@@ -5,9 +5,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { requireRole } from "@/lib/auth/require-role";
-import { reviews } from "@/lib/db/schema";
+import { withUser } from "@/lib/db/client";
+import { reviews, venues } from "@/lib/db/schema";
 import { enqueueMessage } from "@/lib/messaging/enqueue";
 import { processNextBatch } from "@/lib/messaging/dispatch";
+import { truncateError } from "@/lib/messaging/enqueue";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 import { encryptPii } from "@/lib/security/crypto";
@@ -45,64 +47,85 @@ export async function respondToReview(
   const { orgId, userId } = await requireRole("manager");
   const { reviewId, venueId, reply } = parsed.data;
 
-  const db = adminDb();
-  // The compound WHERE on org + venue + review id is what stops a
-  // crafted reviewId from poking another tenant's row — adminDb()
-  // bypasses RLS, so this check carries the weight.
-  const [row] = await db
-    .select({
-      id: reviews.id,
-      bookingId: reviews.bookingId,
-      respondedAt: reviews.respondedAt,
-    })
-    .from(reviews)
-    .where(
-      and(
-        eq(reviews.id, reviewId),
-        eq(reviews.organisationId, orgId),
-        eq(reviews.venueId, venueId),
-      ),
-    )
-    .limit(1);
-  if (!row) return { status: "error", message: "Review not found." };
-  if (row.respondedAt) return { status: "error", message: "Already replied." };
+  // Per-venue scope check — `requireRole` only verifies org membership,
+  // not the per-venue staff scoping from migration 0013. Without this,
+  // a manager scoped to venue A could craft a POST with venue B's id
+  // (same org) and respond on its behalf. withUser routes the lookup
+  // through RLS (`user_visible_venue_ids()`), which honours
+  // memberships.venue_ids.
+  const venueVisible = await withUser(async (db) => {
+    const rows = await db
+      .select({ id: venues.id })
+      .from(venues)
+      .where(eq(venues.id, venueId))
+      .limit(1);
+    return rows.length > 0;
+  });
+  if (!venueVisible) return { status: "error", message: "Review not found." };
 
   const responseCipher = await encryptPii(orgId, reply);
 
-  await db
-    .update(reviews)
-    .set({
-      responseCipher,
-      respondedAt: sql`now()`,
-      respondedByUserId: userId,
-    })
-    .where(eq(reviews.id, row.id));
+  const db = adminDb();
+  const result = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({
+        id: reviews.id,
+        bookingId: reviews.bookingId,
+        respondedAt: reviews.respondedAt,
+      })
+      .from(reviews)
+      .where(
+        and(
+          eq(reviews.id, reviewId),
+          eq(reviews.organisationId, orgId),
+          eq(reviews.venueId, venueId),
+        ),
+      )
+      .limit(1);
+    if (!row) return { ok: false as const, message: "Review not found." };
+    if (row.respondedAt) return { ok: false as const, message: "Already replied." };
 
-  await enqueueMessage({
-    organisationId: orgId,
-    bookingId: row.bookingId,
-    template: "review.operator_reply",
-    channel: "email",
-  });
+    await tx
+      .update(reviews)
+      .set({
+        responseCipher,
+        respondedAt: sql`now()`,
+        respondedByUserId: userId,
+      })
+      .where(eq(reviews.id, row.id));
 
-  await audit.log({
-    organisationId: orgId,
-    actorUserId: userId,
-    action: "review.responded",
-    targetType: "review",
-    targetId: row.id,
-    metadata: { venueId },
-  });
-
-  // Drive a small batch immediately so the email lands in seconds —
-  // matches the inline-drive pattern from booking-confirmation.
-  try {
-    await processNextBatch({ limit: 5 });
-  } catch (err) {
-    console.error("[reviews/actions.ts] inline worker drive failed:", {
-      message: err instanceof Error ? err.message : String(err),
+    // enqueueMessage is idempotent on (booking_id, template, channel),
+    // so even if the transaction is retried by Postgres, we get one
+    // queued row.
+    await enqueueMessage({
+      organisationId: orgId,
+      bookingId: row.bookingId,
+      template: "review.operator_reply",
+      channel: "email",
     });
-  }
+
+    await audit.log({
+      organisationId: orgId,
+      actorUserId: userId,
+      action: "review.responded",
+      targetType: "review",
+      targetId: row.id,
+      metadata: { venueId },
+    });
+
+    return { ok: true as const };
+  });
+
+  if (!result.ok) return { status: "error", message: result.message };
+
+  // Drive a small batch in the background so the operator's "Send
+  // reply" button doesn't block on Resend latency. Cron sweeper picks
+  // up anything missed; the inline drive is just a latency tweak.
+  void processNextBatch({ limit: 5 }).catch((err) => {
+    console.error("[reviews/actions.ts] inline worker drive failed:", {
+      message: truncateError(err),
+    });
+  });
 
   revalidatePath(`/dashboard/venues/${venueId}/reviews`);
   return { status: "saved" };

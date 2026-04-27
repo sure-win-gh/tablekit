@@ -35,6 +35,7 @@ Outbound hyperlinks to third-party sites (e.g. the Google review form linked fro
 - **Booking a table:** contract (Art 6(1)(b)). We don't need consent to store a booking the guest is creating.
 - **Marketing email/SMS:** consent (Art 6(1)(a)). Opt-in only, per-channel, per-venue.
 - **Post-visit review request:** legitimate interests (Art 6(1)(f)) within the PECR reg 22(3) soft-opt-in carve-out for service follow-up. A single, non-promotional email asking the guest to rate the visit they just had, sent through the same per-venue email channel as transactional confirmations and honouring the same unsubscribe. **LIA:** balancing test favours the venue's interest in service improvement against the guest's reasonable expectation that a recent visit may generate a follow-up. Not used for promotion or third-party sharing. The per-venue email-channel unsubscribe is authoritative for review requests too.
+- **Operator reply to a guest review:** legitimate interests (Art 6(1)(f)) within PECR reg 22(3). A single, non-promotional reply within the same service-follow-up loop the guest opted into when they submitted the review. Honours the same per-venue email unsubscribe as the review request (enforced at `lib/messaging/load-context.ts` before any decrypt). **LIA:** the guest's reasonable expectation after submitting a star rating + comment includes a reply from the venue; the venue's interest in service recovery and reputation outweighs the minimal further intrusion. Not used for promotion or third-party sharing.
 - **Fraud prevention, abuse monitoring:** legitimate interests (Art 6(1)(f)). Documented in our ROPA.
 - **Legal/accounting retention:** legal obligation (Art 6(1)(c)).
 
@@ -45,7 +46,7 @@ Outbound hyperlinks to third-party sites (e.g. the Google review form linked fro
 | Booking history       | 7 years (UK accounting)        | Pseudonymised after org erasure request |
 | Guest contact details | Until guest or org erases      | Yes, 30 days |
 | Marketing preferences | Until opt-out                  | Yes, immediately on opt-out |
-| Review text (free-form comment) | 24 months from submission (rating retained indefinitely as numeric only) | Yes, immediately on guest erasure |
+| Review text (guest comment + operator reply) | 24 months from submission/reply (rating retained indefinitely as numeric only) | Yes, immediately on guest erasure |
 | Payment metadata (Stripe IDs, no PAN) | 7 years     | Stripe IDs retained, PII decoupled |
 | Audit log             | 2 years                        | No (integrity) |
 | Session logs          | 30 days                        | Auto-expiry |
@@ -55,9 +56,9 @@ Outbound hyperlinks to third-party sites (e.g. the Google review form linked fro
 Guests don't contact us directly — they contact the venue. The venue uses the dashboard to action requests.
 
 1. Operator opens guest profile → "Data rights" menu.
-2. Options: export (JSON+CSV), rectify, erase.
+2. Options: export (JSON+CSV), rectify, erase. The export must include any reviews the guest left or that were left on their bookings: `rating`, decrypted `comment`, decrypted operator `response`, `submittedAt`, `respondedAt`. (Pipeline TBD — track as part of the DSAR builder phase.)
 3. Erasure: flips `guests.erased_at`, schedules background job to scrub PII columns within 30 days, writes `audit_log` entry.
-4. Erased guests: `email_cipher`, `phone_cipher`, `last_name_cipher`, `dob_cipher`, `notes_cipher` nulled. `first_name` overwritten to "Erased". `reviews.comment_cipher` for that guest's reviews is also nulled (rating kept as numeric — not personal data on its own). Bookings pseudonymised (kept for accounting) — no way to link back.
+4. Erased guests: `email_cipher`, `phone_cipher`, `last_name_cipher`, `dob_cipher`, `notes_cipher` nulled. `first_name` overwritten to "Erased". `reviews.comment_cipher`, `reviews.response_cipher`, `reviews.responded_at`, and `reviews.responded_by_user_id` for that guest's reviews are also nulled — rating kept as numeric only (not personal data on its own); operator attribution is dropped to leave no path back to the data subject. Bookings pseudonymised (kept for accounting) — no way to link back.
 5. A `dsar_requests` table logs requests with 30-day SLA clock.
 
 We also expose a guest-facing page at `/privacy/request?v=<venue-slug>` that posts to the operator's dashboard as a DSAR ticket.
