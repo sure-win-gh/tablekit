@@ -5,10 +5,13 @@ import { requireRole } from "@/lib/auth/require-role";
 import { getAccount } from "@/lib/stripe/connect";
 import { withUser } from "@/lib/db/client";
 import { venueOauthConnections, venues } from "@/lib/db/schema";
+import { listAccounts, listLocations } from "@/lib/google/business-profile";
+import { getActiveGoogleConnection } from "@/lib/google/connection";
 import { isConfigured as googleOauthConfigured } from "@/lib/oauth/google";
 
 import { BillingSection } from "./billing";
 import { GoogleConnectionSection } from "./google-connection";
+import { GoogleLocationPicker, type PickerLocation } from "./google-location-picker";
 import { VenueSettingsForm } from "./form";
 
 export const metadata = {
@@ -83,6 +86,50 @@ export default async function VenueSettingsPage({
     return rows[0] ?? null;
   });
 
+  // If the operator has connected but not yet picked a location, fetch
+  // the available locations server-side so the picker can render. The
+  // active-connection helper handles token refresh transparently.
+  let pickerLocations: PickerLocation[] = [];
+  let pickerLoadError: string | null = null;
+  if (googleConnection && !googleConnection.externalAccountId) {
+    try {
+      const conn = await getActiveGoogleConnection(venueId);
+      if (!conn) {
+        pickerLoadError = "Connection lost. Disconnect and try again.";
+      } else {
+        const accountsRes = await listAccounts(conn.accessToken);
+        if (!accountsRes.ok) {
+          pickerLoadError = `Couldn't list Google accounts (HTTP ${accountsRes.status}).`;
+        } else {
+          // Flatten accounts → locations. Most operators have one
+          // account; we don't paginate here because GBP returns all
+          // accounts in a single response for the typical case.
+          const all: PickerLocation[] = [];
+          for (const account of accountsRes.accounts) {
+            const locs = await listLocations({
+              accessToken: conn.accessToken,
+              accountName: account.name,
+            });
+            if (!locs.ok) continue;
+            for (const l of locs.locations) {
+              all.push({
+                resourceName: `${account.name}/${l.name}`,
+                title: l.title,
+                address:
+                  l.storefrontAddress?.addressLines?.join(", ") ??
+                  l.storefrontAddress?.locality ??
+                  null,
+              });
+            }
+          }
+          pickerLocations = all;
+        }
+      }
+    } catch {
+      pickerLoadError = "Couldn't reach Google. Try again.";
+    }
+  }
+
   return (
     <section className="flex flex-col gap-8">
       <div>
@@ -123,6 +170,14 @@ export default async function VenueSettingsPage({
         connection={googleConnection}
         flash={sp.google ?? null}
       />
+
+      {googleConnection && !googleConnection.externalAccountId ? (
+        <GoogleLocationPicker
+          venueId={venue.id}
+          locations={pickerLocations}
+          loadError={pickerLoadError}
+        />
+      ) : null}
     </section>
   );
 }

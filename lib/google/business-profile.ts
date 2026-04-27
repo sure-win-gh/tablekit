@@ -42,6 +42,73 @@ export function starRatingToInt(s: GoogleReview["starRating"]): number {
   return STAR_TO_INT[s];
 }
 
+// --- Account + location listing (Phase 3c picker) ----------------------------
+
+export type GoogleAccount = {
+  name: string; // resource name "accounts/{accountId}"
+  accountName: string; // human-readable
+  type: string;
+};
+
+export type GoogleLocation = {
+  name: string; // resource name "locations/{locationId}" — note: relative
+  title: string; // human-readable display name
+  storefrontAddress?: { addressLines?: string[]; locality?: string };
+};
+
+export async function listAccounts(
+  accessToken: string,
+): Promise<{ ok: true; accounts: GoogleAccount[] } | { ok: false; status: number }> {
+  const res = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+  });
+  if (!res.ok) return { ok: false, status: res.status };
+  const json = (await res.json()) as { accounts?: GoogleAccount[] };
+  return { ok: true, accounts: json.accounts ?? [] };
+}
+
+export async function listLocations(input: {
+  accessToken: string;
+  accountName: string; // "accounts/{accountId}"
+}): Promise<{ ok: true; locations: GoogleLocation[] } | { ok: false; status: number }> {
+  // readMask is required by the v1 endpoint; ask for the bare minimum.
+  const url = new URL(
+    `https://mybusinessbusinessinformation.googleapis.com/v1/${input.accountName}/locations`,
+  );
+  url.searchParams.set("readMask", "name,title,storefrontAddress");
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${input.accessToken}`, Accept: "application/json" },
+  });
+  if (!res.ok) return { ok: false, status: res.status };
+  const json = (await res.json()) as { locations?: GoogleLocation[] };
+  return { ok: true, locations: json.locations ?? [] };
+}
+
+// --- Review reply (Phase 3c) -------------------------------------------------
+
+export async function replyToReview(input: {
+  accessToken: string;
+  locationName: string; // "accounts/{accountId}/locations/{locationId}"
+  reviewId: string;
+  comment: string;
+}): Promise<{ ok: true } | { ok: false; status: number }> {
+  const url = `https://mybusiness.googleapis.com/v4/${input.locationName}/reviews/${encodeURIComponent(
+    input.reviewId,
+  )}/reply`;
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${input.accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ comment: input.comment }),
+  });
+  if (!res.ok) return { ok: false, status: res.status };
+  return { ok: true };
+}
+
+// --- Existing: list reviews --------------------------------------------------
+
 export async function listReviews(input: {
   accessToken: string;
   locationName: string; // e.g. "accounts/123/locations/456"

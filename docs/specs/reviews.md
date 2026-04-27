@@ -1,6 +1,6 @@
 # Spec: Reviews & reputation management
 
-**Status:** draft (Phase 1, 2, 3a — shipped; Phase 3b — shipped: review pull, schema for external sources, cron sweep)
+**Status:** draft (Phase 1, 2, 3a, 3b, 3c — shipped: capture, dashboard, OAuth, pull, location picker, reply via API, manual sync)
 **Depends on:** `bookings.md`, `messaging.md`
 
 ## What we're building
@@ -81,9 +81,13 @@ Schema: `bookings.id` and `guests.id` are nullable on `reviews`; the `reviews_bo
 
 `lib/google/business-profile.ts` calls `mybusiness.googleapis.com/v4/{location}/reviews`. `lib/google/connection.ts` loads + decrypts the venue's tokens, refreshes via `lib/oauth/google.ts#refreshAccessToken` if within 60s of expiry, and persists the new access token. `lib/google/sync-reviews.ts` upserts on the partial-UNIQUE so re-runs are idempotent. Hooked into the existing `/api/cron/deposit-janitor` sweep — no-op when no venue has a connection or none has picked a location yet.
 
-## Phase 3c — Location picker + reply via Google API (next)
+## Phase 3c — Location picker + reply via Google API (shipped)
 
-Operator picks which Google Business Profile location each venue maps to (post-OAuth flow). Reply action detects `source='google'` and calls `PUT /v4/{location}/reviews/{reviewId}/reply` instead of enqueuing an email. The dashboard's "Reply" button is disabled today for non-internal sources.
+After OAuth connect, the settings page calls `mybusinessaccountmanagement.googleapis.com/v1/accounts` and (per account) `mybusinessbusinessinformation.googleapis.com/v1/{accountName}/locations` to render a picker. The operator picks one and `pickGoogleLocation` persists it as `external_account_id` (validated by regex against `accounts/{id}/locations/{id}`). Until a location is picked, the cron sync is a no-op for that venue.
+
+Reply path: `respondToReview` branches on `reviews.source` — `internal` keeps the email-enqueue path; `google` calls `PUT https://mybusiness.googleapis.com/v4/{location}/reviews/{externalId}/reply` and only persists `response_cipher` after the API returns `2xx`. A failed API call surfaces an HTTP-status flash so the operator can retry without the row being marked replied.
+
+Manual "Sync now" button on the reviews page reuses `syncGoogleReviewsForVenue` and reports `fetched/upserted` counts inline. Visible only when a location is picked.
 
 ## Out of scope (next phases)
 

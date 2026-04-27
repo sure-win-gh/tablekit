@@ -8,10 +8,10 @@ import { notFound } from "next/navigation";
 
 import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
-import { guests, reviews, venues } from "@/lib/db/schema";
+import { guests, reviews, venueOauthConnections, venues } from "@/lib/db/schema";
 import { decryptPii, type Ciphertext } from "@/lib/security/crypto";
 
-import { ReviewRow } from "./forms";
+import { ReviewRow, SyncNowButton } from "./forms";
 
 export const metadata = { title: "Reviews · TableKit" };
 
@@ -40,6 +40,22 @@ export default async function ReviewsPage({
     return rows[0];
   });
   if (!venue) notFound();
+
+  // Show the "Sync now" button only when Google is connected and a
+  // location has been picked — otherwise the click would no-op.
+  const googleSyncReady = await withUser(async (db) => {
+    const rows = await db
+      .select({ externalAccountId: venueOauthConnections.externalAccountId })
+      .from(venueOauthConnections)
+      .where(
+        and(
+          eq(venueOauthConnections.venueId, venueId),
+          eq(venueOauthConnections.provider, "google"),
+        ),
+      )
+      .limit(1);
+    return Boolean(rows[0]?.externalAccountId);
+  });
 
   // Reads go through withUser so RLS scopes them; the venue check
   // above already 404s if the user doesn't have access.
@@ -131,7 +147,10 @@ export default async function ReviewsPage({
         <Stat label="Last 7 days" value={String(stats.last7d)} sub="new reviews" />
       </div>
 
-      <Filters venueId={venueId} rating={ratingFilter} replied={repliedFilter} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Filters venueId={venueId} rating={ratingFilter} replied={repliedFilter} />
+        {googleSyncReady ? <SyncNowButton venueId={venueId} /> : null}
+      </div>
 
       <ul className="flex flex-col gap-3">
         {display.length === 0 ? (

@@ -2,9 +2,40 @@
 
 import { useActionState, useState } from "react";
 
+import {
+  syncNowGoogle,
+  type SyncNowGoogleState,
+} from "../settings/google-actions";
 import { respondToReview, type RespondToReviewState } from "./actions";
 
 const initial: RespondToReviewState = { status: "idle" };
+const initialSync: SyncNowGoogleState = { status: "idle" };
+
+export function SyncNowButton({ venueId }: { venueId: string }) {
+  const [state, formAction, pending] = useActionState(syncNowGoogle, initialSync);
+  return (
+    <form action={formAction} className="flex items-center gap-2">
+      <input type="hidden" name="venue_id" value={venueId} />
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded-md border border-hairline px-3 py-1.5 text-xs text-ink hover:border-ink disabled:opacity-50"
+      >
+        {pending ? "Syncing…" : "Sync now"}
+      </button>
+      {state.status === "saved" ? (
+        <span className="text-xs text-ash" role="status">
+          {state.upserted} review{state.upserted === 1 ? "" : "s"} synced ({state.fetched} seen)
+        </span>
+      ) : null}
+      {state.status === "error" ? (
+        <span className="text-xs text-red-600" role="alert">
+          {state.message}
+        </span>
+      ) : null}
+    </form>
+  );
+}
 
 type Review = {
   id: string;
@@ -22,9 +53,10 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(respondToReview, initial);
   const responded = review.respondedAt !== null || state.status === "saved";
-  // Reply via TableKit email is internal-only. Replying to a Google
-  // review needs the Business Profile API call — Phase 3c.
-  const canReply = review.source === "internal";
+  // Internal replies email the guest; Google replies post via the
+  // Business Profile API. Both flow through the same action with the
+  // server picking the channel by source.
+  const canReply = review.source === "internal" || review.source === "google";
 
   return (
     <li className="flex flex-col gap-3 rounded-card border border-hairline bg-white p-4">
@@ -81,7 +113,11 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
               name="reply"
               rows={3}
               maxLength={800}
-              placeholder="Reply directly to the guest by email — they'll see this in their inbox."
+              placeholder={
+                review.source === "google"
+                  ? "Your reply will post publicly under this review on Google."
+                  : "Reply directly to the guest by email — they'll see this in their inbox."
+              }
               className="rounded-md border border-hairline px-3 py-2 text-sm outline-none focus:border-neutral-900"
               required
             />
