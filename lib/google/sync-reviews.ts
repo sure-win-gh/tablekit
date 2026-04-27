@@ -12,6 +12,7 @@ import "server-only";
 import { and, eq, isNotNull } from "drizzle-orm";
 
 import { reviews, venueOauthConnections, venues } from "@/lib/db/schema";
+import { sendEscalationAlertIfNeeded } from "@/lib/reviews/escalation";
 import { adminDb } from "@/lib/server/admin/db";
 import { encryptPii } from "@/lib/security/crypto";
 
@@ -158,7 +159,7 @@ async function upsertReviews(
     // conflict — keeping the desc-order stable when a guest edits an
     // old review. updated_at on the row is the source of truth for
     // "we last saw this version".
-    await db
+    const [upserted] = await db
       .insert(reviews)
       .values({
         organisationId, // overwritten by enforce trigger using venue's org
@@ -181,7 +182,13 @@ async function upsertReviews(
           reviewerDisplayName: r.reviewer.displayName,
           externalUrl,
         },
-      });
+      })
+      .returning({ id: reviews.id });
+    // Fire escalation alert for low ratings. Idempotent on
+    // escalation_alert_at, so re-running on the same row is safe.
+    if (upserted) {
+      await sendEscalationAlertIfNeeded(upserted.id);
+    }
     count++;
   }
   return count;

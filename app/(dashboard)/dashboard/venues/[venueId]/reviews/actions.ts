@@ -173,3 +173,118 @@ async function rollbackClaim(reviewRowId: string): Promise<void> {
     .set({ responseCipher: null, respondedAt: null, respondedByUserId: null })
     .where(eq(reviews.id, reviewRowId));
 }
+
+// --- sendRecoveryOffer (Phase 6) --------------------------------------------
+// Operator-triggered "we'd like to make it right" outbound to the
+// guest. Internal-source only — Google reviewers don't have a guest
+// row in our DB, so there's nothing to email. Same conditional-claim
+// pattern as respondToReview to defend against double-submit.
+
+const RecoverySchema = z.object({
+  reviewId: z.uuid(),
+  venueId: z.uuid(),
+  message: z.string().trim().min(1, "Write a message.").max(800),
+});
+
+export type SendRecoveryOfferState =
+  | { status: "idle" }
+  | { status: "error"; message: string }
+  | { status: "saved" };
+
+export async function sendRecoveryOffer(
+  _prev: SendRecoveryOfferState,
+  formData: FormData,
+): Promise<SendRecoveryOfferState> {
+  const parsed = RecoverySchema.safeParse({
+    reviewId: formData.get("review_id"),
+    venueId: formData.get("venue_id"),
+    message: formData.get("message"),
+  });
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    return { status: "error", message: first?.message ?? "Invalid input." };
+  }
+
+  const { orgId, userId } = await requireRole("manager");
+  const { reviewId, venueId, message } = parsed.data;
+
+  if (!(await assertVenueVisible(venueId))) {
+    return { status: "error", message: "Review not found." };
+  }
+
+  const db = adminDb();
+  const [row] = await db
+    .select({
+      id: reviews.id,
+      bookingId: reviews.bookingId,
+      source: reviews.source,
+      recoveryOfferAt: reviews.recoveryOfferAt,
+    })
+    .from(reviews)
+    .where(
+      and(
+        eq(reviews.id, reviewId),
+        eq(reviews.organisationId, orgId),
+        eq(reviews.venueId, venueId),
+      ),
+    )
+    .limit(1);
+  if (!row) return { status: "error", message: "Review not found." };
+  if (row.source !== "internal" || !row.bookingId) {
+    return {
+      status: "error",
+      message: "Recovery offers are only available for reviews collected via TableKit.",
+    };
+  }
+  if (row.recoveryOfferAt) {
+    return { status: "error", message: "Recovery offer already sent." };
+  }
+
+  const recoveryMessageCipher = await encryptPii(orgId, message);
+
+  // Conditional claim — only one concurrent submission wins. Both
+  // columns set together to satisfy reviews_recovery_consistency_check.
+  const claimed = await db
+    .update(reviews)
+    .set({
+      recoveryMessageCipher,
+      recoveryOfferAt: sql`now()`,
+      recoveryOfferedByUserId: userId,
+    })
+    .where(
+      and(
+        eq(reviews.id, row.id),
+        eq(reviews.organisationId, orgId),
+        sql`${reviews.recoveryOfferAt} is null`,
+      ),
+    )
+    .returning({ id: reviews.id });
+  if (claimed.length === 0) {
+    return { status: "error", message: "Recovery offer already sent." };
+  }
+
+  await enqueueMessage({
+    organisationId: orgId,
+    bookingId: row.bookingId,
+    template: "review.recovery_offer",
+    channel: "email",
+  });
+
+  await audit.log({
+    organisationId: orgId,
+    actorUserId: userId,
+    action: "review.recovery_sent",
+    targetType: "review",
+    targetId: row.id,
+    metadata: { venueId },
+  });
+
+  void processNextBatch({ limit: 5 }).catch((err) => {
+    console.error("[reviews/actions.ts] inline worker drive failed:", {
+      message: truncateError(err),
+    });
+  });
+
+  revalidatePath(`/dashboard/venues/${venueId}/reviews`);
+  return { status: "saved" };
+}

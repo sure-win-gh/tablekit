@@ -168,6 +168,25 @@ export async function loadMessageContext(input: LoadContextInput): Promise<LoadC
     }
   }
 
+  if (input.template === "review.recovery_offer") {
+    const [rev] = await db
+      .select({ recoveryMessageCipher: reviews.recoveryMessageCipher })
+      .from(reviews)
+      .where(eq(reviews.bookingId, input.bookingId))
+      .limit(1);
+    if (!rev?.recoveryMessageCipher) {
+      return { ok: false, reason: "review-response-missing" };
+    }
+    try {
+      ctx.recoveryMessageText = await decryptPii(
+        row.organisationId,
+        rev.recoveryMessageCipher as Ciphertext,
+      );
+    } catch {
+      return { ok: false, reason: "decrypt-failed" };
+    }
+  }
+
   return { ok: true, ctx, recipient };
 }
 

@@ -540,6 +540,18 @@ export const reviews = pgTable(
     respondedByUserId: uuid("responded_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    // Phase 6 — escalation + recovery. `escalationAlertAt` is the
+    // idempotency stamp for the operator-side alert email; once set
+    // we don't re-alert on the same row. `recovery*` columns capture
+    // the operator-triggered "we'd like to make it right" outbound
+    // to the guest. recovery_message_cipher is encrypted PII (it can
+    // quote the guest's comment back).
+    escalationAlertAt: timestamp("escalation_alert_at", { withTimezone: true }),
+    recoveryOfferAt: timestamp("recovery_offer_at", { withTimezone: true }),
+    recoveryOfferedByUserId: uuid("recovery_offered_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    recoveryMessageCipher: text("recovery_message_cipher"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -60,6 +60,21 @@ export default async function VenueSettingsPage({
       typeof settings["googlePlaceId"] === "string" ? (settings["googlePlaceId"] as string) : "",
   };
 
+  const escalationThreshold: 1 | 2 | 3 =
+    settings["escalationThreshold"] === 1
+      ? 1
+      : settings["escalationThreshold"] === 3
+        ? 3
+        : 2;
+  const escalationSettings = {
+    enabled: settings["escalationEnabled"] !== false,
+    threshold: escalationThreshold,
+    email:
+      typeof settings["escalationEmail"] === "string"
+        ? (settings["escalationEmail"] as string)
+        : "",
+  };
+
   // Stripe Connect state is org-scoped — one connected account per
   // organisation (D1 in the phase plan). The billing section is
   // per-venue in the sense that it lives under a venue URL, but every
@@ -146,6 +161,9 @@ export default async function VenueSettingsPage({
           reviewRequestEnabled={reviewSettings.enabled}
           reviewRequestDelayHours={reviewSettings.delayHours}
           googlePlaceId={reviewSettings.googlePlaceId}
+          escalationEnabled={escalationSettings.enabled}
+          escalationThreshold={escalationSettings.threshold}
+          escalationEmail={escalationSettings.email}
         />
       </div>
 

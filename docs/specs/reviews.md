@@ -1,6 +1,6 @@
 # Spec: Reviews & reputation management
 
-**Status:** draft (Phase 1, 2, 3a, 3b, 3c — shipped: capture, dashboard, OAuth, pull, location picker, reply via API, manual sync)
+**Status:** draft (Phase 1, 2, 3a, 3b, 3c, 6 — shipped; Phase 4-5, 7 deferred)
 **Depends on:** `bookings.md`, `messaging.md`
 
 ## What we're building
@@ -80,6 +80,14 @@ New `venue_oauth_connections` table (per-venue, extensible to TripAdvisor / Face
 Schema: `bookings.id` and `guests.id` are nullable on `reviews`; the `reviews_booking_id_unique` total UNIQUE is replaced with a partial `(booking_id) WHERE booking_id IS NOT NULL`, and a new partial `(venue_id, source, external_id) WHERE external_id IS NOT NULL` dedupes imported rows. Three new columns: `external_id`, `external_url`, `reviewer_display_name`. A `reviews_source_shape_check` CHECK enforces internal-vs-external column population at the DB. The denorm trigger now branches: copy from booking for internal, validate venue→org for external.
 
 `lib/google/business-profile.ts` calls `mybusiness.googleapis.com/v4/{location}/reviews`. `lib/google/connection.ts` loads + decrypts the venue's tokens, refreshes via `lib/oauth/google.ts#refreshAccessToken` if within 60s of expiry, and persists the new access token. `lib/google/sync-reviews.ts` upserts on the partial-UNIQUE so re-runs are idempotent. Hooked into the existing `/api/cron/deposit-janitor` sweep — no-op when no venue has a connection or none has picked a location yet.
+
+## Phase 6 — Escalation alerts + recovery offers (shipped)
+
+When a review with `rating <= venue.settings.escalationThreshold` lands (internal submit or external sync), `lib/reviews/escalation.ts` claims the alert atomically (conditional UPDATE on `escalation_alert_at`), decrypts the comment to a 280-char snippet, and sends an operator alert via `lib/email/send.ts` directly. Recipient comes from `venue.settings.escalationEmail` with a fallback to the org owner's email. Audit `review.escalated`.
+
+Operator dashboard gets a "Send recovery offer" button on internal reviews ≤3★. The action mirrors `respondToReview`'s conditional-claim pattern against `recovery_offer_at`, encrypts the message into `recovery_message_cipher`, and enqueues the new `review.recovery_offer` template via the existing messages outbox. A `reviews_recovery_consistency_check` CHECK keeps cipher and timestamp in lockstep. Audit `review.recovery_sent`.
+
+Settings page gains a "Negative review alerts" fieldset: enabled toggle, threshold (1/2/3), optional alert email.
 
 ## Phase 3c — Location picker + reply via Google API (shipped)
 

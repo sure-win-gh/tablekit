@@ -17,6 +17,9 @@ type Props = {
   reviewRequestEnabled: boolean;
   reviewRequestDelayHours: 24 | 48 | 72;
   googlePlaceId: string;
+  escalationEnabled: boolean;
+  escalationThreshold: 1 | 2 | 3;
+  escalationEmail: string;
 };
 
 export function VenueSettingsForm({
@@ -27,6 +30,9 @@ export function VenueSettingsForm({
   reviewRequestEnabled,
   reviewRequestDelayHours,
   googlePlaceId,
+  escalationEnabled,
+  escalationThreshold,
+  escalationEmail,
 }: Props) {
   const [state, formAction, pending] = useActionState(updateVenue, initial);
   const fieldErrors = state.status === "error" ? state.fieldErrors : undefined;
@@ -105,6 +111,42 @@ export function VenueSettingsForm({
             developers.google.com/maps/.../place-id
           </a>
           . Leave blank to skip the Google link.
+        </p>
+      </fieldset>
+
+      <fieldset id="escalation" className="flex flex-col gap-3 border-t border-hairline pt-4">
+        <legend className="text-sm font-semibold text-ink">Negative review alerts</legend>
+        <p className="text-xs text-ash">
+          Email a manager when a low-star review lands so you can reply or send a recovery offer
+          quickly.
+        </p>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="escalation_enabled"
+            defaultChecked={escalationEnabled}
+            className="h-4 w-4 rounded border-hairline"
+          />
+          <span>Send an alert when a review at or below the threshold lands</span>
+        </label>
+        <div className="grid grid-cols-2 gap-4">
+          <Select
+            label="Threshold"
+            name="escalation_threshold"
+            defaultValue={String(escalationThreshold)}
+            options={["1", "2", "3"]}
+          />
+          <Field
+            label="Alert email"
+            name="escalation_email"
+            defaultValue={escalationEmail}
+            error={fieldErrors?.["escalationEmail"]?.[0]}
+            optional
+          />
+        </div>
+        <p className="text-xs text-ash">
+          Threshold is the highest rating that triggers an alert (e.g. 2 alerts on 1- and 2-star).
+          Leave the email blank to fall back to the org owner&apos;s address.
         </p>
       </fieldset>
 

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { bookings, reviews, venues } from "@/lib/db/schema";
+import { sendEscalationAlertIfNeeded } from "@/lib/reviews/escalation";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 import { encryptPii } from "@/lib/security/crypto";
@@ -84,15 +85,18 @@ export async function submitReview(
     const commentCipher =
       trimmed.length > 0 ? await encryptPii(row.organisationId, trimmed) : null;
 
-    await db.insert(reviews).values({
-      organisationId: row.organisationId, // overwritten by enforce trigger
-      venueId: row.venueId, // overwritten by enforce trigger
-      bookingId: row.bookingId,
-      guestId: row.guestId,
-      rating: parsed.data.rating,
-      commentCipher,
-      source: "internal",
-    });
+    const [inserted] = await db
+      .insert(reviews)
+      .values({
+        organisationId: row.organisationId, // overwritten by enforce trigger
+        venueId: row.venueId, // overwritten by enforce trigger
+        bookingId: row.bookingId,
+        guestId: row.guestId,
+        rating: parsed.data.rating,
+        commentCipher,
+        source: "internal",
+      })
+      .returning({ id: reviews.id });
 
     await audit.log({
       organisationId: row.organisationId,
@@ -102,6 +106,13 @@ export async function submitReview(
       targetId: row.bookingId,
       metadata: { rating: parsed.data.rating, venueId: row.venueId },
     });
+
+    // Fire-and-forget — escalation must not block the guest's
+    // submission flow. The helper swallows errors and stamps
+    // escalation_alert_at idempotently.
+    if (inserted) {
+      void sendEscalationAlertIfNeeded(inserted.id);
+    }
   }
   // No else-branch: subsequent submits are silently ignored. The
   // guest still sees the thank-you screen so a double-click doesn't

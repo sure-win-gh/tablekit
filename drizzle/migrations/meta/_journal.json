@@ -127,6 +127,13 @@
       "when": 1777296950544,
       "tag": "0017_pretty_stone_men",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1777319561263,
+      "tag": "0018_hot_makkari",
+      "breakpoints": true
     }
   ]
 }

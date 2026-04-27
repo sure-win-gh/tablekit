@@ -32,6 +32,7 @@ describe("templateChannels", () => {
     expect(templateChannels("booking.thank_you")).toEqual(["email"]);
     expect(templateChannels("booking.waitlist_ready")).toEqual(["sms"]);
     expect(templateChannels("booking.review_request")).toEqual(["email"]);
+    expect(templateChannels("review.recovery_offer")).toEqual(["email"]);
   });
 });
 
@@ -64,6 +65,17 @@ describe("renderForChannel", () => {
   it("renders booking.thank_you", async () => {
     const r = await renderForChannel("booking.thank_you", "email", ctx);
     expect(r.kind).toBe("email");
+  });
+
+  it("renders review.recovery_offer with the operator's message", async () => {
+    const r = await renderForChannel("review.recovery_offer", "email", {
+      ...ctx,
+      recoveryMessageText: "Sorry your starter was cold. Dinner's on us next time.",
+    });
+    expect(r.kind).toBe("email");
+    if (r.kind !== "email") return;
+    expect(r.rendered.subject).toContain("Tablekit Café");
+    expect(r.rendered.html).toContain("Dinner&#x27;s on us next time");
   });
 
   it("renders booking.review_request with both public and private CTAs", async () => {

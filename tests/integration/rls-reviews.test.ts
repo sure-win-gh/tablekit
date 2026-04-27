@@ -345,6 +345,15 @@ describe("reviews — value constraints", () => {
     await db.delete(schema.reviews).where(eq(schema.reviews.id, row!.id));
   });
 
+  it("rejects a row where recovery_message_cipher is set but recovery_offer_at is null", async () => {
+    await expect(
+      db
+        .update(schema.reviews)
+        .set({ recoveryMessageCipher: "v1:x:x:x" })
+        .where(eq(schema.reviews.id, ctx.reviewAId)),
+    ).rejects.toThrow();
+  });
+
   it("dedupes external reviews by (venue_id, source, external_id)", async () => {
     const externalId = `gbp_${run}_c`;
     await db.insert(schema.reviews).values({

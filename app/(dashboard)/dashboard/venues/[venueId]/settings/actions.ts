@@ -30,6 +30,22 @@ const Schema = z.object({
     .max(200)
     .regex(/^[A-Za-z0-9_-]*$/, "Place ID should look like ChIJ… (letters, digits, _ or -)")
     .optional(),
+  // Phase 6 — escalation alerts
+  escalationEnabled: z.coerce.boolean().optional(),
+  escalationThreshold: z.coerce
+    .number()
+    .int()
+    .refine((v) => [1, 2, 3].includes(v), { message: "Pick 1, 2 or 3" })
+    .optional(),
+  // Empty string = clear (fall back to org-owner email).
+  escalationEmail: z
+    .string()
+    .trim()
+    .max(254)
+    .refine((v) => v === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), {
+      message: "Enter a valid email or leave blank",
+    })
+    .optional(),
 });
 
 export type UpdateVenueState =
@@ -50,6 +66,9 @@ export async function updateVenue(
     reviewRequestEnabled: formData.get("review_request_enabled") === "on",
     reviewRequestDelayHours: formData.get("review_request_delay_hours"),
     googlePlaceId: formData.get("google_place_id"),
+    escalationEnabled: formData.get("escalation_enabled") === "on",
+    escalationThreshold: formData.get("escalation_threshold"),
+    escalationEmail: formData.get("escalation_email"),
   });
 
   if (!parsed.success) {
@@ -61,9 +80,18 @@ export async function updateVenue(
   }
 
   const { orgId, userId } = await requireRole("manager");
-  const { venueId, name, timezone, locale, reviewRequestEnabled, reviewRequestDelayHours } =
-    parsed.data;
+  const {
+    venueId,
+    name,
+    timezone,
+    locale,
+    reviewRequestEnabled,
+    reviewRequestDelayHours,
+    escalationEnabled,
+    escalationThreshold,
+  } = parsed.data;
   const trimmedPlaceId = parsed.data.googlePlaceId?.trim() ?? "";
+  const trimmedEscalationEmail = parsed.data.escalationEmail?.trim() ?? "";
 
   // Read existing settings so we merge instead of clobbering keys we
   // don't manage here (other phases may add their own JSONB entries).
@@ -84,6 +112,9 @@ export async function updateVenue(
     reviewRequestEnabled: reviewRequestEnabled ?? true,
     reviewRequestDelayHours: reviewRequestDelayHours ?? 24,
     googlePlaceId: trimmedPlaceId.length > 0 ? trimmedPlaceId : null,
+    escalationEnabled: escalationEnabled ?? true,
+    escalationThreshold: escalationThreshold ?? 2,
+    escalationEmail: trimmedEscalationEmail.length > 0 ? trimmedEscalationEmail : null,
   };
 
   const [updated] = await db

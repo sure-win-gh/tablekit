@@ -22,6 +22,7 @@ import { renderBookingReminder24h } from "@/lib/email/templates/booking-reminder
 import { renderBookingReviewRequest } from "@/lib/email/templates/booking-review-request";
 import { renderBookingThankYou } from "@/lib/email/templates/booking-thank-you";
 import { renderReviewOperatorReply } from "@/lib/email/templates/review-operator-reply";
+import { renderReviewRecoveryOffer } from "@/lib/email/templates/review-recovery-offer";
 import { renderBookingReminder2h } from "@/lib/sms/templates/booking-reminder-2h";
 import { renderBookingWaitlistReady } from "@/lib/sms/templates/booking-waitlist-ready";
 
@@ -35,7 +36,8 @@ export type MessageTemplate =
   | "booking.thank_you"
   | "booking.waitlist_ready"
   | "booking.review_request"
-  | "review.operator_reply";
+  | "review.operator_reply"
+  | "review.recovery_offer";
 
 type EmailRenderer = (ctx: MessageBookingContext) => Promise<RenderedEmail>;
 type SmsRenderer = (ctx: MessageBookingContext) => RenderedSms;
@@ -54,6 +56,7 @@ const TEMPLATE_REGISTRY: Record<MessageTemplate, RegistryEntry> = {
   "booking.waitlist_ready": { sms: renderBookingWaitlistReady },
   "booking.review_request": { email: renderBookingReviewRequest },
   "review.operator_reply": { email: renderReviewOperatorReply },
+  "review.recovery_offer": { email: renderReviewRecoveryOffer },
 };
 
 // Channels a given template currently supports. Inline triggers

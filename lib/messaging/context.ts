@@ -34,6 +34,10 @@ export type MessageBookingContext = {
   // `review.operator_reply` template; null/undefined elsewhere so
   // load-context doesn't pay the per-message decrypt for no reason.
   operatorReplyText?: string | null;
+  // Decrypted recovery-offer message — same shape as
+  // operatorReplyText but lives in reviews.recovery_message_cipher.
+  // Populated only for the `review.recovery_offer` template.
+  recoveryMessageText?: string | null;
 };
 
 export type RenderedEmail = {

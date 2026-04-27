@@ -76,6 +76,7 @@ export default async function ReviewsPage({
         commentCipher: reviews.commentCipher,
         responseCipher: reviews.responseCipher,
         respondedAt: reviews.respondedAt,
+        recoveryOfferAt: reviews.recoveryOfferAt,
         submittedAt: reviews.submittedAt,
         source: reviews.source,
         externalUrl: reviews.externalUrl,
@@ -118,6 +119,7 @@ export default async function ReviewsPage({
       source: r.source,
       submittedAt: r.submittedAt,
       respondedAt: r.respondedAt,
+      recoveryOfferAt: r.recoveryOfferAt,
       // Imported reviews carry the public reviewer name; internal rows
       // use the guest's first name from the join.
       guestFirstName: r.guestFirstName ?? r.reviewerDisplayName ?? "Anonymous",
