@@ -32,6 +32,7 @@ export default async function VenueSettingsPage({
         venueType: venues.venueType,
         timezone: venues.timezone,
         locale: venues.locale,
+        settings: venues.settings,
       })
       .from(venues)
       .where(eq(venues.id, venueId))
@@ -39,6 +40,20 @@ export default async function VenueSettingsPage({
     return rows[0];
   });
   if (!venue) notFound();
+
+  const settings = (venue.settings ?? {}) as Record<string, unknown>;
+  const delayHours: 24 | 48 | 72 =
+    settings["reviewRequestDelayHours"] === 48
+      ? 48
+      : settings["reviewRequestDelayHours"] === 72
+        ? 72
+        : 24;
+  const reviewSettings = {
+    enabled: settings["reviewRequestEnabled"] !== false,
+    delayHours,
+    googlePlaceId:
+      typeof settings["googlePlaceId"] === "string" ? (settings["googlePlaceId"] as string) : "",
+  };
 
   // Stripe Connect state is org-scoped — one connected account per
   // organisation (D1 in the phase plan). The billing section is
@@ -59,6 +74,9 @@ export default async function VenueSettingsPage({
           name={venue.name}
           timezone={venue.timezone}
           locale={venue.locale}
+          reviewRequestEnabled={reviewSettings.enabled}
+          reviewRequestDelayHours={reviewSettings.delayHours}
+          googlePlaceId={reviewSettings.googlePlaceId}
         />
       </div>
 

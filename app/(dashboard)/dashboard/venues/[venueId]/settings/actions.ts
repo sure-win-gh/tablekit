@@ -16,6 +16,20 @@ const Schema = z.object({
   name: z.string().min(1, "Required").max(120),
   timezone: z.string().min(1).max(60),
   locale: z.string().min(1).max(20),
+  // Reviews — Phase 1. All optional so legacy form posts still parse.
+  reviewRequestEnabled: z.coerce.boolean().optional(),
+  reviewRequestDelayHours: z.coerce.number().int().refine((v) => [24, 48, 72].includes(v), {
+    message: "Pick 24, 48 or 72",
+  }).optional(),
+  // Place IDs are URL-safe base64-ish: letters, digits, `_`, `-`. Reject
+  // pasted URLs / typos early so we don't ship a broken Google deep
+  // link to guests.
+  googlePlaceId: z
+    .string()
+    .trim()
+    .max(200)
+    .regex(/^[A-Za-z0-9_-]*$/, "Place ID should look like ChIJ… (letters, digits, _ or -)")
+    .optional(),
 });
 
 export type UpdateVenueState =
@@ -32,6 +46,10 @@ export async function updateVenue(
     name: formData.get("name"),
     timezone: formData.get("timezone"),
     locale: formData.get("locale"),
+    // Checkboxes only POST when checked, so absence == disabled.
+    reviewRequestEnabled: formData.get("review_request_enabled") === "on",
+    reviewRequestDelayHours: formData.get("review_request_delay_hours"),
+    googlePlaceId: formData.get("google_place_id"),
   });
 
   if (!parsed.success) {
@@ -43,14 +61,34 @@ export async function updateVenue(
   }
 
   const { orgId, userId } = await requireRole("manager");
-  const { venueId, name, timezone, locale } = parsed.data;
+  const { venueId, name, timezone, locale, reviewRequestEnabled, reviewRequestDelayHours } =
+    parsed.data;
+  const trimmedPlaceId = parsed.data.googlePlaceId?.trim() ?? "";
 
+  // Read existing settings so we merge instead of clobbering keys we
+  // don't manage here (other phases may add their own JSONB entries).
   // The `and(org_id = orgId)` in the WHERE is what stops a managed
   // user from poking another org's venue with a crafted venueId —
   // adminDb() bypasses RLS, so this check carries the weight.
-  const [updated] = await adminDb()
+  const db = adminDb();
+  const [existing] = await db
+    .select({ settings: venues.settings })
+    .from(venues)
+    .where(and(eq(venues.id, venueId), eq(venues.organisationId, orgId)))
+    .limit(1);
+  if (!existing) {
+    return { status: "error", message: "Venue not found or not in your organisation." };
+  }
+  const mergedSettings = {
+    ...((existing.settings as Record<string, unknown>) ?? {}),
+    reviewRequestEnabled: reviewRequestEnabled ?? true,
+    reviewRequestDelayHours: reviewRequestDelayHours ?? 24,
+    googlePlaceId: trimmedPlaceId.length > 0 ? trimmedPlaceId : null,
+  };
+
+  const [updated] = await db
     .update(venues)
-    .set({ name, timezone, locale })
+    .set({ name, timezone, locale, settings: mergedSettings })
     .where(and(eq(venues.id, venueId), eq(venues.organisationId, orgId)))
     .returning({ id: venues.id });
 
@@ -67,7 +105,14 @@ export async function updateVenue(
     action: "venue.updated",
     targetType: "venue",
     targetId: updated.id,
-    metadata: { name, timezone, locale },
+    metadata: {
+      name,
+      timezone,
+      locale,
+      reviewRequestEnabled: mergedSettings.reviewRequestEnabled,
+      reviewRequestDelayHours: mergedSettings.reviewRequestDelayHours,
+      googlePlaceIdSet: mergedSettings.googlePlaceId !== null,
+    },
   });
 
   revalidatePath(`/dashboard/venues/${updated.id}`, "layout");

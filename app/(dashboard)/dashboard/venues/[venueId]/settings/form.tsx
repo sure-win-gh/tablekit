@@ -14,9 +14,20 @@ type Props = {
   name: string;
   timezone: string;
   locale: string;
+  reviewRequestEnabled: boolean;
+  reviewRequestDelayHours: 24 | 48 | 72;
+  googlePlaceId: string;
 };
 
-export function VenueSettingsForm({ venueId, name, timezone, locale }: Props) {
+export function VenueSettingsForm({
+  venueId,
+  name,
+  timezone,
+  locale,
+  reviewRequestEnabled,
+  reviewRequestDelayHours,
+  googlePlaceId,
+}: Props) {
   const [state, formAction, pending] = useActionState(updateVenue, initial);
   const fieldErrors = state.status === "error" ? state.fieldErrors : undefined;
 
@@ -52,6 +63,51 @@ export function VenueSettingsForm({ venueId, name, timezone, locale }: Props) {
         />
       </div>
 
+      <fieldset className="flex flex-col gap-3 border-t border-hairline pt-4">
+        <legend className="text-sm font-semibold text-ink">Review requests</legend>
+        <p className="text-xs text-ash">
+          Sent automatically after a booking finishes. You can adjust the delay or turn it off.
+          Guests are always offered both a Google link and a private-feedback option, regardless
+          of rating.
+        </p>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="review_request_enabled"
+            defaultChecked={reviewRequestEnabled}
+            className="h-4 w-4 rounded border-hairline"
+          />
+          <span>Send review requests after dining</span>
+        </label>
+        <div className="grid grid-cols-2 gap-4">
+          <Select
+            label="Send delay"
+            name="review_request_delay_hours"
+            defaultValue={String(reviewRequestDelayHours)}
+            options={["24", "48", "72"]}
+          />
+          <Field
+            label="Google Place ID"
+            name="google_place_id"
+            defaultValue={googlePlaceId}
+            error={fieldErrors?.["googlePlaceId"]?.[0]}
+            optional
+          />
+        </div>
+        <p className="text-xs text-ash">
+          Find your Place ID at{" "}
+          <a
+            href="https://developers.google.com/maps/documentation/places/web-service/place-id"
+            className="underline"
+            target="_blank"
+            rel="noopener"
+          >
+            developers.google.com/maps/.../place-id
+          </a>
+          . Leave blank to skip the Google link.
+        </p>
+      </fieldset>
+
       {state.status === "error" && !fieldErrors ? (
         <p role="alert" className="text-sm text-red-600">
           {state.message}
@@ -81,11 +137,13 @@ function Field({
   name,
   defaultValue,
   error,
+  optional,
 }: {
   label: string;
   name: string;
   defaultValue: string;
   error?: string | undefined;
+  optional?: boolean;
 }) {
   return (
     <label className="flex flex-col gap-1 text-sm">
@@ -94,7 +152,7 @@ function Field({
         name={name}
         type="text"
         defaultValue={defaultValue}
-        required
+        required={!optional}
         aria-invalid={Boolean(error)}
         className="rounded-md border border-hairline px-3 py-2 text-sm outline-none focus:border-neutral-900"
       />
