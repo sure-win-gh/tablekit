@@ -62,7 +62,7 @@ export default async function DashboardPage() {
 
   // Zero-venue state.
   return (
-    <main className="flex flex-1 flex-col px-8 py-6">
+    <main className="flex flex-1 flex-col py-6">
       <header className="border-b border-hairline pb-4">
         <h1 className="text-2xl font-bold tracking-tight text-ink">{data.org.name}</h1>
         <p className="mt-0.5 text-sm text-ash">
