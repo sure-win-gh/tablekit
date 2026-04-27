@@ -450,6 +450,56 @@ export const reviewSource = pgEnum("review_source", [
   "facebook",
 ]);
 
+// =============================================================================
+// Venue OAuth connections (Phase 3a — Google Business Profile, extensible)
+// =============================================================================
+//
+// One row per (venue, provider). Stores the OAuth access + refresh
+// tokens (envelope-encrypted) and the provider-side account/location
+// id we'll later call APIs against. organisation_id denormalised by
+// trigger; per-venue RLS via user_visible_venue_ids().
+//
+// Forward-looking: TripAdvisor + Facebook (Phase 4) reuse this table
+// by adding their entries to the oauth_provider enum.
+
+export const oauthProvider = pgEnum("oauth_provider", [
+  "google",
+  "tripadvisor",
+  "facebook",
+]);
+
+export const venueOauthConnections = pgTable(
+  "venue_oauth_connections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    provider: oauthProvider("provider").notNull(),
+    // Provider-side identifier we hold the connection against —
+    // Google Business Profile location id, etc. Not secret.
+    externalAccountId: text("external_account_id"),
+    // OAuth tokens encrypted via crypto.encryptPii. Treat as
+    // credentials — never log, never surface in error messages.
+    accessTokenCipher: text("access_token_cipher").notNull(),
+    refreshTokenCipher: text("refresh_token_cipher"),
+    // Granted scopes, stored as a comma-joined string so a Drizzle
+    // text column suffices. We don't query inside it.
+    scopes: text("scopes").notNull().default(""),
+    tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("venue_oauth_connections_venue_provider_unique").on(t.venueId, t.provider),
+    index("venue_oauth_connections_org_idx").on(t.organisationId),
+  ],
+);
+
 export const reviews = pgTable(
   "reviews",
   {

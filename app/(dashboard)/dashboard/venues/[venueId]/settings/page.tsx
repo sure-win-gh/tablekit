@@ -1,12 +1,14 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 
 import { requireRole } from "@/lib/auth/require-role";
 import { getAccount } from "@/lib/stripe/connect";
 import { withUser } from "@/lib/db/client";
-import { venues } from "@/lib/db/schema";
+import { venueOauthConnections, venues } from "@/lib/db/schema";
+import { isConfigured as googleOauthConfigured } from "@/lib/oauth/google";
 
 import { BillingSection } from "./billing";
+import { GoogleConnectionSection } from "./google-connection";
 import { VenueSettingsForm } from "./form";
 
 export const metadata = {
@@ -18,7 +20,7 @@ export default async function VenueSettingsPage({
   searchParams,
 }: {
   params: Promise<{ venueId: string }>;
-  searchParams: Promise<{ stripe?: string }>;
+  searchParams: Promise<{ stripe?: string; google?: string }>;
 }) {
   const { orgId } = await requireRole("manager");
   const { venueId } = await params;
@@ -61,6 +63,26 @@ export default async function VenueSettingsPage({
   // venue in an org sees the same state.
   const stripeAccount = await getAccount(orgId);
 
+  // Google Business Profile connection state — RLS-scoped read.
+  const googleConnection = await withUser(async (db) => {
+    const rows = await db
+      .select({
+        externalAccountId: venueOauthConnections.externalAccountId,
+        scopes: venueOauthConnections.scopes,
+        tokenExpiresAt: venueOauthConnections.tokenExpiresAt,
+        lastSyncedAt: venueOauthConnections.lastSyncedAt,
+      })
+      .from(venueOauthConnections)
+      .where(
+        and(
+          eq(venueOauthConnections.venueId, venueId),
+          eq(venueOauthConnections.provider, "google"),
+        ),
+      )
+      .limit(1);
+    return rows[0] ?? null;
+  });
+
   return (
     <section className="flex flex-col gap-8">
       <div>
@@ -93,6 +115,13 @@ export default async function VenueSettingsPage({
             : null
         }
         flash={sp.stripe ?? null}
+      />
+
+      <GoogleConnectionSection
+        venueId={venue.id}
+        configured={googleOauthConfigured()}
+        connection={googleConnection}
+        flash={sp.google ?? null}
       />
     </section>
   );

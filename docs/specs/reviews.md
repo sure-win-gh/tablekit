@@ -1,6 +1,6 @@
 # Spec: Reviews & reputation management
 
-**Status:** draft (Phase 1 — shipped: capture + Google redirect; Phase 2 — operator dashboard + reply)
+**Status:** draft (Phase 1 — shipped: capture + Google redirect; Phase 2 — shipped: operator dashboard + reply; Phase 3a — shipped: Google OAuth scaffolding)
 **Depends on:** `bookings.md`, `messaging.md`
 
 ## What we're building
@@ -71,9 +71,17 @@ If `googlePlaceId` is unset, the post-submission screen shows only "Done" (no Go
 
 `/dashboard/venues/[venueId]/reviews` lists submitted reviews with stats header (avg rating, reply rate, last 7 days), rating + replied filters, and an inline reply form per row. The reply text is encrypted into `reviews.response_cipher` and emailed to the guest via a new `review.operator_reply` template (one-shot per review — editing lands later). Three new columns added: `response_cipher`, `responded_at`, `responded_by_user_id`. CHECK constraint enforces consistency (cipher set iff timestamp set).
 
+## Phase 3a — Google OAuth scaffolding
+
+New `venue_oauth_connections` table (per-venue, extensible to TripAdvisor / Facebook in Phase 4) storing encrypted access + refresh tokens, scopes, expiry. OAuth connect flow at `/api/oauth/google/{start,callback}`: signed-state token + HttpOnly cookie binding; token exchange via native fetch (no `googleapis` SDK). Settings page gains a Google Business Profile section showing connection status with connect / disconnect actions. Env-gated — without `GOOGLE_OAUTH_CLIENT_ID` the button shows "Coming soon" so non-prod deployments stay usable.
+
+## Phase 3b — Review pull + reply via Google API (next)
+
+Cron job pulls public Google reviews into the `reviews` table with `source='google'`. Operator reply dashboard from Phase 2 calls the Business Profile API instead of (or as well as) sending email when the review's source is Google. `bookings.id` becomes nullable on `reviews` for non-internal sources (today's UNIQUE constraint will need to be replaced with a partial UNIQUE on `(source, external_id)` for the imported rows).
+
 ## Out of scope (next phases)
 
-- Google Business Profile / TripAdvisor / Facebook ingestion.
+- TripAdvisor / Facebook ingestion (Phase 4).
 - AI sentiment + reply drafting.
 - Negative-review escalation alerts.
 - Public review showcase widget.

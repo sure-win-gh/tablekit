@@ -25,6 +25,7 @@ We are a **data processor**. The venue (organisation) is the **data controller**
 | Twilio        | SMS                    | EU (Ireland) | Yes |
 | Sentry        | Error tracking         | EU          | Yes |
 | Cloudflare    | DNS, WAF, edge cache   | Global (no PII routed) | Yes |
+| Google (Business Profile API) | Pulling and replying to public reviews | Global (review data is already public; OAuth tokens stored encrypted in TableKit) | Yes — Google's standard data-processing terms apply |
 
 Any new sub-processor requires: DPA signed, EU data residency confirmed, entry added to this table and to `/legal/sub-processors`, and 30-day notice to existing customers.
 
