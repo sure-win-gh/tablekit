@@ -141,6 +141,13 @@
       "when": 1777321755164,
       "tag": "0019_absurd_celestials",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1777326787359,
+      "tag": "0020_sturdy_gorgon",
+      "breakpoints": true
     }
   ]
 }

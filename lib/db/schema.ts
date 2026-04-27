@@ -111,8 +111,8 @@ export const memberships = pgTable(
 );
 
 // Append-only log of security-relevant events. Per gdpr.md retention
-// table: 2 years. Inserts are restricted by RLS to service_role only —
-// writes go through the audit.log() helper under lib/server/admin/.
+// table: 2 years. Inserts are restricted by RLS — writes go through
+// the audit.log() helper under lib/server/admin/.
 export const auditLog = pgTable(
   "audit_log",
   {
@@ -134,6 +134,31 @@ export const auditLog = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("audit_log_org_created_at").on(t.organisationId, t.createdAt.desc())],
+);
+
+// Platform-staff audit log. Distinct from public.audit_log (which is
+// org-scoped). Records cross-org actions taken by Tablekit staff via
+// the /admin dashboard.
+//
+// PLATFORM-ONLY — never add an organisation_id column or any column
+// that joins this row back into operator-visible data. Writes happen
+// exclusively via lib/server/admin/dashboard/audit.ts using adminDb().
+// RLS policy on this table denies authenticated and anon outright —
+// see migration 0020.
+export const platformAuditLog = pgTable(
+  "platform_audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorEmail: citext("actor_email").notNull(),
+    action: text("action").notNull(),
+    targetType: text("target_type"),
+    targetId: uuid("target_id"),
+    metadata: jsonb("metadata")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("platform_audit_log_created_at_idx").on(t.createdAt.desc())],
 );
 
 // =============================================================================
