@@ -97,7 +97,7 @@ export default async function PrivacyRequestDetailPage({
     row.dueAt.getTime() < now && (row.status === "pending" || row.status === "in_progress");
 
   return (
-    <main className="flex flex-1 flex-col p-6">
+    <main className="flex flex-1 flex-col px-8 py-6">
       <nav className="flex items-center gap-1.5 text-xs text-ash">
         <Link href="/dashboard" className="hover:text-ink">
           Dashboard
