@@ -65,7 +65,20 @@ export async function onBookingFinished(input: TriggerInput): Promise<void> {
   // and out the door. The cron sweeper picks this up.
   const at = new Date(Date.now() + 3 * 60 * 60 * 1000);
   await enqueueAllChannels(input.organisationId, input.bookingId, "booking.thank_you", at);
-  // Don't drive worker — the thank-you isn't due for hours.
+  // Review request fires later (default 24h post-finish) so it doesn't
+  // collide with the thank-you and so the guest has slept on the
+  // experience. Per-venue toggle + delay live in venues.settings.
+  const settings = await loadVenueReviewSettings(input.bookingId);
+  if (settings && settings.enabled) {
+    const reviewAt = new Date(Date.now() + settings.delayHours * 60 * 60 * 1000);
+    await enqueueAllChannels(
+      input.organisationId,
+      input.bookingId,
+      "booking.review_request",
+      reviewAt,
+    );
+  }
+  // Don't drive worker — neither message is due for hours.
 }
 
 // --- internals ---------------------------------------------------------------
@@ -105,6 +118,31 @@ async function scheduleRemindersFor(input: TriggerInput): Promise<void> {
       reminder2h,
     );
   }
+}
+
+// Read the per-venue review-request settings from venues.settings JSONB
+// via the parent booking. Returns null if the venue/booking is gone
+// (caller skips). Defaults: enabled=true, delayHours=24.
+async function loadVenueReviewSettings(
+  bookingId: string,
+): Promise<{ enabled: boolean; delayHours: number } | null> {
+  const { adminDb } = await import("@/lib/server/admin/db");
+  const { bookings, venues } = await import("@/lib/db/schema");
+  const { eq } = await import("drizzle-orm");
+  const [row] = await adminDb()
+    .select({ settings: venues.settings })
+    .from(bookings)
+    .innerJoin(venues, eq(venues.id, bookings.venueId))
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+  if (!row) return null;
+  const s = (row.settings ?? {}) as Record<string, unknown>;
+  const enabled = s["reviewRequestEnabled"] !== false;
+  const raw = s["reviewRequestDelayHours"];
+  const allowed = [24, 48, 72] as const;
+  const delayHours =
+    typeof raw === "number" && (allowed as readonly number[]).includes(raw) ? raw : 24;
+  return { enabled, delayHours };
 }
 
 async function driveWorker(): Promise<void> {

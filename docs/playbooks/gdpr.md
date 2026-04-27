@@ -28,10 +28,13 @@ We are a **data processor**. The venue (organisation) is the **data controller**
 
 Any new sub-processor requires: DPA signed, EU data residency confirmed, entry added to this table and to `/legal/sub-processors`, and 30-day notice to existing customers.
 
+Outbound hyperlinks to third-party sites (e.g. the Google review form linked from `/review`) are **not** sub-processing — the guest navigates their own browser to the third party; no PII is transmitted from TableKit.
+
 ## Lawful basis
 
 - **Booking a table:** contract (Art 6(1)(b)). We don't need consent to store a booking the guest is creating.
 - **Marketing email/SMS:** consent (Art 6(1)(a)). Opt-in only, per-channel, per-venue.
+- **Post-visit review request:** legitimate interests (Art 6(1)(f)) within the PECR reg 22(3) soft-opt-in carve-out for service follow-up. A single, non-promotional email asking the guest to rate the visit they just had, sent through the same per-venue email channel as transactional confirmations and honouring the same unsubscribe. **LIA:** balancing test favours the venue's interest in service improvement against the guest's reasonable expectation that a recent visit may generate a follow-up. Not used for promotion or third-party sharing. The per-venue email-channel unsubscribe is authoritative for review requests too.
 - **Fraud prevention, abuse monitoring:** legitimate interests (Art 6(1)(f)). Documented in our ROPA.
 - **Legal/accounting retention:** legal obligation (Art 6(1)(c)).
 
@@ -42,6 +45,7 @@ Any new sub-processor requires: DPA signed, EU data residency confirmed, entry a
 | Booking history       | 7 years (UK accounting)        | Pseudonymised after org erasure request |
 | Guest contact details | Until guest or org erases      | Yes, 30 days |
 | Marketing preferences | Until opt-out                  | Yes, immediately on opt-out |
+| Review text (free-form comment) | 24 months from submission (rating retained indefinitely as numeric only) | Yes, immediately on guest erasure |
 | Payment metadata (Stripe IDs, no PAN) | 7 years     | Stripe IDs retained, PII decoupled |
 | Audit log             | 2 years                        | No (integrity) |
 | Session logs          | 30 days                        | Auto-expiry |
@@ -53,7 +57,7 @@ Guests don't contact us directly — they contact the venue. The venue uses the 
 1. Operator opens guest profile → "Data rights" menu.
 2. Options: export (JSON+CSV), rectify, erase.
 3. Erasure: flips `guests.erased_at`, schedules background job to scrub PII columns within 30 days, writes `audit_log` entry.
-4. Erased guests: `email_cipher`, `phone_cipher`, `last_name_cipher`, `dob_cipher`, `notes_cipher` nulled. `first_name` overwritten to "Erased". Bookings pseudonymised (kept for accounting) — no way to link back.
+4. Erased guests: `email_cipher`, `phone_cipher`, `last_name_cipher`, `dob_cipher`, `notes_cipher` nulled. `first_name` overwritten to "Erased". `reviews.comment_cipher` for that guest's reviews is also nulled (rating kept as numeric — not personal data on its own). Bookings pseudonymised (kept for accounting) — no way to link back.
 5. A `dsar_requests` table logs requests with 30-day SLA clock.
 
 We also expose a guest-facing page at `/privacy/request?v=<venue-slug>` that posts to the operator's dashboard as a DSAR ticket.
@@ -109,3 +113,4 @@ Before merging any PR that adds or modifies a column, table, or query involving 
 3. Confirm RLS policy exists and scopes by `organisation_id`.
 4. Confirm retention and erasure behaviour covers the new column.
 5. Update this playbook if a new data category is introduced.
+6. For features that capture free-text from guests (review comments, DSAR messages, booking notes): add a privacy notice on the input surface, cap input length at the smallest defensible value, and ensure the erasure job covers the encrypted column.

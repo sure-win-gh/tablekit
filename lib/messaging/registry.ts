@@ -19,6 +19,7 @@ import type { MessageBookingContext, RenderedEmail, RenderedSms } from "./contex
 import { renderBookingCancelled } from "@/lib/email/templates/booking-cancelled";
 import { renderBookingConfirmation } from "@/lib/email/templates/booking-confirmation";
 import { renderBookingReminder24h } from "@/lib/email/templates/booking-reminder-24h";
+import { renderBookingReviewRequest } from "@/lib/email/templates/booking-review-request";
 import { renderBookingThankYou } from "@/lib/email/templates/booking-thank-you";
 import { renderBookingReminder2h } from "@/lib/sms/templates/booking-reminder-2h";
 import { renderBookingWaitlistReady } from "@/lib/sms/templates/booking-waitlist-ready";
@@ -31,7 +32,8 @@ export type MessageTemplate =
   | "booking.reminder_2h"
   | "booking.cancelled"
   | "booking.thank_you"
-  | "booking.waitlist_ready";
+  | "booking.waitlist_ready"
+  | "booking.review_request";
 
 type EmailRenderer = (ctx: MessageBookingContext) => Promise<RenderedEmail>;
 type SmsRenderer = (ctx: MessageBookingContext) => RenderedSms;
@@ -48,6 +50,7 @@ const TEMPLATE_REGISTRY: Record<MessageTemplate, RegistryEntry> = {
   "booking.cancelled": { email: renderBookingCancelled },
   "booking.thank_you": { email: renderBookingThankYou },
   "booking.waitlist_ready": { sms: renderBookingWaitlistReady },
+  "booking.review_request": { email: renderBookingReviewRequest },
 };
 
 // Channels a given template currently supports. Inline triggers

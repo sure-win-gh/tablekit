@@ -65,6 +65,8 @@ export type AuditAction =
   | "message.bounced"
   | "guest.unsubscribed"
   | "guest.contact_invalidated"
+  // reviews phase
+  | "review.submitted"
   // waitlist phase
   | "waitlist.added"
   | "waitlist.seated"
@@ -98,7 +100,8 @@ export type AuditTargetType =
   | "payment"
   | "message"
   | "waitlist"
-  | "dsar_request";
+  | "dsar_request"
+  | "review";
 
 export type AuditInput = {
   organisationId: string;

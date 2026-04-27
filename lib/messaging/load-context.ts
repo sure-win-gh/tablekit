@@ -22,6 +22,7 @@ import { formatVenueDateLong, formatVenueTime } from "@/lib/bookings/time";
 
 import type { MessageBookingContext } from "./context";
 import type { MessageChannel } from "./registry";
+import { reviewUrl } from "./review-tokens";
 import { unsubscribeUrl } from "./tokens";
 
 export type LoadContextInput = {
@@ -116,6 +117,7 @@ export async function loadMessageContext(input: LoadContextInput): Promise<LoadC
       venueId: row.venueId,
       channel: input.channel,
     }),
+    reviewUrl: reviewUrl(input.appUrl, { bookingId: row.bookingId }),
   };
 
   return { ok: true, ctx, recipient };

@@ -421,6 +421,64 @@ export const bookingEvents = pgTable(
 );
 
 // =============================================================================
+// Reviews (reputation management — Phase 1: internal capture)
+// =============================================================================
+//
+// One row per booking. organisation_id + venue_id are denormalised from
+// the parent booking by the enforce_reviews_org_and_venue trigger.
+// `comment_cipher` is envelope-encrypted PII (lib/security/crypto.ts).
+// Future phases (Google Business Profile, TripAdvisor, Facebook) write
+// rows with source != 'internal' from cron pull jobs; the booking_id
+// link is nullable for those — but Phase 1 only writes 'internal' rows
+// where booking_id is always set (unique).
+//
+// Erasure: when a guest is erased (guests.erased_at set), the future
+// scrub job MUST null `comment_cipher` and overwrite `rating` to 0
+// (sentinel; CHECK allows 1..5 only on insert/update, but a SECURITY
+// DEFINER scrub function with the constraint deferred can null/zero
+// it). Cascade-delete is a defence-in-depth fallback for org-delete,
+// not the primary erasure path. See docs/playbooks/gdpr.md §DSAR.
+
+export const reviewSource = pgEnum("review_source", [
+  "internal",
+  "google",
+  "tripadvisor",
+  "facebook",
+]);
+
+export const reviews = pgTable(
+  "reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .unique()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    guestId: uuid("guest_id")
+      .notNull()
+      .references(() => guests.id, { onDelete: "cascade" }),
+    rating: integer("rating").notNull(),
+    commentCipher: text("comment_cipher"),
+    source: reviewSource("source").notNull().default("internal"),
+    redirectedToExternal: boolean("redirected_to_external").notNull().default(false),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("reviews_venue_idx").on(t.venueId, t.submittedAt.desc()),
+    index("reviews_org_idx").on(t.organisationId),
+    index("reviews_guest_idx").on(t.guestId),
+  ],
+);
+
+// =============================================================================
 // Stripe (payments-connect phase)
 // =============================================================================
 //

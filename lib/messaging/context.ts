@@ -22,6 +22,9 @@ export type MessageBookingContext = {
   serviceName: string;
   notes: string | null;
   unsubscribeUrl: string;
+  // Tokenised public review-submission URL. Built unconditionally;
+  // only `booking.review_request` actually renders it.
+  reviewUrl: string;
   // Optional fields some templates need:
   cancellationReason?: string | null;
   // For card-hold no-show captures; rendered in cancelled emails when

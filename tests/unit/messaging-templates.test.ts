@@ -20,6 +20,7 @@ const ctx: MessageBookingContext = {
   serviceName: "Dinner",
   notes: null,
   unsubscribeUrl: "https://example.test/unsubscribe?t=abc",
+  reviewUrl: "https://example.test/review?p=abc&s=def",
 };
 
 describe("templateChannels", () => {
@@ -30,6 +31,7 @@ describe("templateChannels", () => {
     expect(templateChannels("booking.cancelled")).toEqual(["email"]);
     expect(templateChannels("booking.thank_you")).toEqual(["email"]);
     expect(templateChannels("booking.waitlist_ready")).toEqual(["sms"]);
+    expect(templateChannels("booking.review_request")).toEqual(["email"]);
   });
 });
 
@@ -62,6 +64,17 @@ describe("renderForChannel", () => {
   it("renders booking.thank_you", async () => {
     const r = await renderForChannel("booking.thank_you", "email", ctx);
     expect(r.kind).toBe("email");
+  });
+
+  it("renders booking.review_request with both public and private CTAs", async () => {
+    const r = await renderForChannel("booking.review_request", "email", ctx);
+    expect(r.kind).toBe("email");
+    if (r.kind !== "email") return;
+    expect(r.rendered.subject).toContain("Tablekit Café");
+    // `&` is HTML-encoded in the rendered output, so check the path
+    // and the private-mode marker independently.
+    expect(r.rendered.html).toContain("https://example.test/review?p=abc");
+    expect(r.rendered.html).toContain("mode=private");
   });
 
   it("renders booking.reminder_2h SMS body within one segment when names are short", () => {
