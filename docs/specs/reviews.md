@@ -1,6 +1,6 @@
 # Spec: Reviews & reputation management
 
-**Status:** draft (Phase 1, 2, 3a, 3b, 3c, 6, 7a — shipped; Phase 4-5, 7b deferred)
+**Status:** draft (Phase 1, 2, 3a, 3b, 3c, 6, 7a — shipped; Phase 4 + 5 deferred; Phase 7b cut)
 **Depends on:** `bookings.md`, `messaging.md`
 
 ## What we're building
@@ -85,7 +85,11 @@ Schema: `bookings.id` and `guests.id` are nullable on `reviews`; the `reviews_bo
 
 The public booking widget at `app/(widget)/book/[venueId]/page.tsx` now renders a "Recent guests said" section showing up to 3 internal reviews where: `rating >= 4`, `comment_cipher IS NOT NULL`, and the guest ticked an opt-in checkbox at submission time (`showcase_consent_at IS NOT NULL`). A new partial index `reviews_showcase_idx` keeps the read cheap. We display first name + rating + comment only — never email or last name. Consent is per-review, not blanket.
 
-Operators turn the showcase on per venue via `venue.settings.showcaseEnabled` (default off). When the toggle is off the loader returns an empty list regardless of consent state. Phase 7b adds competitive intel (Google Places nearby) — a separate PR because it brings a different API surface + cron loop.
+Operators turn the showcase on per venue via `venue.settings.showcaseEnabled` (default off). When the toggle is off the loader returns an empty list regardless of consent state.
+
+## Phase 7b — Competitive intel via Google Places (cut, 2026-04-27)
+
+Originally planned as a "venues nearby" card on the dashboard sourced from Google Places Nearby Search + Place Details. **Cut** before implementation: low operator value (vanity metric, not actionable), brings a paid Google API surface (Nearby Search ≈ $32/1k requests) that doesn't recoup the cost in user experience. Reconsider only if a specific operator request makes the case for it.
 
 ## Phase 6 — Escalation alerts + recovery offers (shipped)
 
