@@ -67,6 +67,7 @@ export type AuditAction =
   | "guest.contact_invalidated"
   // reviews phase
   | "review.submitted"
+  | "review.responded"
   // waitlist phase
   | "waitlist.added"
   | "waitlist.seated"

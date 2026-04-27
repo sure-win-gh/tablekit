@@ -15,13 +15,13 @@ import "server-only";
 
 import { eq } from "drizzle-orm";
 
-import { bookings, guests, services, venues } from "@/lib/db/schema";
+import { bookings, guests, reviews, services, venues } from "@/lib/db/schema";
 import { decryptPii, type Ciphertext } from "@/lib/security/crypto";
 import { adminDb } from "@/lib/server/admin/db";
 import { formatVenueDateLong, formatVenueTime } from "@/lib/bookings/time";
 
 import type { MessageBookingContext } from "./context";
-import type { MessageChannel } from "./registry";
+import type { MessageChannel, MessageTemplate } from "./registry";
 import { reviewUrl } from "./review-tokens";
 import { unsubscribeUrl } from "./tokens";
 
@@ -29,6 +29,10 @@ export type LoadContextInput = {
   bookingId: string;
   channel: MessageChannel;
   appUrl: string;
+  // Threaded so templates with extra context (operator reply text,
+  // future per-template fields) can opt into a second decrypt without
+  // every message paying the cost.
+  template: MessageTemplate;
 };
 
 export type LoadContextResult =
@@ -119,6 +123,27 @@ export async function loadMessageContext(input: LoadContextInput): Promise<LoadC
     }),
     reviewUrl: reviewUrl(input.appUrl, { bookingId: row.bookingId }),
   };
+
+  // Per-template extra loads. Kept in load-context (rather than the
+  // template render step) so the whole context is final by the time
+  // renderForChannel runs and templates stay pure.
+  if (input.template === "review.operator_reply") {
+    const [rev] = await db
+      .select({ responseCipher: reviews.responseCipher })
+      .from(reviews)
+      .where(eq(reviews.bookingId, input.bookingId))
+      .limit(1);
+    if (rev?.responseCipher) {
+      try {
+        ctx.operatorReplyText = await decryptPii(
+          row.organisationId,
+          rev.responseCipher as Ciphertext,
+        );
+      } catch {
+        return { ok: false, reason: "decrypt-failed" };
+      }
+    }
+  }
 
   return { ok: true, ctx, recipient };
 }

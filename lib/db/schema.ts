@@ -468,6 +468,14 @@ export const reviews = pgTable(
     source: reviewSource("source").notNull().default("internal"),
     redirectedToExternal: boolean("redirected_to_external").notNull().default(false),
     submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
+    // Operator reply (Phase 2). Encrypted via crypto.encryptPii because
+    // it can quote the guest's comment back to them, and replies are
+    // free-text so an operator could paste anything.
+    responseCipher: text("response_cipher"),
+    respondedAt: timestamp("responded_at", { withTimezone: true }),
+    respondedByUserId: uuid("responded_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

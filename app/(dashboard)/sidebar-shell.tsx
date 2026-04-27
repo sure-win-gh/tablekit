@@ -13,6 +13,7 @@ import {
   Menu,
   Settings,
   ShieldCheck,
+  Star,
   TableProperties,
   Users,
   UtensilsCrossed,
@@ -82,6 +83,7 @@ export function SidebarShell({
         { href: `/dashboard/venues/${venueId}/services`, label: "Services", icon: UtensilsCrossed },
         { href: `/dashboard/venues/${venueId}/deposits`, label: "Deposits", icon: CreditCard },
         { href: `/dashboard/venues/${venueId}/reports`, label: "Reports", icon: CalendarRange },
+        { href: `/dashboard/venues/${venueId}/reviews`, label: "Reviews", icon: Star },
         { href: `/dashboard/venues/${venueId}/settings`, label: "Settings", icon: Settings },
       ]
     : [];

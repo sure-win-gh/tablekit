@@ -1,6 +1,6 @@
 # Spec: Reviews & reputation management
 
-**Status:** draft (Phase 1 — internal capture + Google redirect)
+**Status:** draft (Phase 1 — shipped: capture + Google redirect; Phase 2 — operator dashboard + reply)
 **Depends on:** `bookings.md`, `messaging.md`
 
 ## What we're building
@@ -67,9 +67,12 @@ If `googlePlaceId` is unset, the post-submission screen shows only "Done" (no Go
 - [ ] Google deep link uses `https://search.google.com/local/writereview?placeid=<placeId>` only when `googlePlaceId` is set.
 - [ ] Operator can toggle the feature off and adjust delay in the venue settings page.
 
+## Phase 2 — Operator dashboard + reply
+
+`/dashboard/venues/[venueId]/reviews` lists submitted reviews with stats header (avg rating, reply rate, last 7 days), rating + replied filters, and an inline reply form per row. The reply text is encrypted into `reviews.response_cipher` and emailed to the guest via a new `review.operator_reply` template (one-shot per review — editing lands later). Three new columns added: `response_cipher`, `responded_at`, `responded_by_user_id`. CHECK constraint enforces consistency (cipher set iff timestamp set).
+
 ## Out of scope (next phases)
 
-- Operator review dashboard / list view.
 - Google Business Profile / TripAdvisor / Facebook ingestion.
 - AI sentiment + reply drafting.
 - Negative-review escalation alerts.

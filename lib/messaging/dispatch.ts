@@ -102,6 +102,7 @@ async function processOne(row: ClaimedRow, appUrl: string): Promise<ProcessOutco
     bookingId: row.bookingId,
     channel,
     appUrl,
+    template,
   });
   if (!ctxResult.ok) {
     return markFailed(row, `load-context: ${ctxResult.reason}`);

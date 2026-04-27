@@ -30,6 +30,10 @@ export type MessageBookingContext = {
   // For card-hold no-show captures; rendered in cancelled emails when
   // a deposit was forfeited.
   forfeitedAmountMinor?: number;
+  // Decrypted operator reply text — populated only for the
+  // `review.operator_reply` template; null/undefined elsewhere so
+  // load-context doesn't pay the per-message decrypt for no reason.
+  operatorReplyText?: string | null;
 };
 
 export type RenderedEmail = {
