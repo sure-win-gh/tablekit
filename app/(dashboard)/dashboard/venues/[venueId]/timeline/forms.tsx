@@ -942,8 +942,6 @@ export function BookingDetailModal({ venueId, date }: { venueId: string; date: s
 
   if (!detailBlock) return null;
 
-  const manageHref = `/dashboard/venues/${venueId}/bookings?date=${date}`;
-
   return (
     <div
       role="dialog"
@@ -956,57 +954,165 @@ export function BookingDetailModal({ venueId, date }: { venueId: string; date: s
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-md rounded-card border border-hairline bg-white shadow-panel"
       >
-        <header className="flex items-start justify-between gap-2 border-b border-hairline px-5 py-4">
-          <div>
-            <h3 className="text-base font-bold tracking-tight text-ink">
-              {detailBlock.guestFirstName}
-            </h3>
-            <p className="mt-0.5 text-xs text-ash">
-              {detailBlock.wallStart}–{detailBlock.wallEnd} · {detailBlock.tableLabel} ·{" "}
-              {detailBlock.serviceName}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={closeDetail}
-            aria-label="Close"
-            className="-mr-1 -mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-ash transition hover:bg-cloud hover:text-ink"
-          >
-            <X className="h-4 w-4" aria-hidden />
-          </button>
-        </header>
-
-        <div className="flex flex-col gap-3 px-5 py-4 text-sm text-charcoal">
-          <DetailRow label="Status">
-            <span
-              className={cn(
-                "inline-flex items-center rounded-pill border px-2 py-0.5 text-[11px] font-semibold",
-                STATUS_FILL[detailBlock.status],
-              )}
-            >
-              {STATUS_LABEL[detailBlock.status]}
-            </span>
-          </DetailRow>
-          <DetailRow label="Party size">
-            <span className="font-mono tabular-nums">{detailBlock.partySize}</span>
-          </DetailRow>
-          {detailBlock.notes ? (
-            <DetailRow label="Notes">
-              <span className="whitespace-pre-line">{detailBlock.notes}</span>
-            </DetailRow>
-          ) : null}
-        </div>
-
-        <footer className="flex items-center justify-end gap-2 border-t border-hairline px-5 py-3">
-          <Button variant="secondary" size="sm" onClick={closeDetail}>
-            Close
-          </Button>
-          <a href={manageHref}>
-            <Button size="sm">Manage</Button>
-          </a>
-        </footer>
+        {/* Keyed by booking id so transient form state (mode toggle,
+            time input) resets cleanly when a different block opens
+            the modal. Mirrors the new-booking modal's pattern. */}
+        <DetailModalBody key={detailBlock.id} venueId={venueId} date={date} />
       </div>
     </div>
+  );
+}
+
+function DetailModalBody({ venueId, date }: { venueId: string; date: string }) {
+  const router = useRouter();
+  const { detailBlock, closeDetail } = useTimelineCtx();
+  const [pending, startTransition] = useTransition();
+  const [mode, setMode] = useState<"view" | "edit-time">("view");
+  const [error, setError] = useState<string | null>(null);
+  // Initialise the time input from the booking's current wall start.
+  // Stays static-derived from detailBlock so a re-render on the same
+  // draft doesn't clobber typed-in changes — the modal body
+  // remounts via the parent's `key` when a new draft opens.
+  const [newWallStart, setNewWallStart] = useState(detailBlock?.wallStart ?? "");
+
+  if (!detailBlock) return null;
+
+  const manageHref = `/dashboard/venues/${venueId}/bookings?date=${date}`;
+  const editable =
+    detailBlock.status !== "cancelled" &&
+    detailBlock.status !== "no_show" &&
+    detailBlock.status !== "finished";
+
+  function onSaveTime() {
+    if (!detailBlock || !newWallStart || newWallStart === detailBlock.wallStart) {
+      setMode("view");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const r = await shiftFromTimeline({
+        venueId,
+        bookingId: detailBlock.id,
+        date,
+        wallStart: newWallStart,
+      });
+      if (!r.ok) {
+        setError(shiftErrorMessage(r.reason));
+        return;
+      }
+      closeDetail();
+      router.refresh();
+    });
+  }
+
+  return (
+    <>
+      <header className="flex items-start justify-between gap-2 border-b border-hairline px-5 py-4">
+        <div>
+          <h3 className="text-base font-bold tracking-tight text-ink">
+            {detailBlock.guestFirstName}
+          </h3>
+          <p className="mt-0.5 text-xs text-ash">
+            {detailBlock.wallStart}–{detailBlock.wallEnd} · {detailBlock.tableLabel} ·{" "}
+            {detailBlock.serviceName}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={closeDetail}
+          aria-label="Close"
+          className="-mr-1 -mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-ash transition hover:bg-cloud hover:text-ink"
+        >
+          <X className="h-4 w-4" aria-hidden />
+        </button>
+      </header>
+
+      <div className="flex flex-col gap-3 px-5 py-4 text-sm text-charcoal">
+        <DetailRow label="Status">
+          <span
+            className={cn(
+              "inline-flex items-center rounded-pill border px-2 py-0.5 text-[11px] font-semibold",
+              STATUS_FILL[detailBlock.status],
+            )}
+          >
+            {STATUS_LABEL[detailBlock.status]}
+          </span>
+        </DetailRow>
+        <DetailRow label="Party size">
+          <span className="font-mono tabular-nums">{detailBlock.partySize}</span>
+        </DetailRow>
+        {detailBlock.notes ? (
+          <DetailRow label="Notes">
+            <span className="whitespace-pre-line">{detailBlock.notes}</span>
+          </DetailRow>
+        ) : null}
+
+        {mode === "edit-time" ? (
+          <div className="mt-2 flex flex-col gap-2 rounded-card border border-hairline bg-cloud p-3">
+            <Field
+              label="New start time"
+              htmlFor="bdm-time"
+              hint={`Duration ${detailBlock.span * 15} min — preserved.`}
+            >
+              <Input
+                id="bdm-time"
+                type="time"
+                step={900}
+                value={newWallStart}
+                onChange={(e) => setNewWallStart(e.target.value)}
+                size="sm"
+                className="w-32"
+              />
+            </Field>
+            {error ? <p className="text-xs text-rose">{error}</p> : null}
+          </div>
+        ) : null}
+      </div>
+
+      <footer className="flex items-center justify-end gap-2 border-t border-hairline px-5 py-3">
+        {mode === "edit-time" ? (
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setMode("view");
+                setNewWallStart(detailBlock.wallStart);
+                setError(null);
+              }}
+              disabled={pending}
+            >
+              Cancel
+            </Button>
+            <Button type="button" size="sm" onClick={onSaveTime} disabled={pending}>
+              {pending ? "Saving…" : "Save time"}
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button variant="secondary" size="sm" onClick={closeDetail}>
+              Close
+            </Button>
+            {editable ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setMode("edit-time");
+                  setError(null);
+                }}
+              >
+                Edit time
+              </Button>
+            ) : null}
+            <a href={manageHref}>
+              <Button size="sm">Manage</Button>
+            </a>
+          </>
+        )}
+      </footer>
+    </>
   );
 }
 
