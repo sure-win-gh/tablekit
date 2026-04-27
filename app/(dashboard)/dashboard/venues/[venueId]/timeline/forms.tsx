@@ -8,6 +8,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useOptimistic,
   useRef,
   useState,
   useTransition,
@@ -283,6 +284,36 @@ export function TimelineRow({
   const [error, setError] = useState<string | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
 
+  // Optimistic shift — when the operator drops a booking on a new
+  // slot of the same row, we paint the new position immediately
+  // instead of waiting for the server round-trip + revalidatePath
+  // to fetch a new render. The transition awaits the server action
+  // and router.refresh; once they settle, useOptimistic clears and
+  // the new server-side bookings prop takes over (matching what we
+  // optimistically showed). If the action fails, it auto-reverts.
+  type OptimisticShift = {
+    type: "shift";
+    bookingId: string;
+    newStartCol: number;
+    newWallStart: string;
+    newWallEnd: string;
+  };
+  const [optimisticBookings, mutateOptimistic] = useOptimistic<
+    TimelineBookingBlock[],
+    OptimisticShift
+  >(bookings, (state, action) =>
+    state.map((b) =>
+      b.id === action.bookingId
+        ? {
+            ...b,
+            startCol: action.newStartCol,
+            wallStart: action.newWallStart,
+            wallEnd: action.newWallEnd,
+          }
+        : b,
+    ),
+  );
+
   const sameArea = source && source.fromAreaId === areaId;
   const sameTable = source?.fromTableId === tableId;
   // Drops accepted when:
@@ -339,6 +370,26 @@ export function TimelineRow({
           const wallStart = `${String(Math.floor(totalMin / 60)).padStart(2, "0")}:${String(
             totalMin % 60,
           ).padStart(2, "0")}`;
+
+          // Paint the new position instantly. useOptimistic auto-
+          // reverts when this transition settles unless router.refresh
+          // brings back a server state that already reflects the move
+          // — which it will on success.
+          const dragged = optimisticBookings.find((b) => b.id === source.bookingId);
+          if (dragged) {
+            const newEndMin = totalMin + dragged.span * 15;
+            const wallEnd = `${String(Math.floor(newEndMin / 60)).padStart(2, "0")}:${String(
+              newEndMin % 60,
+            ).padStart(2, "0")}`;
+            mutateOptimistic({
+              type: "shift",
+              bookingId: source.bookingId,
+              newStartCol: slot + 2,
+              newWallStart: wallStart,
+              newWallEnd: wallEnd,
+            });
+          }
+
           const r = await shiftFromTimeline({
             venueId,
             bookingId: source.bookingId,
@@ -367,23 +418,35 @@ export function TimelineRow({
         router.refresh();
       });
     },
-    [canDrop, source, venueId, tableId, date, windowStartHour, setSource, slotFromClientX, router],
+    [
+      canDrop,
+      source,
+      venueId,
+      tableId,
+      date,
+      windowStartHour,
+      setSource,
+      slotFromClientX,
+      router,
+      optimisticBookings,
+      mutateOptimistic,
+    ],
   );
 
   // Slot indices blocked by existing bookings on this row. Used to:
   // (a) refuse selection-start over a block;
   // (b) clamp the selection to not run through an occupied slot in
   //     either direction (forward or backward from the anchor).
+  // Driven by optimisticBookings so a freshly-shifted block updates
+  // the occupancy mask without waiting for the server.
   const occupied = useMemo(() => {
     const set = new Set<number>();
-    for (const b of bookings) {
-      // block.startCol is 1-indexed grid col; subtract the +1 offset
-      // for the label, and another +1 to re-zero into slot space.
+    for (const b of optimisticBookings) {
       const slotStart = b.startCol - 2;
       for (let i = 0; i < b.span; i++) set.add(slotStart + i);
     }
     return set;
-  }, [bookings]);
+  }, [optimisticBookings]);
 
   // Mousedown on a cell starts a selection anchored to that slot.
   // Block-drag-active short-circuits.
@@ -526,7 +589,7 @@ export function TimelineRow({
           className="pointer-events-none m-0.5 rounded-input border border-coral/60 bg-coral/10"
         />
       ) : null}
-      {bookings.map((b) => (
+      {optimisticBookings.map((b) => (
         <BookingBlock
           key={b.id}
           tableId={tableId}
