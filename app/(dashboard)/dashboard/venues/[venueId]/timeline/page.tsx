@@ -18,6 +18,7 @@ import {
   bookingTables,
   bookings,
   guests,
+  payments,
   services,
   venueTables,
   venues,
@@ -87,7 +88,13 @@ export default async function TimelinePage({
   const date = dateParam ?? todayInZone(venue.timezone);
   const { startUtc, endUtc } = venueLocalDayRange(date, venue.timezone);
 
-  const { tables, bookingsForDay, assignments, services: svcRows } = await withUser(async (db) => {
+  const {
+    tables,
+    bookingsForDay,
+    assignments,
+    services: svcRows,
+    paymentRows,
+  } = await withUser(async (db) => {
     const [tableRows, bookingRows, svcRows] = await Promise.all([
       db
         .select({
@@ -145,11 +152,29 @@ export default async function TimelinePage({
             .from(bookingTables)
             .where(inArray(bookingTables.bookingId, bookingIds));
 
+    // Same payment-shape signals the bookings list uses for its row
+    // actions: refundable (succeeded deposit), cardHold (succeeded
+    // hold = flow B), noShowOutcome (the no-show capture row's
+    // status, if one exists). Lets the detail modal render the
+    // refund button + the no-show outcome badge.
+    const paymentRows =
+      bookingIds.length === 0
+        ? ([] as Array<{ bookingId: string; kind: string; status: string }>)
+        : await db
+            .select({
+              bookingId: payments.bookingId,
+              kind: payments.kind,
+              status: payments.status,
+            })
+            .from(payments)
+            .where(inArray(payments.bookingId, bookingIds));
+
     return {
       tables: tableRows,
       bookingsForDay: bookingRows,
       assignments: assignmentRows,
       services: svcRows,
+      paymentRows,
     };
   });
 
@@ -178,6 +203,18 @@ export default async function TimelinePage({
     const list = bookingsByTable.get(a.tableId) ?? [];
     list.push(b);
     bookingsByTable.set(a.tableId, list);
+  }
+
+  // Payment-shape signals — same ones the bookings list computes.
+  const refundableSet = new Set<string>();
+  const cardHoldSet = new Set<string>();
+  const noShowOutcomes = new Map<string, "captured" | "failed">();
+  for (const p of paymentRows) {
+    if (p.kind === "deposit" && p.status === "succeeded") refundableSet.add(p.bookingId);
+    if (p.kind === "hold" && p.status === "succeeded") cardHoldSet.add(p.bookingId);
+    if (p.kind === "no_show_capture") {
+      noShowOutcomes.set(p.bookingId, p.status === "succeeded" ? "captured" : "failed");
+    }
   }
 
   // Build hour-tick labels for the header row.
@@ -325,6 +362,9 @@ export default async function TimelinePage({
                               partySize: b.partySize,
                               notes: b.notes,
                               serviceName: b.serviceName,
+                              refundable: refundableSet.has(b.id),
+                              cardHold: cardHoldSet.has(b.id),
+                              noShowOutcome: noShowOutcomes.get(b.id) ?? null,
                             },
                           ];
                         });

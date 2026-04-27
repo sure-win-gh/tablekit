@@ -18,8 +18,12 @@ import {
 } from "react";
 
 import { Button, Field, IconButton, Input, Textarea, cn } from "@/components/ui";
-import type { BookingStatus } from "@/lib/bookings/state";
+import { nextActions, type BookingStatus } from "@/lib/bookings/state";
 
+import {
+  refundBookingAction,
+  transitionBookingAction,
+} from "../bookings/actions";
 import {
   createFromTimeline,
   reassignFromTimeline,
@@ -304,6 +308,12 @@ export type TimelineBookingBlock = {
   partySize: number;
   notes: string | null;
   serviceName: string;
+  // Payment-shape signals from the page query. Used by the detail
+  // modal to render the refund button + no-show / card-on-file
+  // badges. Mirrors the bookings list.
+  refundable: boolean;
+  cardHold: boolean;
+  noShowOutcome: "captured" | "failed" | null;
 };
 
 // Detail-modal payload — derived from a TimelineBookingBlock + the
@@ -1173,6 +1183,17 @@ const STATUS_LABEL: Record<BookingStatus, string> = {
   no_show: "No-show",
 };
 
+// Verb-form labels for transition buttons — what the operator is
+// *doing* when they click. Mirrors the bookings list's mapping.
+const ACTION_LABEL: Record<BookingStatus, string> = {
+  requested: "Request",
+  confirmed: "Confirm",
+  seated: "Seat",
+  finished: "Finish",
+  cancelled: "Cancel",
+  no_show: "No-show",
+};
+
 export function BookingDetailModal({ venueId, date }: { venueId: string; date: string }) {
   const { detailBlock, closeDetail } = useTimelineCtx();
 
@@ -1212,21 +1233,22 @@ function DetailModalBody({ venueId, date }: { venueId: string; date: string }) {
   const router = useRouter();
   const { detailBlock, closeDetail } = useTimelineCtx();
   const [pending, startTransition] = useTransition();
-  const [mode, setMode] = useState<"view" | "edit-time">("view");
+  const [mode, setMode] = useState<"view" | "edit-time" | "refund">("view");
   const [error, setError] = useState<string | null>(null);
   // Initialise the time input from the booking's current wall start.
   // Stays static-derived from detailBlock so a re-render on the same
   // draft doesn't clobber typed-in changes — the modal body
   // remounts via the parent's `key` when a new draft opens.
   const [newWallStart, setNewWallStart] = useState(detailBlock?.wallStart ?? "");
+  const [refundReason, setRefundReason] = useState("");
 
   if (!detailBlock) return null;
 
-  const manageHref = `/dashboard/venues/${venueId}/bookings?date=${date}`;
   const editable =
     detailBlock.status !== "cancelled" &&
     detailBlock.status !== "no_show" &&
     detailBlock.status !== "finished";
+  const transitionsAvailable = nextActions(detailBlock.status);
 
   function onSaveTime() {
     if (!detailBlock || !newWallStart || newWallStart === detailBlock.wallStart) {
@@ -1243,6 +1265,54 @@ function DetailModalBody({ venueId, date }: { venueId: string; date: string }) {
       });
       if (!r.ok) {
         setError(shiftErrorMessage(r.reason));
+        return;
+      }
+      closeDetail();
+      router.refresh();
+    });
+  }
+
+  // Status transitions — synthesises a FormData and calls the
+  // existing transitionBookingAction (which the bookings list
+  // also uses). Cancellation reason is omitted here for brevity;
+  // operators who want to record a reason can use the bookings
+  // list (or we add an inline reason input in a follow-up).
+  function onTransition(to: BookingStatus) {
+    if (!detailBlock) return;
+    setError(null);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("venueId", venueId);
+      fd.set("bookingId", detailBlock.id);
+      fd.set("to", to);
+      const r = await transitionBookingAction({ status: "idle" }, fd);
+      if (r.status === "error") {
+        setError(r.message);
+        return;
+      }
+      closeDetail();
+      router.refresh();
+    });
+  }
+
+  // Refund — two-step: arm via "Refund" button → reason input
+  // appears → "Confirm refund" submits. Reuses refundBookingAction
+  // (server enforces ≥3 chars).
+  function onConfirmRefund() {
+    if (!detailBlock) return;
+    if (refundReason.trim().length < 3) {
+      setError("Reason must be at least 3 characters.");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("venueId", venueId);
+      fd.set("bookingId", detailBlock.id);
+      fd.set("reason", refundReason.trim());
+      const r = await refundBookingAction({ status: "idle" }, fd);
+      if (r.status === "error") {
+        setError(r.message);
         return;
       }
       closeDetail();
@@ -1274,14 +1344,30 @@ function DetailModalBody({ venueId, date }: { venueId: string; date: string }) {
 
       <div className="flex flex-col gap-3 px-5 py-4 text-sm text-charcoal">
         <DetailRow label="Status">
-          <span
-            className={cn(
-              "inline-flex items-center rounded-pill border px-2 py-0.5 text-[11px] font-semibold",
-              STATUS_FILL[detailBlock.status],
-            )}
-          >
-            {STATUS_LABEL[detailBlock.status]}
-          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                "inline-flex items-center rounded-pill border px-2 py-0.5 text-[11px] font-semibold",
+                STATUS_FILL[detailBlock.status],
+              )}
+            >
+              {STATUS_LABEL[detailBlock.status]}
+            </span>
+            {mode === "view" && transitionsAvailable.length > 0
+              ? transitionsAvailable.map((to) => (
+                  <Button
+                    key={to}
+                    type="button"
+                    size="sm"
+                    variant={to === "cancelled" ? "destructive" : "secondary"}
+                    onClick={() => onTransition(to)}
+                    disabled={pending}
+                  >
+                    {ACTION_LABEL[to]}
+                  </Button>
+                ))
+              : null}
+          </div>
         </DetailRow>
         <DetailRow label="Party size">
           <span className="font-mono tabular-nums">{detailBlock.partySize}</span>
@@ -1289,6 +1375,23 @@ function DetailModalBody({ venueId, date }: { venueId: string; date: string }) {
         {detailBlock.notes ? (
           <DetailRow label="Notes">
             <span className="whitespace-pre-line">{detailBlock.notes}</span>
+          </DetailRow>
+        ) : null}
+
+        {/* Payment-shape badges + actions. */}
+        {detailBlock.cardHold && !detailBlock.noShowOutcome ? (
+          <DetailRow label="Card on file">
+            <span className="text-xs text-ash">Hold succeeded — captured only on no-show.</span>
+          </DetailRow>
+        ) : null}
+        {detailBlock.noShowOutcome === "captured" ? (
+          <DetailRow label="No-show">
+            <span className="text-xs text-emerald-700">Capture succeeded.</span>
+          </DetailRow>
+        ) : null}
+        {detailBlock.noShowOutcome === "failed" ? (
+          <DetailRow label="No-show">
+            <span className="text-xs text-rose">Capture failed — see Stripe.</span>
           </DetailRow>
         ) : null}
 
@@ -1312,6 +1415,29 @@ function DetailModalBody({ venueId, date }: { venueId: string; date: string }) {
             {error ? <p className="text-xs text-rose">{error}</p> : null}
           </div>
         ) : null}
+
+        {mode === "refund" ? (
+          <div className="mt-2 flex flex-col gap-2 rounded-card border border-rose/30 bg-rose/5 p-3">
+            <Field
+              label="Refund reason"
+              htmlFor="bdm-refund-reason"
+              hint="Required — at least 3 characters. Recorded in the audit log."
+            >
+              <Input
+                id="bdm-refund-reason"
+                type="text"
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+                minLength={3}
+                maxLength={200}
+                size="sm"
+              />
+            </Field>
+            {error ? <p className="text-xs text-rose">{error}</p> : null}
+          </div>
+        ) : null}
+
+        {mode === "view" && error ? <p className="text-xs text-rose">{error}</p> : null}
       </div>
 
       <footer className="flex items-center justify-end gap-2 border-t border-hairline px-5 py-3">
@@ -1334,6 +1460,31 @@ function DetailModalBody({ venueId, date }: { venueId: string; date: string }) {
               {pending ? "Saving…" : "Save time"}
             </Button>
           </>
+        ) : mode === "refund" ? (
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setMode("view");
+                setRefundReason("");
+                setError(null);
+              }}
+              disabled={pending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={onConfirmRefund}
+              disabled={pending || refundReason.trim().length < 3}
+            >
+              {pending ? "Refunding…" : "Confirm refund"}
+            </Button>
+          </>
         ) : (
           <>
             <Button variant="secondary" size="sm" onClick={closeDetail}>
@@ -1351,9 +1502,19 @@ function DetailModalBody({ venueId, date }: { venueId: string; date: string }) {
                 Edit time
               </Button>
             ) : null}
-            <a href={manageHref}>
-              <Button size="sm">Manage</Button>
-            </a>
+            {detailBlock.refundable ? (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  setMode("refund");
+                  setRefundReason("");
+                  setError(null);
+                }}
+              >
+                Refund
+              </Button>
+            ) : null}
           </>
         )}
       </footer>

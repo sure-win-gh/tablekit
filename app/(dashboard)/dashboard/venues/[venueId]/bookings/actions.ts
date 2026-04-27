@@ -146,6 +146,7 @@ export async function transitionBookingAction(
   }
 
   revalidatePath(`/dashboard/venues/${parsed.data.venueId}/bookings`);
+  revalidatePath(`/dashboard/venues/${parsed.data.venueId}/timeline`);
   return { status: "done", from: r.from, to: r.to };
 }
 
@@ -201,6 +202,7 @@ export async function refundBookingAction(
   }
 
   revalidatePath(`/dashboard/venues/${parsed.data.venueId}/bookings`);
+  revalidatePath(`/dashboard/venues/${parsed.data.venueId}/timeline`);
   return { status: "done", refundId: r.refundId };
 }
 
