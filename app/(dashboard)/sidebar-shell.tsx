@@ -195,14 +195,13 @@ export function SidebarShell({
         </div>
       </aside>
 
-      {/* Push the main content to the right of the sidebar at md+.
-          Spacer width matches the sidebar exactly — content sits
-          flush against the sidebar's right edge with no extra
-          gutter. */}
-      <div
-        aria-hidden
-        className={cn("hidden md:block", collapsed ? "w-16" : "w-60")}
-      />
+      {/* No layout spacer needed: at md+ the aside is
+          `position: sticky` which participates in normal flow and
+          already takes its own flex width. A spacer in addition to
+          this was double-counting, producing a sidebar-width empty
+          band right of the rail. On mobile the aside is
+          `position: fixed` (out of flow) and main fills the full
+          width; the drawer slides over content. */}
     </>
   );
 }

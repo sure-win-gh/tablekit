@@ -57,6 +57,7 @@ if (
   /service_role/i.test(content) &&
   !file.includes("lib/server/admin/") &&
   !file.includes("tests/integration/") &&
+  !file.includes("tests/e2e/") &&
   !file.includes(".claude/hooks/") &&
   !file.endsWith(".md")
 ) {
