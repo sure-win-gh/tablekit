@@ -29,6 +29,12 @@ This folder holds the source of truth for every feature. Claude should read the 
 |13 | [`import-export.md`](import-export.md) | Migration from ResDiary / OpenTable / CSV |
 |14 | [`public-api.md`](public-api.md)     | REST API + webhooks |
 
+## Internal tools
+
+| #  | Spec                                       | Notes |
+|----|--------------------------------------------|-------|
+| 99 | [`admin-dashboard.md`](admin-dashboard.md) | Founder-only platform metrics, ops health, venue search. Live Stripe pull for MRR; env allowlist auth. |
+
 ## How to use
 
 1. Before implementing a feature, open its spec and check the acceptance criteria.
