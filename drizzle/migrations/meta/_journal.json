@@ -120,6 +120,13 @@
       "when": 1777296120988,
       "tag": "0016_fuzzy_gauntlet",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1777296950544,
+      "tag": "0017_pretty_stone_men",
+      "breakpoints": true
     }
   ]
 }

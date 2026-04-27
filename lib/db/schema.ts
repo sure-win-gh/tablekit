@@ -510,16 +510,26 @@ export const reviews = pgTable(
     venueId: uuid("venue_id")
       .notNull()
       .references(() => venues.id, { onDelete: "cascade" }),
-    bookingId: uuid("booking_id")
-      .notNull()
-      .unique()
-      .references(() => bookings.id, { onDelete: "cascade" }),
-    guestId: uuid("guest_id")
-      .notNull()
-      .references(() => guests.id, { onDelete: "cascade" }),
+    // Phase 3b: booking_id + guest_id are nullable for non-internal
+    // sources (Google / TripAdvisor / Facebook reviews aren't tied to
+    // our bookings). Internal reviews still set both. Partial UNIQUE
+    // on (booking_id) WHERE booking_id IS NOT NULL preserves the
+    // "one internal review per booking" invariant.
+    bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "cascade" }),
+    guestId: uuid("guest_id").references(() => guests.id, { onDelete: "cascade" }),
     rating: integer("rating").notNull(),
     commentCipher: text("comment_cipher"),
     source: reviewSource("source").notNull().default("internal"),
+    // Provider-side review id. Non-null for non-internal sources;
+    // dedup via partial UNIQUE on (venue_id, source, external_id).
+    externalId: text("external_id"),
+    // Public URL on the source platform (e.g. the Google review link)
+    // — surfaced in the operator dashboard.
+    externalUrl: text("external_url"),
+    // Reviewer's public display name as published by the source. Not
+    // encrypted: it's already public on the source platform, and the
+    // dashboard needs to render it.
+    reviewerDisplayName: text("reviewer_display_name"),
     redirectedToExternal: boolean("redirected_to_external").notNull().default(false),
     submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
     // Operator reply (Phase 2). Encrypted via crypto.encryptPii because

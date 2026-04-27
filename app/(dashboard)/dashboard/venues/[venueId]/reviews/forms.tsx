@@ -13,6 +13,7 @@ type Review = {
   submittedAt: Date;
   respondedAt: Date | null;
   guestFirstName: string;
+  externalUrl: string | null;
   comment: string | null;
   response: string | null;
 };
@@ -21,6 +22,9 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(respondToReview, initial);
   const responded = review.respondedAt !== null || state.status === "saved";
+  // Reply via TableKit email is internal-only. Replying to a Google
+  // review needs the Business Profile API call — Phase 3c.
+  const canReply = review.source === "internal";
 
   return (
     <li className="flex flex-col gap-3 rounded-card border border-hairline bg-white p-4">
@@ -35,7 +39,19 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
               month: "short",
               day: "numeric",
             })}{" "}
-            · {review.source}
+            ·{" "}
+            {review.externalUrl ? (
+              <a
+                href={review.externalUrl}
+                target="_blank"
+                rel="noopener"
+                className="underline hover:text-ink"
+              >
+                {review.source}
+              </a>
+            ) : (
+              review.source
+            )}
           </p>
         </div>
         {responded ? (
@@ -56,7 +72,7 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
         </div>
       ) : null}
 
-      {!responded ? (
+      {!responded && canReply ? (
         open ? (
           <form action={formAction} className="flex flex-col gap-2">
             <input type="hidden" name="review_id" value={review.id} />

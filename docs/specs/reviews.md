@@ -1,6 +1,6 @@
 # Spec: Reviews & reputation management
 
-**Status:** draft (Phase 1 — shipped: capture + Google redirect; Phase 2 — shipped: operator dashboard + reply; Phase 3a — shipped: Google OAuth scaffolding)
+**Status:** draft (Phase 1, 2, 3a — shipped; Phase 3b — shipped: review pull, schema for external sources, cron sweep)
 **Depends on:** `bookings.md`, `messaging.md`
 
 ## What we're building
@@ -75,9 +75,15 @@ If `googlePlaceId` is unset, the post-submission screen shows only "Done" (no Go
 
 New `venue_oauth_connections` table (per-venue, extensible to TripAdvisor / Facebook in Phase 4) storing encrypted access + refresh tokens, scopes, expiry. OAuth connect flow at `/api/oauth/google/{start,callback}`: signed-state token + HttpOnly cookie binding; token exchange via native fetch (no `googleapis` SDK). Settings page gains a Google Business Profile section showing connection status with connect / disconnect actions. Env-gated — without `GOOGLE_OAUTH_CLIENT_ID` the button shows "Coming soon" so non-prod deployments stay usable.
 
-## Phase 3b — Review pull + reply via Google API (next)
+## Phase 3b — Review pull (shipped)
 
-Cron job pulls public Google reviews into the `reviews` table with `source='google'`. Operator reply dashboard from Phase 2 calls the Business Profile API instead of (or as well as) sending email when the review's source is Google. `bookings.id` becomes nullable on `reviews` for non-internal sources (today's UNIQUE constraint will need to be replaced with a partial UNIQUE on `(source, external_id)` for the imported rows).
+Schema: `bookings.id` and `guests.id` are nullable on `reviews`; the `reviews_booking_id_unique` total UNIQUE is replaced with a partial `(booking_id) WHERE booking_id IS NOT NULL`, and a new partial `(venue_id, source, external_id) WHERE external_id IS NOT NULL` dedupes imported rows. Three new columns: `external_id`, `external_url`, `reviewer_display_name`. A `reviews_source_shape_check` CHECK enforces internal-vs-external column population at the DB. The denorm trigger now branches: copy from booking for internal, validate venue→org for external.
+
+`lib/google/business-profile.ts` calls `mybusiness.googleapis.com/v4/{location}/reviews`. `lib/google/connection.ts` loads + decrypts the venue's tokens, refreshes via `lib/oauth/google.ts#refreshAccessToken` if within 60s of expiry, and persists the new access token. `lib/google/sync-reviews.ts` upserts on the partial-UNIQUE so re-runs are idempotent. Hooked into the existing `/api/cron/deposit-janitor` sweep — no-op when no venue has a connection or none has picked a location yet.
+
+## Phase 3c — Location picker + reply via Google API (next)
+
+Operator picks which Google Business Profile location each venue maps to (post-OAuth flow). Reply action detects `source='google'` and calls `PUT /v4/{location}/reviews/{reviewId}/reply` instead of enqueuing an email. The dashboard's "Reply" button is disabled today for non-internal sources.
 
 ## Out of scope (next phases)
 

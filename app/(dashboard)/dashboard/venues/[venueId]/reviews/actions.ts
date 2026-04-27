@@ -71,6 +71,7 @@ export async function respondToReview(
       .select({
         id: reviews.id,
         bookingId: reviews.bookingId,
+        source: reviews.source,
         respondedAt: reviews.respondedAt,
       })
       .from(reviews)
@@ -84,6 +85,13 @@ export async function respondToReview(
       .limit(1);
     if (!row) return { ok: false as const, message: "Review not found." };
     if (row.respondedAt) return { ok: false as const, message: "Already replied." };
+    // Email reply is internal-only — non-internal sources have no
+    // booking/guest pair so there's nothing to email. Phase 3c routes
+    // Google replies through the Business Profile API instead.
+    if (row.source !== "internal" || !row.bookingId) {
+      return { ok: false as const, message: "Replies for this source aren't supported yet." };
+    }
+    const internalBookingId = row.bookingId;
 
     await tx
       .update(reviews)
@@ -99,7 +107,7 @@ export async function respondToReview(
     // queued row.
     await enqueueMessage({
       organisationId: orgId,
-      bookingId: row.bookingId,
+      bookingId: internalBookingId,
       template: "review.operator_reply",
       channel: "email",
     });

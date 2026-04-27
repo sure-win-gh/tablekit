@@ -304,4 +304,66 @@ describe("reviews — value constraints", () => {
       }),
     ).rejects.toThrow();
   });
+
+  it("rejects an internal review without a booking_id", async () => {
+    await expect(
+      db.insert(schema.reviews).values({
+        organisationId: ctx.orgAId,
+        venueId: ctx.venueAId,
+        guestId: ctx.guestAId,
+        rating: 4,
+        source: "internal",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("rejects an external review missing reviewer_display_name", async () => {
+    await expect(
+      db.insert(schema.reviews).values({
+        organisationId: ctx.orgAId,
+        venueId: ctx.venueAId,
+        rating: 4,
+        source: "google",
+        externalId: `gbp_${run}_a`,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("accepts an external review with the expected shape", async () => {
+    const [row] = await db
+      .insert(schema.reviews)
+      .values({
+        organisationId: ctx.orgAId,
+        venueId: ctx.venueAId,
+        rating: 5,
+        source: "google",
+        externalId: `gbp_${run}_b`,
+        reviewerDisplayName: "Public Reviewer",
+      })
+      .returning({ id: schema.reviews.id, organisationId: schema.reviews.organisationId });
+    expect(row?.organisationId).toBe(ctx.orgAId);
+    await db.delete(schema.reviews).where(eq(schema.reviews.id, row!.id));
+  });
+
+  it("dedupes external reviews by (venue_id, source, external_id)", async () => {
+    const externalId = `gbp_${run}_c`;
+    await db.insert(schema.reviews).values({
+      organisationId: ctx.orgAId,
+      venueId: ctx.venueAId,
+      rating: 4,
+      source: "google",
+      externalId,
+      reviewerDisplayName: "First",
+    });
+    await expect(
+      db.insert(schema.reviews).values({
+        organisationId: ctx.orgAId,
+        venueId: ctx.venueAId,
+        rating: 5,
+        source: "google",
+        externalId,
+        reviewerDisplayName: "Duplicate",
+      }),
+    ).rejects.toThrow();
+  });
 });

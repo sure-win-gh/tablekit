@@ -130,6 +130,35 @@ export type TokenResponse = {
   scope: string;
 };
 
+export async function refreshAccessToken(input: {
+  refreshToken: string;
+}): Promise<{ accessToken: string; expiresInSeconds: number }> {
+  const id = clientId();
+  const secret = clientSecret();
+  if (!id || !secret) throw new Error("Google OAuth not configured");
+  const body = new URLSearchParams({
+    client_id: id,
+    client_secret: secret,
+    refresh_token: input.refreshToken,
+    grant_type: "refresh_token",
+  });
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  if (!res.ok) {
+    // Status only — body can echo the refresh token in some error
+    // shapes, never log it.
+    throw new Error(`Google token refresh failed: ${res.status}`);
+  }
+  const json = (await res.json()) as { access_token?: string; expires_in?: number };
+  if (!json.access_token || typeof json.expires_in !== "number") {
+    throw new Error("Google token refresh returned malformed body");
+  }
+  return { accessToken: json.access_token, expiresInSeconds: json.expires_in };
+}
+
 export async function exchangeCodeForTokens(input: {
   code: string;
   appUrl: string;

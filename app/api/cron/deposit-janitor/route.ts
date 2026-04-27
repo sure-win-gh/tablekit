@@ -16,6 +16,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 
+import { syncAllConnectedGoogleVenues } from "@/lib/google/sync-reviews";
 import { processNextBatch } from "@/lib/messaging/dispatch";
 import { sweepAbandonedDeposits } from "@/lib/payments/janitor";
 import { sweepDueNoShowCaptures } from "@/lib/payments/no-show";
@@ -38,10 +39,14 @@ export async function GET(req: NextRequest) {
   // Drain whatever messaging work is due. 200 rows is a generous cap;
   // each send is ~500ms, well under Vercel's function timeout.
   const messages = await processNextBatch({ limit: 200 });
+  // Pull new Google reviews for every connected venue. No-op when no
+  // venues have a connection or no operator has picked a location.
+  const googleReviews = await syncAllConnectedGoogleVenues();
   return NextResponse.json({
     ok: true,
     abandonment: janitor,
     noShow,
     messages,
+    googleReviews,
   });
 }

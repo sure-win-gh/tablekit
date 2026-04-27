@@ -62,10 +62,15 @@ export default async function ReviewsPage({
         respondedAt: reviews.respondedAt,
         submittedAt: reviews.submittedAt,
         source: reviews.source,
+        externalUrl: reviews.externalUrl,
+        reviewerDisplayName: reviews.reviewerDisplayName,
+        // leftJoin so externally-sourced reviews (NULL guest_id) still
+        // appear; row component falls back to reviewerDisplayName when
+        // guestFirstName is null.
         guestFirstName: guests.firstName,
       })
       .from(reviews)
-      .innerJoin(guests, eq(guests.id, reviews.guestId))
+      .leftJoin(guests, eq(guests.id, reviews.guestId))
       .where(and(...conditions))
       .orderBy(desc(reviews.submittedAt))
       .limit(100);
@@ -97,7 +102,10 @@ export default async function ReviewsPage({
       source: r.source,
       submittedAt: r.submittedAt,
       respondedAt: r.respondedAt,
-      guestFirstName: r.guestFirstName,
+      // Imported reviews carry the public reviewer name; internal rows
+      // use the guest's first name from the join.
+      guestFirstName: r.guestFirstName ?? r.reviewerDisplayName ?? "Anonymous",
+      externalUrl: r.externalUrl,
       comment: r.commentCipher
         ? await decryptPii(orgId, r.commentCipher as Ciphertext).catch(() => "[decrypt failed]")
         : null,
