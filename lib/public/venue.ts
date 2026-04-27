@@ -7,10 +7,11 @@
 
 import "server-only";
 
-import { and, eq, gte, lt } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, lt, sql } from "drizzle-orm";
 
-import { bookingTables, services, venueTables, venues } from "@/lib/db/schema";
+import { bookingTables, guests, reviews, services, venueTables, venues } from "@/lib/db/schema";
 import { adminDb } from "@/lib/server/admin/db";
+import { decryptPii, type Ciphertext } from "@/lib/security/crypto";
 import {
   findSlots,
   type ServiceSpec,
@@ -126,6 +127,78 @@ export async function loadPublicAvailability(
       endAt: s.endAt,
     })),
   };
+}
+
+export type PublicShowcaseReview = {
+  id: string;
+  rating: number;
+  firstName: string;
+  comment: string;
+  submittedAt: Date;
+};
+
+// Top consented reviews for the public booking widget. Internal-only,
+// rating >= 4, with a comment, where the guest ticked the consent
+// box. We never surface email or last name. The query relies on the
+// reviews_showcase_idx partial index for cheap range scans.
+//
+// Returns an empty list when the venue's showcase is disabled — the
+// caller doesn't need to know whether the toggle is off vs no
+// eligible reviews exist.
+export async function loadPublicShowcase(venueId: string): Promise<PublicShowcaseReview[]> {
+  const db = adminDb();
+  const [venue] = await db
+    .select({ id: venues.id, organisationId: venues.organisationId, settings: venues.settings })
+    .from(venues)
+    .where(eq(venues.id, venueId))
+    .limit(1);
+  if (!venue) return [];
+  const settings = (venue.settings ?? {}) as Record<string, unknown>;
+  if (settings["showcaseEnabled"] !== true) return [];
+
+  const rows = await db
+    .select({
+      id: reviews.id,
+      rating: reviews.rating,
+      commentCipher: reviews.commentCipher,
+      submittedAt: reviews.submittedAt,
+      firstName: guests.firstName,
+    })
+    .from(reviews)
+    .innerJoin(guests, eq(guests.id, reviews.guestId))
+    .where(
+      and(
+        eq(reviews.venueId, venueId),
+        eq(reviews.source, "internal"),
+        isNotNull(reviews.showcaseConsentAt),
+        isNotNull(reviews.commentCipher),
+        sql`${reviews.rating} >= 4`,
+      ),
+    )
+    .orderBy(desc(reviews.submittedAt))
+    .limit(3);
+
+  const decrypted = await Promise.all(
+    rows.map(async (r) => {
+      // Decrypt failures are skipped — the showcase silently drops
+      // unreadable rows rather than surface "[error]" placeholders to
+      // public visitors. Operator-side dashboard already flags
+      // decrypt issues.
+      try {
+        const comment = await decryptPii(venue.organisationId, r.commentCipher as Ciphertext);
+        return {
+          id: r.id,
+          rating: r.rating,
+          firstName: r.firstName,
+          comment,
+          submittedAt: r.submittedAt,
+        } satisfies PublicShowcaseReview;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return decrypted.filter((r): r is PublicShowcaseReview => r !== null);
 }
 
 // Resolve the organisation that owns a venue — needed by the API

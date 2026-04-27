@@ -75,6 +75,8 @@ export default async function VenueSettingsPage({
         : "",
   };
 
+  const showcaseEnabled = settings["showcaseEnabled"] === true;
+
   // Stripe Connect state is org-scoped — one connected account per
   // organisation (D1 in the phase plan). The billing section is
   // per-venue in the sense that it lives under a venue URL, but every
@@ -164,6 +166,7 @@ export default async function VenueSettingsPage({
           escalationEnabled={escalationSettings.enabled}
           escalationThreshold={escalationSettings.threshold}
           escalationEmail={escalationSettings.email}
+          showcaseEnabled={showcaseEnabled}
         />
       </div>
 

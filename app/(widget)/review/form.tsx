@@ -62,6 +62,20 @@ export function ReviewForm({
         />
       </label>
 
+      {mode === "public" ? (
+        <label className="flex items-start gap-2 text-sm text-ash">
+          <input
+            type="checkbox"
+            name="showcase_consent"
+            className="mt-0.5 h-4 w-4 rounded border-hairline"
+          />
+          <span>
+            Let the venue show your first name, rating, and comment on their public booking
+            page. You can ask them to take it down at any time.
+          </span>
+        </label>
+      ) : null}
+
       {state.status === "error" ? (
         <p role="alert" className="text-sm text-red-600">
           {state.message}

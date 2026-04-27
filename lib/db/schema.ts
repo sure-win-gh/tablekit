@@ -552,6 +552,11 @@ export const reviews = pgTable(
       onDelete: "set null",
     }),
     recoveryMessageCipher: text("recovery_message_cipher"),
+    // Phase 7a — public showcase consent. Set when the guest ticks
+    // the opt-in checkbox on the public submission page. NULL means
+    // "not consented"; only consented rows are eligible for the
+    // booking-widget showcase. Per-review (one consent ≠ blanket).
+    showcaseConsentAt: timestamp("showcase_consent_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

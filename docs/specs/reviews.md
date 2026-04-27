@@ -1,6 +1,6 @@
 # Spec: Reviews & reputation management
 
-**Status:** draft (Phase 1, 2, 3a, 3b, 3c, 6 — shipped; Phase 4-5, 7 deferred)
+**Status:** draft (Phase 1, 2, 3a, 3b, 3c, 6, 7a — shipped; Phase 4-5, 7b deferred)
 **Depends on:** `bookings.md`, `messaging.md`
 
 ## What we're building
@@ -80,6 +80,12 @@ New `venue_oauth_connections` table (per-venue, extensible to TripAdvisor / Face
 Schema: `bookings.id` and `guests.id` are nullable on `reviews`; the `reviews_booking_id_unique` total UNIQUE is replaced with a partial `(booking_id) WHERE booking_id IS NOT NULL`, and a new partial `(venue_id, source, external_id) WHERE external_id IS NOT NULL` dedupes imported rows. Three new columns: `external_id`, `external_url`, `reviewer_display_name`. A `reviews_source_shape_check` CHECK enforces internal-vs-external column population at the DB. The denorm trigger now branches: copy from booking for internal, validate venue→org for external.
 
 `lib/google/business-profile.ts` calls `mybusiness.googleapis.com/v4/{location}/reviews`. `lib/google/connection.ts` loads + decrypts the venue's tokens, refreshes via `lib/oauth/google.ts#refreshAccessToken` if within 60s of expiry, and persists the new access token. `lib/google/sync-reviews.ts` upserts on the partial-UNIQUE so re-runs are idempotent. Hooked into the existing `/api/cron/deposit-janitor` sweep — no-op when no venue has a connection or none has picked a location yet.
+
+## Phase 7a — Public review showcase (shipped)
+
+The public booking widget at `app/(widget)/book/[venueId]/page.tsx` now renders a "Recent guests said" section showing up to 3 internal reviews where: `rating >= 4`, `comment_cipher IS NOT NULL`, and the guest ticked an opt-in checkbox at submission time (`showcase_consent_at IS NOT NULL`). A new partial index `reviews_showcase_idx` keeps the read cheap. We display first name + rating + comment only — never email or last name. Consent is per-review, not blanket.
+
+Operators turn the showcase on per venue via `venue.settings.showcaseEnabled` (default off). When the toggle is off the loader returns an empty list regardless of consent state. Phase 7b adds competitive intel (Google Places nearby) — a separate PR because it brings a different API surface + cron loop.
 
 ## Phase 6 — Escalation alerts + recovery offers (shipped)
 

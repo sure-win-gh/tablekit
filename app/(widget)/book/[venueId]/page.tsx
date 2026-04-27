@@ -3,7 +3,12 @@ import { notFound } from "next/navigation";
 import { formatVenueDateLong, todayInZone } from "@/lib/bookings/time";
 import { widgetDisabled } from "@/lib/feature-flags";
 import { captchaEnabled } from "@/lib/public/captcha";
-import { loadPublicAvailability, loadPublicVenue } from "@/lib/public/venue";
+import {
+  loadPublicAvailability,
+  loadPublicShowcase,
+  loadPublicVenue,
+  type PublicShowcaseReview,
+} from "@/lib/public/venue";
 
 import { BookingForm, SlotPicker } from "./forms";
 
@@ -63,7 +68,10 @@ export default async function PublicBookingPage({
   const date = sp.date ?? todayInZone(venue.timezone);
   const partySize = sp.party ? Math.max(1, Math.min(20, Number(sp.party))) : 2;
 
-  const availability = await loadPublicAvailability(venue, { date, partySize });
+  const [availability, showcase] = await Promise.all([
+    loadPublicAvailability(venue, { date, partySize }),
+    loadPublicShowcase(venueId),
+  ]);
 
   const pickedSlot =
     sp.serviceId && sp.wallStart
@@ -112,6 +120,39 @@ export default async function PublicBookingPage({
           }
         />
       ) : null}
+
+      {showcase.length > 0 ? <ShowcaseSection reviews={showcase} /> : null}
     </main>
+  );
+}
+
+function ShowcaseSection({ reviews }: { reviews: PublicShowcaseReview[] }) {
+  return (
+    <section
+      aria-label="Recent guest reviews"
+      className="flex flex-col gap-3 border-t border-hairline pt-6"
+    >
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-ash">
+        Recent guests said
+      </h2>
+      <ul className="flex flex-col gap-3">
+        {reviews.map((r) => (
+          <li
+            key={r.id}
+            className="rounded-card border border-hairline bg-white p-4 text-sm text-charcoal"
+          >
+            <p className="text-coral" aria-label={`${r.rating} stars`}>
+              {"★".repeat(r.rating)}
+              <span className="text-stone">{"★".repeat(5 - r.rating)}</span>
+            </p>
+            <p className="mt-2 whitespace-pre-line">{r.comment}</p>
+            <p className="mt-2 text-xs text-ash">
+              — {r.firstName},{" "}
+              {r.submittedAt.toLocaleDateString(undefined, { year: "numeric", month: "short" })}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

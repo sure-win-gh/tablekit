@@ -30,6 +30,8 @@ const Schema = z.object({
     .max(200)
     .regex(/^[A-Za-z0-9_-]*$/, "Place ID should look like ChIJ… (letters, digits, _ or -)")
     .optional(),
+  // Phase 7a — public showcase on the booking widget
+  showcaseEnabled: z.coerce.boolean().optional(),
   // Phase 6 — escalation alerts
   escalationEnabled: z.coerce.boolean().optional(),
   escalationThreshold: z.coerce
@@ -66,6 +68,7 @@ export async function updateVenue(
     reviewRequestEnabled: formData.get("review_request_enabled") === "on",
     reviewRequestDelayHours: formData.get("review_request_delay_hours"),
     googlePlaceId: formData.get("google_place_id"),
+    showcaseEnabled: formData.get("showcase_enabled") === "on",
     escalationEnabled: formData.get("escalation_enabled") === "on",
     escalationThreshold: formData.get("escalation_threshold"),
     escalationEmail: formData.get("escalation_email"),
@@ -87,6 +90,7 @@ export async function updateVenue(
     locale,
     reviewRequestEnabled,
     reviewRequestDelayHours,
+    showcaseEnabled,
     escalationEnabled,
     escalationThreshold,
   } = parsed.data;
@@ -112,6 +116,7 @@ export async function updateVenue(
     reviewRequestEnabled: reviewRequestEnabled ?? true,
     reviewRequestDelayHours: reviewRequestDelayHours ?? 24,
     googlePlaceId: trimmedPlaceId.length > 0 ? trimmedPlaceId : null,
+    showcaseEnabled: showcaseEnabled ?? false,
     escalationEnabled: escalationEnabled ?? true,
     escalationThreshold: escalationThreshold ?? 2,
     escalationEmail: trimmedEscalationEmail.length > 0 ? trimmedEscalationEmail : null,

@@ -20,6 +20,7 @@ type Props = {
   escalationEnabled: boolean;
   escalationThreshold: 1 | 2 | 3;
   escalationEmail: string;
+  showcaseEnabled: boolean;
 };
 
 export function VenueSettingsForm({
@@ -33,6 +34,7 @@ export function VenueSettingsForm({
   escalationEnabled,
   escalationThreshold,
   escalationEmail,
+  showcaseEnabled,
 }: Props) {
   const [state, formAction, pending] = useActionState(updateVenue, initial);
   const fieldErrors = state.status === "error" ? state.fieldErrors : undefined;
@@ -112,6 +114,24 @@ export function VenueSettingsForm({
           </a>
           . Leave blank to skip the Google link.
         </p>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-3 border-t border-hairline pt-4">
+        <legend className="text-sm font-semibold text-ink">Public review showcase</legend>
+        <p className="text-xs text-ash">
+          Show recent 4★ and 5★ reviews on this venue&apos;s booking page. Only reviews where
+          the guest ticked the consent box appear; we display first name + rating + comment,
+          never email or last name.
+        </p>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="showcase_enabled"
+            defaultChecked={showcaseEnabled}
+            className="h-4 w-4 rounded border-hairline"
+          />
+          <span>Show consented reviews on the booking page</span>
+        </label>
       </fieldset>
 
       <fieldset id="escalation" className="flex flex-col gap-3 border-t border-hairline pt-4">

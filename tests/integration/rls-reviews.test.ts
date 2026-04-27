@@ -345,6 +345,60 @@ describe("reviews — value constraints", () => {
     await db.delete(schema.reviews).where(eq(schema.reviews.id, row!.id));
   });
 
+  it("accepts an internal review with showcase_consent_at set", async () => {
+    // Insert a fresh booking so we can write a consented review
+    // alongside the existing fixture without colliding on booking_id.
+    const [v] = await db
+      .insert(schema.venues)
+      .values({ organisationId: ctx.orgAId, name: "V-cons", venueType: "cafe" })
+      .returning({ id: schema.venues.id });
+    const [a] = await db
+      .insert(schema.areas)
+      .values({ organisationId: ctx.orgAId, venueId: v!.id, name: "Inside" })
+      .returning({ id: schema.areas.id });
+    const [s] = await db
+      .insert(schema.services)
+      .values({
+        organisationId: ctx.orgAId,
+        venueId: v!.id,
+        name: "Open",
+        schedule: { days: ["mon"], start: "08:00", end: "17:00" },
+        turnMinutes: 60,
+      })
+      .returning({ id: schema.services.id });
+    const [b] = await db
+      .insert(schema.bookings)
+      .values({
+        organisationId: ctx.orgAId,
+        venueId: v!.id,
+        serviceId: s!.id,
+        areaId: a!.id,
+        guestId: ctx.guestAId,
+        partySize: 2,
+        startAt: new Date("2026-09-03T12:00:00Z"),
+        endAt: new Date("2026-09-03T13:00:00Z"),
+        status: "finished",
+        source: "host",
+      })
+      .returning({ id: schema.bookings.id });
+
+    const [row] = await db
+      .insert(schema.reviews)
+      .values({
+        organisationId: ctx.orgAId,
+        venueId: v!.id,
+        bookingId: b!.id,
+        guestId: ctx.guestAId,
+        rating: 5,
+        showcaseConsentAt: sql`now()`,
+      })
+      .returning({
+        id: schema.reviews.id,
+        showcaseConsentAt: schema.reviews.showcaseConsentAt,
+      });
+    expect(row?.showcaseConsentAt).toBeTruthy();
+  });
+
   it("rejects a row where recovery_message_cipher is set but recovery_offer_at is null", async () => {
     await expect(
       db

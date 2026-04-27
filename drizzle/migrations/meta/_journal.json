@@ -134,6 +134,13 @@
       "when": 1777319561263,
       "tag": "0018_hot_makkari",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1777321755164,
+      "tag": "0019_absurd_celestials",
+      "breakpoints": true
     }
   ]
 }

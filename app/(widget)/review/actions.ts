@@ -1,6 +1,6 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { bookings, reviews, venues } from "@/lib/db/schema";
@@ -19,6 +19,9 @@ const Schema = z.object({
   s: z.string().min(1),
   rating: z.coerce.number().int().min(1).max(5),
   comment: z.string().max(800).optional(),
+  // Phase 7a — public showcase consent. Optional, default false;
+  // checkbox only POSTs "on" when ticked.
+  showcaseConsent: z.coerce.boolean().optional(),
 });
 
 export type SubmitReviewState =
@@ -35,6 +38,7 @@ export async function submitReview(
     s: formData.get("s"),
     rating: formData.get("rating"),
     comment: formData.get("comment"),
+    showcaseConsent: formData.get("showcase_consent") === "on",
   });
   if (!parsed.success) return { status: "error", message: "Please pick a rating from 1 to 5." };
 
@@ -95,6 +99,9 @@ export async function submitReview(
         rating: parsed.data.rating,
         commentCipher,
         source: "internal",
+        // Stamp consent at write time so the timestamp matches the
+        // submission (not the moment a future audit runs).
+        showcaseConsentAt: parsed.data.showcaseConsent ? sql`now()` : null,
       })
       .returning({ id: reviews.id });
 
