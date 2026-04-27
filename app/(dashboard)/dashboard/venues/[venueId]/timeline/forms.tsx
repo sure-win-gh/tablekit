@@ -29,6 +29,7 @@ import {
   reassignFromTimeline,
   resizeFromTimeline,
   shiftFromTimeline,
+  updateDetailsFromTimeline,
 } from "./actions";
 
 // ===========================================================================
@@ -316,10 +317,11 @@ export type TimelineBookingBlock = {
   noShowOutcome: "captured" | "failed" | null;
 };
 
-// Detail-modal payload — derived from a TimelineBookingBlock + the
-// row's table label (the block doesn't carry it because it's owned by
-// the row that renders it).
+// Detail-modal payload — a TimelineBookingBlock plus the row's
+// identifying bits (the block doesn't carry table_id / label /
+// area_id because the row that renders it owns those).
 export type BookingDetailPayload = TimelineBookingBlock & {
+  tableId: string;
   tableLabel: string;
   areaId: string;
 };
@@ -836,7 +838,7 @@ function BookingBlock({
         if (blocker && blocker.id === block.id && Date.now() < blocker.until) {
           return;
         }
-        openDetail({ ...block, tableLabel, areaId });
+        openDetail({ ...block, tableId, tableLabel, areaId });
       }}
       onDragStart={(e) => {
         if (!interactive || resize) {
@@ -1194,7 +1196,23 @@ const ACTION_LABEL: Record<BookingStatus, string> = {
   no_show: "No-show",
 };
 
-export function BookingDetailModal({ venueId, date }: { venueId: string; date: string }) {
+export type TimelineVenueTable = {
+  id: string;
+  label: string;
+  areaId: string;
+  areaName: string;
+  maxCover: number;
+};
+
+export function BookingDetailModal({
+  venueId,
+  date,
+  allVenueTables,
+}: {
+  venueId: string;
+  date: string;
+  allVenueTables: TimelineVenueTable[];
+}) {
   const { detailBlock, closeDetail } = useTimelineCtx();
 
   useEffect(() => {
@@ -1223,17 +1241,32 @@ export function BookingDetailModal({ venueId, date }: { venueId: string; date: s
         {/* Keyed by booking id so transient form state (mode toggle,
             time input) resets cleanly when a different block opens
             the modal. Mirrors the new-booking modal's pattern. */}
-        <DetailModalBody key={detailBlock.id} venueId={venueId} date={date} />
+        <DetailModalBody
+          key={detailBlock.id}
+          venueId={venueId}
+          date={date}
+          allVenueTables={allVenueTables}
+        />
       </div>
     </div>
   );
 }
 
-function DetailModalBody({ venueId, date }: { venueId: string; date: string }) {
+function DetailModalBody({
+  venueId,
+  date,
+  allVenueTables,
+}: {
+  venueId: string;
+  date: string;
+  allVenueTables: TimelineVenueTable[];
+}) {
   const router = useRouter();
   const { detailBlock, closeDetail } = useTimelineCtx();
   const [pending, startTransition] = useTransition();
-  const [mode, setMode] = useState<"view" | "edit-time" | "refund">("view");
+  const [mode, setMode] = useState<
+    "view" | "edit-time" | "edit-details" | "refund" | "cancel-with-reason" | "reassign-table"
+  >("view");
   const [error, setError] = useState<string | null>(null);
   // Initialise the time input from the booking's current wall start.
   // Stays static-derived from detailBlock so a re-render on the same
@@ -1241,6 +1274,10 @@ function DetailModalBody({ venueId, date }: { venueId: string; date: string }) {
   // remounts via the parent's `key` when a new draft opens.
   const [newWallStart, setNewWallStart] = useState(detailBlock?.wallStart ?? "");
   const [refundReason, setRefundReason] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
+  const [draftPartySize, setDraftPartySize] = useState(detailBlock?.partySize ?? 1);
+  const [draftNotes, setDraftNotes] = useState(detailBlock?.notes ?? "");
+  const [reassignTo, setReassignTo] = useState("");
 
   if (!detailBlock) return null;
 
@@ -1249,6 +1286,14 @@ function DetailModalBody({ venueId, date }: { venueId: string; date: string }) {
     detailBlock.status !== "no_show" &&
     detailBlock.status !== "finished";
   const transitionsAvailable = nextActions(detailBlock.status);
+
+  // Same-area, capacity ≥ party, not the current table.
+  const moveTargets = allVenueTables.filter(
+    (t) =>
+      t.areaId === detailBlock.areaId &&
+      t.maxCover >= detailBlock.partySize &&
+      t.id !== detailBlock.tableId,
+  );
 
   function onSaveTime() {
     if (!detailBlock || !newWallStart || newWallStart === detailBlock.wallStart) {
@@ -1274,11 +1319,16 @@ function DetailModalBody({ venueId, date }: { venueId: string; date: string }) {
 
   // Status transitions — synthesises a FormData and calls the
   // existing transitionBookingAction (which the bookings list
-  // also uses). Cancellation reason is omitted here for brevity;
-  // operators who want to record a reason can use the bookings
-  // list (or we add an inline reason input in a follow-up).
+  // also uses). Cancellation routes through onConfirmCancel below
+  // so we can capture a reason.
   function onTransition(to: BookingStatus) {
     if (!detailBlock) return;
+    if (to === "cancelled") {
+      setMode("cancel-with-reason");
+      setCancelReason("");
+      setError(null);
+      return;
+    }
     setError(null);
     startTransition(async () => {
       const fd = new FormData();
@@ -1288,6 +1338,74 @@ function DetailModalBody({ venueId, date }: { venueId: string; date: string }) {
       const r = await transitionBookingAction({ status: "idle" }, fd);
       if (r.status === "error") {
         setError(r.message);
+        return;
+      }
+      closeDetail();
+      router.refresh();
+    });
+  }
+
+  // Cancel with reason — same action as a normal transition; the
+  // optional cancelledReason field gets carried through.
+  function onConfirmCancel() {
+    if (!detailBlock) return;
+    setError(null);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("venueId", venueId);
+      fd.set("bookingId", detailBlock.id);
+      fd.set("to", "cancelled");
+      if (cancelReason.trim()) fd.set("cancelledReason", cancelReason.trim());
+      const r = await transitionBookingAction({ status: "idle" }, fd);
+      if (r.status === "error") {
+        setError(r.message);
+        return;
+      }
+      closeDetail();
+      router.refresh();
+    });
+  }
+
+  // Edit details — notes + party size, both optional. A submit with
+  // both unchanged is a no-op + close.
+  function onSaveDetails() {
+    if (!detailBlock) return;
+    const notesChanged = draftNotes !== (detailBlock.notes ?? "");
+    const partyChanged = draftPartySize !== detailBlock.partySize;
+    if (!notesChanged && !partyChanged) {
+      setMode("view");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const r = await updateDetailsFromTimeline({
+        venueId,
+        bookingId: detailBlock.id,
+        ...(notesChanged ? { notes: draftNotes.trim() === "" ? null : draftNotes } : {}),
+        ...(partyChanged ? { partySize: draftPartySize } : {}),
+      });
+      if (!r.ok) {
+        setError(r.message ?? "Couldn't save.");
+        return;
+      }
+      closeDetail();
+      router.refresh();
+    });
+  }
+
+  // Reassign table — single-table swap within the same area.
+  function onConfirmReassign() {
+    if (!detailBlock || !reassignTo) return;
+    setError(null);
+    startTransition(async () => {
+      const r = await reassignFromTimeline({
+        venueId,
+        bookingId: detailBlock.id,
+        fromTableId: detailBlock.tableId,
+        toTableId: reassignTo,
+      });
+      if (!r.ok) {
+        setError(reassignErrorMessage(r.reason));
         return;
       }
       closeDetail();
@@ -1437,6 +1555,88 @@ function DetailModalBody({ venueId, date }: { venueId: string; date: string }) {
           </div>
         ) : null}
 
+        {mode === "cancel-with-reason" ? (
+          <div className="mt-2 flex flex-col gap-2 rounded-card border border-rose/30 bg-rose/5 p-3">
+            <Field
+              label="Cancellation reason"
+              htmlFor="bdm-cancel-reason"
+              hint="Optional — recorded on the booking + audit log."
+              optional
+            >
+              <Input
+                id="bdm-cancel-reason"
+                type="text"
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                maxLength={200}
+                size="sm"
+              />
+            </Field>
+            {error ? <p className="text-xs text-rose">{error}</p> : null}
+          </div>
+        ) : null}
+
+        {mode === "edit-details" ? (
+          <div className="mt-2 flex flex-col gap-3 rounded-card border border-hairline bg-cloud p-3">
+            <Field label="Party size" htmlFor="bdm-party">
+              <Input
+                id="bdm-party"
+                type="number"
+                min={1}
+                max={20}
+                value={draftPartySize}
+                onChange={(e) =>
+                  setDraftPartySize(Math.max(1, Math.min(20, Number(e.target.value) || 1)))
+                }
+                size="sm"
+                className="w-24"
+              />
+            </Field>
+            <Field label="Notes" htmlFor="bdm-notes" optional>
+              <Textarea
+                id="bdm-notes"
+                value={draftNotes}
+                onChange={(e) => setDraftNotes(e.target.value)}
+                rows={3}
+                maxLength={500}
+              />
+            </Field>
+            {error ? <p className="text-xs text-rose">{error}</p> : null}
+          </div>
+        ) : null}
+
+        {mode === "reassign-table" ? (
+          <div className="mt-2 flex flex-col gap-2 rounded-card border border-hairline bg-cloud p-3">
+            {moveTargets.length === 0 ? (
+              <p className="text-xs text-ash">
+                No same-area tables with capacity ≥ {detailBlock.partySize}. Use drag-to-reassign on
+                the timeline if you want to move across capacity.
+              </p>
+            ) : (
+              <Field
+                label="Move to table"
+                htmlFor="bdm-reassign"
+                hint="Same area, capacity ≥ party. Cross-area moves stay drag-only."
+              >
+                <select
+                  id="bdm-reassign"
+                  value={reassignTo}
+                  onChange={(e) => setReassignTo(e.target.value)}
+                  className="w-full rounded-input border border-hairline bg-white px-2 py-1 text-sm text-ink focus:border-ink focus:outline-none focus:ring-2 focus:ring-ink"
+                >
+                  <option value="">Pick a table…</option>
+                  {moveTargets.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.areaName} · {t.label} (cap {t.maxCover})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
+            {error ? <p className="text-xs text-rose">{error}</p> : null}
+          </div>
+        ) : null}
+
         {mode === "view" && error ? <p className="text-xs text-rose">{error}</p> : null}
       </div>
 
@@ -1485,11 +1685,107 @@ function DetailModalBody({ venueId, date }: { venueId: string; date: string }) {
               {pending ? "Refunding…" : "Confirm refund"}
             </Button>
           </>
+        ) : mode === "cancel-with-reason" ? (
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setMode("view");
+                setCancelReason("");
+                setError(null);
+              }}
+              disabled={pending}
+            >
+              Back
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={onConfirmCancel}
+              disabled={pending}
+            >
+              {pending ? "Cancelling…" : "Confirm cancel"}
+            </Button>
+          </>
+        ) : mode === "edit-details" ? (
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setMode("view");
+                setDraftPartySize(detailBlock.partySize);
+                setDraftNotes(detailBlock.notes ?? "");
+                setError(null);
+              }}
+              disabled={pending}
+            >
+              Cancel
+            </Button>
+            <Button type="button" size="sm" onClick={onSaveDetails} disabled={pending}>
+              {pending ? "Saving…" : "Save details"}
+            </Button>
+          </>
+        ) : mode === "reassign-table" ? (
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setMode("view");
+                setReassignTo("");
+                setError(null);
+              }}
+              disabled={pending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={onConfirmReassign}
+              disabled={pending || !reassignTo}
+            >
+              {pending ? "Moving…" : "Move table"}
+            </Button>
+          </>
         ) : (
           <>
             <Button variant="secondary" size="sm" onClick={closeDetail}>
               Close
             </Button>
+            {editable ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setMode("edit-details");
+                  setDraftPartySize(detailBlock.partySize);
+                  setDraftNotes(detailBlock.notes ?? "");
+                  setError(null);
+                }}
+              >
+                Edit details
+              </Button>
+            ) : null}
+            {editable && moveTargets.length > 0 ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setMode("reassign-table");
+                  setReassignTo("");
+                  setError(null);
+                }}
+              >
+                Move table
+              </Button>
+            ) : null}
             {editable ? (
               <Button
                 variant="secondary"

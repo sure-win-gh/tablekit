@@ -328,7 +328,17 @@ export default async function TimelinePage({
                   windowStartHour={window.startHour}
                   services={svcRows as unknown as TimelineService[]}
                 />
-                <BookingDetailModal venueId={venueId} date={date} />
+                <BookingDetailModal
+                  venueId={venueId}
+                  date={date}
+                  allVenueTables={tables.map((t) => ({
+                    id: t.id,
+                    label: t.label,
+                    areaId: t.areaId,
+                    areaName: t.areaName,
+                    maxCover: t.maxCover,
+                  }))}
+                />
                 {areaOrder.map((areaId) => {
                   const areaTables = tablesByArea.get(areaId) ?? [];
                   const areaName = areaTables[0]?.areaName ?? "";

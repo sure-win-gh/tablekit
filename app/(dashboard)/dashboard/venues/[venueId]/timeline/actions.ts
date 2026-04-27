@@ -9,6 +9,7 @@ import { createBooking } from "@/lib/bookings/create";
 import { reassignBookingTable } from "@/lib/bookings/reassign";
 import { resizeBookingDuration } from "@/lib/bookings/resize";
 import { shiftBookingTime } from "@/lib/bookings/shift";
+import { updateBookingDetails } from "@/lib/bookings/update-details";
 import { zonedWallToUtc } from "@/lib/bookings/time";
 import { venues } from "@/lib/db/schema";
 import { upsertGuestInput } from "@/lib/guests/schema";
@@ -101,6 +102,55 @@ export async function shiftFromTimeline(raw: unknown): Promise<ShiftFromTimeline
   });
 
   if (!r.ok) return { ok: false, reason: r.reason };
+
+  revalidatePath(`/dashboard/venues/${parsed.data.venueId}/timeline`);
+  revalidatePath(`/dashboard/venues/${parsed.data.venueId}/bookings`);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Update details — notes + party size from the detail modal's
+// "Edit details" form. Either field is optional; the helper rejects
+// when neither is supplied.
+// ---------------------------------------------------------------------------
+
+const UpdateDetailsArgs = z.object({
+  venueId: z.uuid(),
+  bookingId: z.uuid(),
+  // null clears, string sets, undefined leaves alone.
+  notes: z.union([z.string(), z.null()]).optional(),
+  partySize: z.number().int().min(1).max(20).optional(),
+});
+
+export type UpdateDetailsState =
+  | { ok: true }
+  | { ok: false; reason: "invalid" | "not-found"; message?: string | undefined };
+
+export async function updateDetailsFromTimeline(raw: unknown): Promise<UpdateDetailsState> {
+  const parsed = UpdateDetailsArgs.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      reason: "invalid",
+      message: parsed.error.issues.map((i) => i.message).join("; "),
+    };
+  }
+
+  const { orgId, userId } = await requireRole("host");
+
+  const r = await updateBookingDetails({
+    organisationId: orgId,
+    actorUserId: userId,
+    bookingId: parsed.data.bookingId,
+    ...(parsed.data.notes !== undefined ? { notes: parsed.data.notes } : {}),
+    ...(parsed.data.partySize !== undefined ? { partySize: parsed.data.partySize } : {}),
+  });
+  if (!r.ok) {
+    if (r.reason === "invalid-input") {
+      return { ok: false, reason: "invalid", message: r.issues?.join("; ") };
+    }
+    return { ok: false, reason: "not-found" };
+  }
 
   revalidatePath(`/dashboard/venues/${parsed.data.venueId}/timeline`);
   revalidatePath(`/dashboard/venues/${parsed.data.venueId}/bookings`);
