@@ -81,7 +81,7 @@ export default async function PrivacyRequestsPage() {
   const resolved = rows.filter((r) => r.status === "completed" || r.status === "rejected");
 
   return (
-    <main className="flex flex-1 flex-col py-6 pr-8">
+    <main className="flex flex-1 flex-col px-8 py-6">
       <nav className="flex items-center gap-1.5 text-xs text-ash">
         <Link href="/dashboard" className="hover:text-ink">
           Dashboard

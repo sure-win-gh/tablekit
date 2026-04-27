@@ -47,7 +47,7 @@ export default async function VenueLayout({
   if (!venue) notFound();
 
   return (
-    <div className="flex flex-1 flex-col py-6 pr-8">
+    <div className="flex flex-1 flex-col px-8 py-6">
       <nav className="flex items-center justify-between gap-1.5 text-xs text-ash">
         <div className="flex items-center gap-1.5">
           <Link href="/dashboard/venues" className="hover:text-ink">

@@ -14,7 +14,7 @@ export default async function NewVenuePage() {
   await requireRole("manager");
 
   return (
-    <main className="flex flex-1 flex-col py-6 pr-8">
+    <main className="flex flex-1 flex-col px-8 py-6">
       <nav className="flex items-center gap-1.5 text-xs text-ash">
         <Link href="/dashboard/venues" className="hover:text-ink">
           Venues
