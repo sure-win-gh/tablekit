@@ -7,6 +7,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/require-role";
 import { createBooking } from "@/lib/bookings/create";
 import { reassignBookingTable } from "@/lib/bookings/reassign";
+import { resizeBookingDuration } from "@/lib/bookings/resize";
 import { shiftBookingTime } from "@/lib/bookings/shift";
 import { zonedWallToUtc } from "@/lib/bookings/time";
 import { venues } from "@/lib/db/schema";
@@ -99,6 +100,62 @@ export async function shiftFromTimeline(raw: unknown): Promise<ShiftFromTimeline
     newStartAt,
   });
 
+  if (!r.ok) return { ok: false, reason: r.reason };
+
+  revalidatePath(`/dashboard/venues/${parsed.data.venueId}/timeline`);
+  revalidatePath(`/dashboard/venues/${parsed.data.venueId}/bookings`);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Resize — drag the right edge of a booking on the timeline to
+// extend or shorten its duration. Updates end_at only; start_at
+// stays put. Same trigger + EXCLUDE-constraint guarantees as shift.
+// ---------------------------------------------------------------------------
+
+const ResizeArgs = z.object({
+  venueId: z.uuid(),
+  bookingId: z.uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  wallEnd: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
+});
+
+export type ResizeFromTimelineState =
+  | { ok: true }
+  | {
+      ok: false;
+      reason:
+        | "invalid"
+        | "venue-not-found"
+        | "not-found"
+        | "slot-taken"
+        | "terminal-status"
+        | "non-positive-duration";
+    };
+
+export async function resizeFromTimeline(raw: unknown): Promise<ResizeFromTimelineState> {
+  const parsed = ResizeArgs.safeParse(raw);
+  if (!parsed.success) return { ok: false, reason: "invalid" };
+
+  const { orgId, userId } = await requireRole("host");
+
+  const [venue] = await adminDb()
+    .select({ id: venues.id, timezone: venues.timezone, organisationId: venues.organisationId })
+    .from(venues)
+    .where(eq(venues.id, parsed.data.venueId))
+    .limit(1);
+  if (!venue || venue.organisationId !== orgId) {
+    return { ok: false, reason: "venue-not-found" };
+  }
+
+  const newEndAt = zonedWallToUtc(parsed.data.date, parsed.data.wallEnd, venue.timezone);
+
+  const r = await resizeBookingDuration({
+    organisationId: orgId,
+    actorUserId: userId,
+    bookingId: parsed.data.bookingId,
+    newEndAt,
+  });
   if (!r.ok) return { ok: false, reason: r.reason };
 
   revalidatePath(`/dashboard/venues/${parsed.data.venueId}/timeline`);

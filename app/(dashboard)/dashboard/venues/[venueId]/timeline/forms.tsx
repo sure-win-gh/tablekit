@@ -20,7 +20,12 @@ import {
 import { Button, Field, IconButton, Input, Textarea, cn } from "@/components/ui";
 import type { BookingStatus } from "@/lib/bookings/state";
 
-import { createFromTimeline, reassignFromTimeline, shiftFromTimeline } from "./actions";
+import {
+  createFromTimeline,
+  reassignFromTimeline,
+  resizeFromTimeline,
+  shiftFromTimeline,
+} from "./actions";
 
 // ===========================================================================
 // Date navigator (unchanged from wave 1).
@@ -105,6 +110,18 @@ type Selection = {
   active: boolean;
 };
 
+// Resize state — drag the right edge of a booking to extend or
+// shorten its duration. anchorEndSlot is exclusive (the slot one
+// past the booking's last occupied slot at resize-start);
+// currentEndSlot tracks the cursor and is also exclusive.
+export type Resize = {
+  bookingId: string;
+  tableId: string;
+  startSlot: number; // booking's start slot, fixed
+  anchorEndSlot: number; // exclusive
+  currentEndSlot: number; // exclusive
+};
+
 type DragCtx = {
   source: DragSource;
   setSource: (s: DragSource) => void;
@@ -114,6 +131,13 @@ type DragCtx = {
   extendSelection: (slot: number) => void;
   cancelSelection: () => void;
   commitSelection: () => void;
+
+  resize: Resize | null;
+  startResize: (s: { bookingId: string; tableId: string; startSlot: number; endSlot: number }) => void;
+  extendResize: (endSlot: number) => void;
+  cancelResize: () => void;
+  // Returns the final state for the action layer to act on.
+  commitResize: () => Resize | null;
 
   modalDraft: NewBookingDraft | null;
   closeModal: () => void;
@@ -178,6 +202,37 @@ export function TimelineDragProvider({ children }: { children: ReactNode }) {
 
   const closeModal = useCallback(() => setModalDraft(null), []);
 
+  // Resize state.
+  const [resize, setResize] = useState<Resize | null>(null);
+  const startResize = useCallback(
+    (s: { bookingId: string; tableId: string; startSlot: number; endSlot: number }) => {
+      setResize({
+        bookingId: s.bookingId,
+        tableId: s.tableId,
+        startSlot: s.startSlot,
+        anchorEndSlot: s.endSlot,
+        currentEndSlot: s.endSlot,
+      });
+    },
+    [],
+  );
+  const extendResize = useCallback((endSlot: number) => {
+    setResize((prev) => {
+      if (!prev) return prev;
+      if (prev.currentEndSlot === endSlot) return prev;
+      return { ...prev, currentEndSlot: endSlot };
+    });
+  }, []);
+  const cancelResize = useCallback(() => setResize(null), []);
+  const commitResize = useCallback((): Resize | null => {
+    let final: Resize | null = null;
+    setResize((prev) => {
+      final = prev;
+      return null;
+    });
+    return final;
+  }, []);
+
   const value = useMemo(
     () => ({
       source,
@@ -187,6 +242,11 @@ export function TimelineDragProvider({ children }: { children: ReactNode }) {
       extendSelection,
       cancelSelection,
       commitSelection,
+      resize,
+      startResize,
+      extendResize,
+      cancelResize,
+      commitResize,
       modalDraft,
       closeModal,
       detailBlock,
@@ -200,6 +260,11 @@ export function TimelineDragProvider({ children }: { children: ReactNode }) {
       extendSelection,
       cancelSelection,
       commitSelection,
+      resize,
+      startResize,
+      extendResize,
+      cancelResize,
+      commitResize,
       modalDraft,
       closeModal,
       detailBlock,
@@ -278,40 +343,53 @@ export function TimelineRow({
     extendSelection,
     commitSelection,
     cancelSelection,
+    resize,
+    extendResize,
+    commitResize,
+    cancelResize,
   } = ctx;
   const [pending, startTransition] = useTransition();
   const [isOver, setOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
 
-  // Optimistic shift — when the operator drops a booking on a new
-  // slot of the same row, we paint the new position immediately
-  // instead of waiting for the server round-trip + revalidatePath
-  // to fetch a new render. The transition awaits the server action
-  // and router.refresh; once they settle, useOptimistic clears and
-  // the new server-side bookings prop takes over (matching what we
-  // optimistically showed). If the action fails, it auto-reverts.
-  type OptimisticShift = {
-    type: "shift";
-    bookingId: string;
-    newStartCol: number;
-    newWallStart: string;
-    newWallEnd: string;
-  };
+  // Optimistic updates — when the operator drops a booking on a new
+  // slot or releases a resize, paint the new position immediately
+  // instead of waiting for the server round-trip + revalidatePath.
+  // The transition awaits the server action + router.refresh; once
+  // they settle, useOptimistic clears and the new server props take
+  // over. On failure it auto-reverts.
+  type OptimisticAction =
+    | {
+        type: "shift";
+        bookingId: string;
+        newStartCol: number;
+        newWallStart: string;
+        newWallEnd: string;
+      }
+    | {
+        type: "resize";
+        bookingId: string;
+        newSpan: number;
+        newWallEnd: string;
+      };
   const [optimisticBookings, mutateOptimistic] = useOptimistic<
     TimelineBookingBlock[],
-    OptimisticShift
+    OptimisticAction
   >(bookings, (state, action) =>
-    state.map((b) =>
-      b.id === action.bookingId
-        ? {
-            ...b,
-            startCol: action.newStartCol,
-            wallStart: action.newWallStart,
-            wallEnd: action.newWallEnd,
-          }
-        : b,
-    ),
+    state.map((b) => {
+      if (b.id !== action.bookingId) return b;
+      if (action.type === "shift") {
+        return {
+          ...b,
+          startCol: action.newStartCol,
+          wallStart: action.newWallStart,
+          wallEnd: action.newWallEnd,
+        };
+      }
+      // resize
+      return { ...b, span: action.newSpan, wallEnd: action.newWallEnd };
+    }),
   );
 
   const sameArea = source && source.fromAreaId === areaId;
@@ -518,6 +596,110 @@ export function TimelineRow({
     };
   }, [isMyDrag, selection, occupied, totalSlots, extendSelection, commitSelection, cancelSelection]);
 
+  // Window-level mousemove + mouseup while a resize is active on
+  // this row — extends/shortens the booking by tracking the cursor's
+  // slot position. On mouseup, fires resizeFromTimeline + the
+  // optimistic update.
+  const isMyResize = resize?.tableId === tableId;
+  useEffect(() => {
+    if (!isMyResize || !resize) return;
+    const node = rowRef.current;
+    if (!node) return;
+
+    // Cap the right edge: the next occupied slot belonging to a
+    // different booking. The booking's own occupied slots are
+    // allowed (we want to shrink into them) but the next neighbour's
+    // start blocks further extension.
+    const r = resize;
+    let rightCap = totalSlots; // exclusive end
+    for (let i = r.startSlot + 1; i < totalSlots; i++) {
+      // skip the slots owned by this very booking
+      const isOwnSlot = optimisticBookings.some(
+        (b) => b.id === r.bookingId && i >= b.startCol - 2 && i < b.startCol - 2 + b.span,
+      );
+      if (!isOwnSlot && occupied.has(i)) {
+        rightCap = i;
+        break;
+      }
+    }
+    // Minimum duration = 1 slot (15 min).
+    const leftCap = r.startSlot + 1;
+
+    function endSlotAt(clientX: number): number {
+      const rect = node!.getBoundingClientRect();
+      const xInGrid = clientX - rect.left - 120;
+      const cellWidth = (rect.width - 120) / totalSlots;
+      if (cellWidth <= 0) return r.currentEndSlot;
+      // The exclusive end is the slot the cursor has just crossed
+      // over the right edge of: ceil((x + cellWidth*0.5) / cellWidth)
+      // gives a friendlier snap than floor + 1.
+      const raw = Math.round(xInGrid / cellWidth);
+      return Math.max(leftCap, Math.min(rightCap, raw));
+    }
+
+    function onMove(ev: globalThis.MouseEvent) {
+      extendResize(endSlotAt(ev.clientX));
+    }
+    function onUp() {
+      const final = commitResize();
+      if (!final) return;
+      const newSpan = final.currentEndSlot - final.startSlot;
+      if (newSpan < 1) return;
+      // No change → skip the round-trip.
+      if (final.currentEndSlot === final.anchorEndSlot) return;
+      const totalMin = windowStartHour * 60 + final.currentEndSlot * 15;
+      const wallEnd = `${String(Math.floor(totalMin / 60)).padStart(2, "0")}:${String(
+        totalMin % 60,
+      ).padStart(2, "0")}`;
+      setError(null);
+      startTransition(async () => {
+        mutateOptimistic({
+          type: "resize",
+          bookingId: final.bookingId,
+          newSpan,
+          newWallEnd: wallEnd,
+        });
+        const result = await resizeFromTimeline({
+          venueId,
+          bookingId: final.bookingId,
+          date,
+          wallEnd,
+        });
+        if (!result.ok) {
+          setError(resizeErrorMessage(result.reason));
+          setTimeout(() => setError(null), 4000);
+          return;
+        }
+        router.refresh();
+      });
+    }
+    function onKey(ev: KeyboardEvent) {
+      if (ev.key === "Escape") cancelResize();
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [
+    isMyResize,
+    resize,
+    occupied,
+    totalSlots,
+    optimisticBookings,
+    extendResize,
+    commitResize,
+    cancelResize,
+    mutateOptimistic,
+    venueId,
+    date,
+    windowStartHour,
+    router,
+  ]);
+
   // Selection ghost — visible on this row only when the active
   // selection started here.
   const ghost =
@@ -589,15 +771,24 @@ export function TimelineRow({
           className="pointer-events-none m-0.5 rounded-input border border-coral/60 bg-coral/10"
         />
       ) : null}
-      {optimisticBookings.map((b) => (
-        <BookingBlock
-          key={b.id}
-          tableId={tableId}
-          tableLabel={tableLabel}
-          areaId={areaId}
-          block={b}
-        />
-      ))}
+      {optimisticBookings.map((b) => {
+        // Override the rendered span if this booking is being
+        // resized — purely visual while the cursor moves;
+        // useOptimistic takes the final value on commit.
+        const isResizing = resize?.bookingId === b.id;
+        const renderedBlock = isResizing
+          ? { ...b, span: Math.max(1, resize!.currentEndSlot - (b.startCol - 2)) }
+          : b;
+        return (
+          <BookingBlock
+            key={b.id}
+            tableId={tableId}
+            tableLabel={tableLabel}
+            areaId={areaId}
+            block={renderedBlock}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -613,19 +804,32 @@ function BookingBlock({
   areaId: string;
   block: TimelineBookingBlock;
 }) {
-  const { setSource, openDetail } = useTimelineCtx();
+  const { setSource, openDetail, startResize, resize } = useTimelineCtx();
   // Cancelled / no_show / finished blocks aren't draggable — they're
-  // already off the floor.
-  const draggable =
+  // already off the floor. Same gating for resize.
+  const interactive =
     block.status !== "cancelled" && block.status !== "no_show" && block.status !== "finished";
+
+  // Suppress the click that would otherwise open the detail modal
+  // immediately after a resize ends (mousedown-on-handle ... mouseup
+  // ... bubbles a click on the parent button if mouseup landed back
+  // on it). We snapshot the booking id when the user starts resizing
+  // and ignore the next click for that block.
+  const blockerRef = useRef<{ id: string; until: number } | null>(null);
 
   return (
     <button
       type="button"
-      draggable={draggable}
-      onClick={() => openDetail({ ...block, tableLabel, areaId })}
+      draggable={interactive}
+      onClick={() => {
+        const blocker = blockerRef.current;
+        if (blocker && blocker.id === block.id && Date.now() < blocker.until) {
+          return;
+        }
+        openDetail({ ...block, tableLabel, areaId });
+      }}
       onDragStart={(e) => {
-        if (!draggable) {
+        if (!interactive || resize) {
           e.preventDefault();
           return;
         }
@@ -640,9 +844,7 @@ function BookingBlock({
       onDragEnd={() => setSource(null)}
       onMouseDown={(e) => {
         // Stop the row's selection-start from firing when the user
-        // mouses down on a block. Without this the row sees the
-        // mousedown on its background (the click is on the block,
-        // but bubbles up).
+        // mouses down on a block.
         e.stopPropagation();
       }}
       style={{
@@ -650,19 +852,46 @@ function BookingBlock({
         gridRow: 1,
       }}
       className={cn(
-        "m-0.5 flex flex-col justify-center overflow-hidden rounded-input border px-2 py-1 text-left text-[11px] leading-tight transition",
+        "relative m-0.5 flex flex-col justify-center overflow-hidden rounded-input border px-2 py-1 text-left text-[11px] leading-tight transition",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-1",
-        draggable ? "cursor-grab active:cursor-grabbing hover:shadow-sm" : "cursor-pointer hover:shadow-sm",
+        interactive
+          ? "cursor-grab active:cursor-grabbing hover:shadow-sm"
+          : "cursor-pointer hover:shadow-sm",
         STATUS_FILL[block.status],
       )}
     >
       <span className="truncate font-semibold">
-        {block.wallStart} {block.guestFirstName}
+        {block.wallStart}–{block.wallEnd} {block.guestFirstName}
       </span>
       <span className="truncate">
         party {block.partySize}
         {block.notes ? ` · ${block.notes}` : ""}
       </span>
+      {interactive ? (
+        <span
+          aria-label="Resize booking"
+          role="separator"
+          draggable={false}
+          onMouseDown={(e) => {
+            // Start a resize, not a drag-to-shift. stopPropagation
+            // keeps the row from starting a selection; preventDefault
+            // suppresses any incidental text selection.
+            e.stopPropagation();
+            e.preventDefault();
+            blockerRef.current = { id: block.id, until: Date.now() + 500 };
+            const startSlot = block.startCol - 2;
+            const endSlot = startSlot + block.span; // exclusive
+            startResize({ bookingId: block.id, tableId, startSlot, endSlot });
+          }}
+          onDragStart={(e) => {
+            // Belt-and-braces: if the browser tries to start an HTML5
+            // drag on the handle anyway, kill it.
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          className="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize bg-transparent hover:bg-ink/10"
+        />
+      ) : null}
     </button>
   );
 }
@@ -674,6 +903,22 @@ function reassignErrorMessage(reason: string): string {
     case "slot-taken":
       return "Slot taken";
     case "not-found":
+      return "Not found";
+    default:
+      return "Failed";
+  }
+}
+
+function resizeErrorMessage(reason: string): string {
+  switch (reason) {
+    case "slot-taken":
+      return "Slot taken";
+    case "terminal-status":
+      return "Already closed";
+    case "non-positive-duration":
+      return "End must be after start";
+    case "not-found":
+    case "venue-not-found":
       return "Not found";
     default:
       return "Failed";
