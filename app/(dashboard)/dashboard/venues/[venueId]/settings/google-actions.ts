@@ -5,8 +5,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { requireRole } from "@/lib/auth/require-role";
-import { withUser } from "@/lib/db/client";
-import { venueOauthConnections, venues } from "@/lib/db/schema";
+import { assertVenueVisible } from "@/lib/auth/venue-scope";
+import { venueOauthConnections } from "@/lib/db/schema";
 import { syncGoogleReviewsForVenue } from "@/lib/google/sync-reviews";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
@@ -31,15 +31,9 @@ export async function disconnectGoogle(
   // Per-venue scope check via RLS (matches the pattern in
   // reviews/actions.ts). Without this, a manager scoped to one venue
   // could disconnect another venue's connection in the same org.
-  const visible = await withUser(async (db) => {
-    const rows = await db
-      .select({ id: venues.id })
-      .from(venues)
-      .where(eq(venues.id, venueId))
-      .limit(1);
-    return rows.length > 0;
-  });
-  if (!visible) return { status: "error", message: "Venue not found." };
+  if (!(await assertVenueVisible(venueId))) {
+    return { status: "error", message: "Venue not found." };
+  }
 
   const db = adminDb();
   await db
@@ -100,15 +94,9 @@ export async function pickGoogleLocation(
   const { venueId, locationResource } = parsed.data;
 
   // Per-venue scope check via RLS — same pattern as disconnectGoogle.
-  const visible = await withUser(async (db) => {
-    const rows = await db
-      .select({ id: venues.id })
-      .from(venues)
-      .where(eq(venues.id, venueId))
-      .limit(1);
-    return rows.length > 0;
-  });
-  if (!visible) return { status: "error", message: "Venue not found." };
+  if (!(await assertVenueVisible(venueId))) {
+    return { status: "error", message: "Venue not found." };
+  }
 
   const db = adminDb();
   const updated = await db
@@ -129,10 +117,10 @@ export async function pickGoogleLocation(
   await audit.log({
     organisationId: orgId,
     actorUserId: userId,
-    action: "oauth.connected",
+    action: "oauth.location_picked",
     targetType: "venue",
     targetId: venueId,
-    metadata: { provider: "google", locationPicked: true },
+    metadata: { provider: "google" },
   });
 
   revalidatePath(`/dashboard/venues/${venueId}/settings`);
@@ -160,15 +148,9 @@ export async function syncNowGoogle(
   await requireRole("manager");
   const { venueId } = parsed.data;
 
-  const visible = await withUser(async (db) => {
-    const rows = await db
-      .select({ id: venues.id })
-      .from(venues)
-      .where(eq(venues.id, venueId))
-      .limit(1);
-    return rows.length > 0;
-  });
-  if (!visible) return { status: "error", message: "Venue not found." };
+  if (!(await assertVenueVisible(venueId))) {
+    return { status: "error", message: "Venue not found." };
+  }
 
   const outcome = await syncGoogleReviewsForVenue(venueId);
   if (!outcome.ok) {

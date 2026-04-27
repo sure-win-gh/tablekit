@@ -25,7 +25,7 @@ We are a **data processor**. The venue (organisation) is the **data controller**
 | Twilio        | SMS                    | EU (Ireland) | Yes |
 | Sentry        | Error tracking         | EU          | Yes |
 | Cloudflare    | DNS, WAF, edge cache   | Global (no PII routed) | Yes |
-| Google (Business Profile API) | Pulling and replying to public reviews | Global (review data is already public; OAuth tokens stored encrypted in TableKit) | Yes — Google's standard data-processing terms apply |
+| Google (Business Profile API) | Pulling reviews, posting operator replies, and reading the operator's GBP account + location list for the picker UI | Global (review data is already public; OAuth tokens stored encrypted in TableKit) | Yes — Google's standard data-processing terms apply |
 
 Any new sub-processor requires: DPA signed, EU data residency confirmed, entry added to this table and to `/legal/sub-processors`, and 30-day notice to existing customers.
 
@@ -37,6 +37,7 @@ Outbound hyperlinks to third-party sites (e.g. the Google review form linked fro
 - **Marketing email/SMS:** consent (Art 6(1)(a)). Opt-in only, per-channel, per-venue.
 - **Post-visit review request:** legitimate interests (Art 6(1)(f)) within the PECR reg 22(3) soft-opt-in carve-out for service follow-up. A single, non-promotional email asking the guest to rate the visit they just had, sent through the same per-venue email channel as transactional confirmations and honouring the same unsubscribe. **LIA:** balancing test favours the venue's interest in service improvement against the guest's reasonable expectation that a recent visit may generate a follow-up. Not used for promotion or third-party sharing. The per-venue email-channel unsubscribe is authoritative for review requests too.
 - **Operator reply to a guest review:** legitimate interests (Art 6(1)(f)) within PECR reg 22(3). A single, non-promotional reply within the same service-follow-up loop the guest opted into when they submitted the review. Honours the same per-venue email unsubscribe as the review request (enforced at `lib/messaging/load-context.ts` before any decrypt). **LIA:** the guest's reasonable expectation after submitting a star rating + comment includes a reply from the venue; the venue's interest in service recovery and reputation outweighs the minimal further intrusion. Not used for promotion or third-party sharing.
+- **Operator reply to an external (Google) review:** controller-to-controller between the venue and Google — TableKit is processor for the venue, transmitting the reply via the Business Profile API for publication under the existing public review thread. No new personal data of the reviewer is created or stored by us beyond what was already imported. Reply text stored locally is encrypted (`reviews.response_cipher`) and falls under the same retention rule as other review text. We do not need separate consent because the reviewer chose to publish on Google; the reply is the venue's response to a public statement, not a new outbound to the data subject.
 - **Fraud prevention, abuse monitoring:** legitimate interests (Art 6(1)(f)). Documented in our ROPA.
 - **Legal/accounting retention:** legal obligation (Art 6(1)(c)).
 
@@ -47,7 +48,10 @@ Outbound hyperlinks to third-party sites (e.g. the Google review form linked fro
 | Booking history       | 7 years (UK accounting)        | Pseudonymised after org erasure request |
 | Guest contact details | Until guest or org erases      | Yes, 30 days |
 | Marketing preferences | Until opt-out                  | Yes, immediately on opt-out |
-| Review text (guest comment + operator reply) | 24 months from submission/reply (rating retained indefinitely as numeric only) | Yes, immediately on guest erasure |
+| Internal review text (guest comment + operator reply on TableKit) | 24 months from submission/reply (rating retained indefinitely as numeric only) | Yes, immediately on guest erasure |
+| Imported review (external source — Google etc.) | Synced from source while connection active; row deleted within 30 days of disconnect; not retained after disconnect | Imported reviews are not linked to our `guests` table — see §DSAR for the carve-out |
+| Reviewer display name (external) | Same as the imported review row | Same as the imported review row |
+| OAuth tokens (provider connection) | Until operator disconnects or revokes upstream; deleted on disconnect | Yes — disconnect deletes the row |
 | Payment metadata (Stripe IDs, no PAN) | 7 years     | Stripe IDs retained, PII decoupled |
 | Audit log             | 2 years                        | No (integrity) |
 | Session logs          | 30 days                        | Auto-expiry |
@@ -57,9 +61,10 @@ Outbound hyperlinks to third-party sites (e.g. the Google review form linked fro
 Guests don't contact us directly — they contact the venue. The venue uses the dashboard to action requests.
 
 1. Operator opens guest profile → "Data rights" menu.
-2. Options: export (JSON+CSV), rectify, erase. The export must include any reviews the guest left or that were left on their bookings: `rating`, decrypted `comment`, decrypted operator `response`, `submittedAt`, `respondedAt`. (Pipeline TBD — track as part of the DSAR builder phase.)
+2. Options: export (JSON+CSV), rectify, erase. The export must include any internal reviews the guest left or that were left on their bookings: `rating`, decrypted `comment`, decrypted operator `response`, `submittedAt`, `respondedAt`. Imported external reviews are out of scope (no deterministic guest mapping — see step 4). (Pipeline TBD — track as part of the DSAR builder phase.)
 3. Erasure: flips `guests.erased_at`, schedules background job to scrub PII columns within 30 days, writes `audit_log` entry.
 4. Erased guests: `email_cipher`, `phone_cipher`, `last_name_cipher`, `dob_cipher`, `notes_cipher` nulled. `first_name` overwritten to "Erased". `reviews.comment_cipher`, `reviews.response_cipher`, `reviews.responded_at`, and `reviews.responded_by_user_id` for that guest's reviews are also nulled — rating kept as numeric only (not personal data on its own); operator attribution is dropped to leave no path back to the data subject. Bookings pseudonymised (kept for accounting) — no way to link back.
+   - **Imported reviews from external sources (Google etc.) are not scrubbed on guest erasure.** The source identifies the reviewer by public display name only and we have no deterministic mapping from `guests.id` to a Google reviewer. The source platform remains the controller of the public review; the row will re-import on the next sync regardless of any local action. Guests who want a Google review removed must request it from Google directly. We document this on `/privacy/request` and the operator's DSAR action UI surfaces it as a non-actionable line.
 5. A `dsar_requests` table logs requests with 30-day SLA clock.
 
 We also expose a guest-facing page at `/privacy/request?v=<venue-slug>` that posts to the operator's dashboard as a DSAR ticket.

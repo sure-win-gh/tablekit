@@ -7,11 +7,11 @@
 // Errors land on the same settings page with `?google=<reason>` so the
 // operator gets a readable message instead of a JSON 500.
 
-import { eq } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { requireRole } from "@/lib/auth/require-role";
-import { venueOauthConnections, venues } from "@/lib/db/schema";
+import { assertVenueVisible } from "@/lib/auth/venue-scope";
+import { venueOauthConnections } from "@/lib/db/schema";
 import { exchangeCodeForTokens, isConfigured, verifyOAuthState } from "@/lib/oauth/google";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
@@ -54,15 +54,15 @@ export async function GET(req: NextRequest) {
   const { userId, orgId } = await requireRole("manager");
   if (userId !== stateUserId) return backTo(appUrl, venueId, "user-mismatch");
 
-  // Confirm the venue belongs to the caller's org. adminDb bypasses
-  // RLS, so the explicit org check carries the weight.
+  // Confirm the venue is in the caller's org + per-venue scope.
+  // assertVenueVisible routes through RLS so it consults
+  // memberships.venue_ids — without this, the caller could craft a
+  // venue id from a different org and we'd happily upsert tokens
+  // against it (DoS via cross-tenant overwrite).
+  if (!(await assertVenueVisible(venueId))) {
+    return backTo(appUrl, null, "venue-not-found");
+  }
   const db = adminDb();
-  const [venue] = await db
-    .select({ id: venues.id })
-    .from(venues)
-    .where(eq(venues.id, venueId))
-    .limit(1);
-  if (!venue) return backTo(appUrl, null, "venue-not-found");
 
   let tokens;
   try {

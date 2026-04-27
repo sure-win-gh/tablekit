@@ -68,9 +68,10 @@ export type AuditAction =
   // reviews phase
   | "review.submitted"
   | "review.responded"
-  // oauth (Phase 3a — Google Business Profile)
+  // oauth (Phase 3a/3c — Google Business Profile)
   | "oauth.connected"
   | "oauth.disconnected"
+  | "oauth.location_picked"
   // waitlist phase
   | "waitlist.added"
   | "waitlist.seated"

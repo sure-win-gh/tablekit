@@ -12,6 +12,8 @@
 
 import "server-only";
 
+import { GOOGLE_FETCH_TIMEOUT_MS } from "@/lib/oauth/google";
+
 export type GoogleReview = {
   reviewId: string; // stable per review — used as our external_id
   reviewer: { displayName: string };
@@ -61,6 +63,7 @@ export async function listAccounts(
 ): Promise<{ ok: true; accounts: GoogleAccount[] } | { ok: false; status: number }> {
   const res = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+    signal: AbortSignal.timeout(GOOGLE_FETCH_TIMEOUT_MS),
   });
   if (!res.ok) return { ok: false, status: res.status };
   const json = (await res.json()) as { accounts?: GoogleAccount[] };
@@ -78,6 +81,7 @@ export async function listLocations(input: {
   url.searchParams.set("readMask", "name,title,storefrontAddress");
   const res = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${input.accessToken}`, Accept: "application/json" },
+    signal: AbortSignal.timeout(GOOGLE_FETCH_TIMEOUT_MS),
   });
   if (!res.ok) return { ok: false, status: res.status };
   const json = (await res.json()) as { locations?: GoogleLocation[] };
@@ -102,6 +106,7 @@ export async function replyToReview(input: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ comment: input.comment }),
+    signal: AbortSignal.timeout(GOOGLE_FETCH_TIMEOUT_MS),
   });
   if (!res.ok) return { ok: false, status: res.status };
   return { ok: true };
@@ -123,6 +128,7 @@ export async function listReviews(input: {
       Authorization: `Bearer ${input.accessToken}`,
       Accept: "application/json",
     },
+    signal: AbortSignal.timeout(GOOGLE_FETCH_TIMEOUT_MS),
   });
   if (!res.ok) return { ok: false, status: res.status };
   const json = (await res.json()) as {

@@ -6,6 +6,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { requireRole } from "@/lib/auth/require-role";
+import { assertVenueVisible } from "@/lib/auth/venue-scope";
 import { authorizeUrl, isConfigured, signOAuthState } from "@/lib/oauth/google";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,12 @@ export async function GET(req: NextRequest) {
   // Manager+ only — connecting a third-party account is a privileged
   // org-level action, not something hosts should be able to do.
   const { userId } = await requireRole("manager");
+
+  // Per-venue scope check — without this, a manager in org A who
+  // knows a venue id from org B could mint a state token for it.
+  if (!(await assertVenueVisible(venueId))) {
+    return NextResponse.json({ error: "venue-not-found" }, { status: 404 });
+  }
 
   if (!isConfigured()) {
     return NextResponse.json({ error: "google-oauth-disabled" }, { status: 503 });

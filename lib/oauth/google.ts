@@ -130,6 +130,12 @@ export type TokenResponse = {
   scope: string;
 };
 
+// 8s is generous for Google's token + Business Profile endpoints —
+// most return well under a second; we want the cron / page render to
+// fail fast on a stalled API rather than holding a worker open until
+// Vercel times out the function.
+export const GOOGLE_FETCH_TIMEOUT_MS = 8_000;
+
 export async function refreshAccessToken(input: {
   refreshToken: string;
 }): Promise<{ accessToken: string; expiresInSeconds: number }> {
@@ -146,6 +152,7 @@ export async function refreshAccessToken(input: {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
+    signal: AbortSignal.timeout(GOOGLE_FETCH_TIMEOUT_MS),
   });
   if (!res.ok) {
     // Status only — body can echo the refresh token in some error
@@ -177,6 +184,7 @@ export async function exchangeCodeForTokens(input: {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
+    signal: AbortSignal.timeout(GOOGLE_FETCH_TIMEOUT_MS),
   });
   if (!res.ok) {
     // Body may include error_description with the bad code echoed back —

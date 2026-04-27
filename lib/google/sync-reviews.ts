@@ -9,9 +9,9 @@
 
 import "server-only";
 
-import { eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 
-import { reviews, venueOauthConnections } from "@/lib/db/schema";
+import { reviews, venueOauthConnections, venues } from "@/lib/db/schema";
 import { adminDb } from "@/lib/server/admin/db";
 import { encryptPii } from "@/lib/security/crypto";
 
@@ -38,6 +38,10 @@ export async function syncGoogleReviewsForVenue(venueId: string): Promise<SyncOu
     return { venueId, ok: true, fetched: 0, upserted: 0, reason: "no-location" };
   }
 
+  // Read the venue's googlePlaceId once per sync — it drives the
+  // public review URL we set on each imported row.
+  const placeId = await loadVenuePlaceId(venueId);
+
   let fetched = 0;
   let upserted = 0;
   let pageToken: string | null = null;
@@ -57,7 +61,12 @@ export async function syncGoogleReviewsForVenue(venueId: string): Promise<SyncOu
       };
     }
     fetched += result.reviews.length;
-    upserted += await upsertReviews(conn.organisationId, conn.venueId, result.reviews);
+    upserted += await upsertReviews(
+      conn.organisationId,
+      conn.venueId,
+      result.reviews,
+      placeId,
+    );
     if (!result.nextPageToken) break;
     pageToken = result.nextPageToken;
   }
@@ -73,18 +82,15 @@ export async function syncGoogleReviewsForVenue(venueId: string): Promise<SyncOu
 // sweep retries naturally.
 export async function syncAllConnectedGoogleVenues(): Promise<SyncOutcome[]> {
   const db = adminDb();
-  const rows = await db
+  const targets = await db
     .select({ venueId: venueOauthConnections.venueId })
     .from(venueOauthConnections)
-    .where(eq(venueOauthConnections.provider, "google"));
-  // Filter to ones with a location id picked — the sync is a no-op
-  // otherwise, but skipping the round-trip keeps cron logs clean.
-  const withLocation = await db
-    .select({ venueId: venueOauthConnections.venueId })
-    .from(venueOauthConnections)
-    .where(isNotNull(venueOauthConnections.externalAccountId));
-  const wantSet = new Set(withLocation.map((r) => r.venueId));
-  const targets = rows.filter((r) => wantSet.has(r.venueId));
+    .where(
+      and(
+        eq(venueOauthConnections.provider, "google"),
+        isNotNull(venueOauthConnections.externalAccountId),
+      ),
+    );
 
   const outcomes: SyncOutcome[] = [];
   for (const target of targets) {
@@ -96,27 +102,62 @@ export async function syncAllConnectedGoogleVenues(): Promise<SyncOutcome[]> {
         ok: false,
         fetched: 0,
         upserted: 0,
-        reason: err instanceof Error ? err.message.slice(0, 200) : "unknown",
+        // First line, length-capped, no `cause` chain. undici's
+        // "fetch failed" can attach a cause whose message includes
+        // the request URL — we don't put tokens in URLs (we use
+        // Authorization headers) but we still don't want the chain
+        // sliding into cron-response logs.
+        reason: safeReason(err),
       });
     }
   }
   return outcomes;
 }
 
+function safeReason(err: unknown): string {
+  if (!(err instanceof Error)) return "unknown";
+  const firstLine = err.message.split("\n", 1)[0] ?? "";
+  return `${err.constructor.name}: ${firstLine.slice(0, 120)}`;
+}
+
 // --- internals ---------------------------------------------------------------
+
+async function loadVenuePlaceId(venueId: string): Promise<string | null> {
+  const [row] = await adminDb()
+    .select({ settings: venues.settings })
+    .from(venues)
+    .where(eq(venues.id, venueId))
+    .limit(1);
+  if (!row) return null;
+  const s = (row.settings ?? {}) as Record<string, unknown>;
+  const v = s["googlePlaceId"];
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+function buildExternalUrl(placeId: string | null): string | null {
+  return placeId
+    ? `https://search.google.com/local/reviews?placeid=${encodeURIComponent(placeId)}`
+    : null;
+}
 
 async function upsertReviews(
   organisationId: string,
   venueId: string,
   fetchedReviews: GoogleReview[],
+  placeId: string | null,
 ): Promise<number> {
   if (fetchedReviews.length === 0) return 0;
   const db = adminDb();
+  const externalUrl = buildExternalUrl(placeId);
   let count = 0;
   for (const r of fetchedReviews) {
     const commentCipher = r.comment
       ? await encryptPii(organisationId, r.comment)
       : null;
+    // submittedAt is set on insert from createTime and never moved on
+    // conflict — keeping the desc-order stable when a guest edits an
+    // old review. updated_at on the row is the source of truth for
+    // "we last saw this version".
     await db
       .insert(reviews)
       .values({
@@ -128,7 +169,7 @@ async function upsertReviews(
         commentCipher,
         source: "google",
         externalId: r.reviewId,
-        externalUrl: null,
+        externalUrl,
         reviewerDisplayName: r.reviewer.displayName,
         submittedAt: new Date(r.createTime),
       })
@@ -138,7 +179,7 @@ async function upsertReviews(
           rating: starRatingToInt(r.starRating),
           commentCipher,
           reviewerDisplayName: r.reviewer.displayName,
-          submittedAt: new Date(r.updateTime),
+          externalUrl,
         },
       });
     count++;

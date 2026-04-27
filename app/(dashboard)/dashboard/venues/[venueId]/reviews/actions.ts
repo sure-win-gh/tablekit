@@ -5,8 +5,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { requireRole } from "@/lib/auth/require-role";
-import { withUser } from "@/lib/db/client";
-import { reviews, venues } from "@/lib/db/schema";
+import { assertVenueVisible } from "@/lib/auth/venue-scope";
+import { reviews } from "@/lib/db/schema";
 import { replyToReview as replyToGoogleReview } from "@/lib/google/business-profile";
 import { getActiveGoogleConnection } from "@/lib/google/connection";
 import { processNextBatch } from "@/lib/messaging/dispatch";
@@ -16,11 +16,12 @@ import { adminDb } from "@/lib/server/admin/db";
 import { encryptPii } from "@/lib/security/crypto";
 
 // Operator reply to a guest review.
-// - internal source: persist encrypted reply + enqueue email.
-// - google source (Phase 3c): persist encrypted reply + post to the
-//   Business Profile API. The API call lives outside the DB
-//   transaction (HTTP can't participate); we only persist after a
-//   successful POST so we don't claim "replied" on a failed send.
+// - internal source: claim → enqueue email → audit (transactional).
+// - google source: claim → call Business Profile API → audit. The
+//   claim is a conditional UPDATE that only matches rows where
+//   responded_at IS NULL, so two near-simultaneous submissions can't
+//   both proceed. If the API call fails we roll back the claim so a
+//   retry can win.
 //
 // Replies are one-shot — the form disables once a row has a response.
 
@@ -52,16 +53,9 @@ export async function respondToReview(
   const { orgId, userId } = await requireRole("manager");
   const { reviewId, venueId, reply } = parsed.data;
 
-  // Per-venue scope check — `requireRole` only verifies org membership.
-  const venueVisible = await withUser(async (db) => {
-    const rows = await db
-      .select({ id: venues.id })
-      .from(venues)
-      .where(eq(venues.id, venueId))
-      .limit(1);
-    return rows.length > 0;
-  });
-  if (!venueVisible) return { status: "error", message: "Review not found." };
+  if (!(await assertVenueVisible(venueId))) {
+    return { status: "error", message: "Review not found." };
+  }
 
   const db = adminDb();
   const [row] = await db
@@ -86,28 +80,40 @@ export async function respondToReview(
 
   const responseCipher = await encryptPii(orgId, reply);
 
+  // Conditional claim — only one concurrent submission wins. Sets
+  // both response_cipher and responded_at together to keep the
+  // reviews_response_consistency_check satisfied at every stable
+  // point. RETURNING tells us whether we won the race.
+  const claimed = await db
+    .update(reviews)
+    .set({ responseCipher, respondedAt: sql`now()`, respondedByUserId: userId })
+    .where(
+      and(
+        eq(reviews.id, row.id),
+        eq(reviews.organisationId, orgId),
+        eq(reviews.venueId, venueId),
+        sql`${reviews.respondedAt} is null`,
+      ),
+    )
+    .returning({ id: reviews.id });
+  if (claimed.length === 0) return { status: "error", message: "Already replied." };
+
   if (row.source === "internal") {
     if (!row.bookingId) return { status: "error", message: "Internal review missing booking." };
     const internalBookingId = row.bookingId;
-    await db.transaction(async (tx) => {
-      await tx
-        .update(reviews)
-        .set({ responseCipher, respondedAt: sql`now()`, respondedByUserId: userId })
-        .where(eq(reviews.id, row.id));
-      await enqueueMessage({
-        organisationId: orgId,
-        bookingId: internalBookingId,
-        template: "review.operator_reply",
-        channel: "email",
-      });
-      await audit.log({
-        organisationId: orgId,
-        actorUserId: userId,
-        action: "review.responded",
-        targetType: "review",
-        targetId: row.id,
-        metadata: { venueId, source: "internal" },
-      });
+    await enqueueMessage({
+      organisationId: orgId,
+      bookingId: internalBookingId,
+      template: "review.operator_reply",
+      channel: "email",
+    });
+    await audit.log({
+      organisationId: orgId,
+      actorUserId: userId,
+      action: "review.responded",
+      targetType: "review",
+      targetId: row.id,
+      metadata: { venueId, source: "internal" },
     });
     void processNextBatch({ limit: 5 }).catch((err) => {
       console.error("[reviews/actions.ts] inline worker drive failed:", {
@@ -116,10 +122,13 @@ export async function respondToReview(
     });
   } else if (row.source === "google") {
     if (!row.externalId) {
+      // Roll the claim back — we got further than expected.
+      await rollbackClaim(row.id);
       return { status: "error", message: "Google review missing external id." };
     }
     const conn = await getActiveGoogleConnection(venueId);
     if (!conn || !conn.externalAccountId) {
+      await rollbackClaim(row.id);
       return {
         status: "error",
         message: "Google connection lost. Reconnect in settings.",
@@ -132,33 +141,35 @@ export async function respondToReview(
       comment: reply,
     });
     if (!apiResult.ok) {
+      await rollbackClaim(row.id);
       return {
         status: "error",
         message: `Google rejected the reply (HTTP ${apiResult.status}).`,
       };
     }
-    // API accepted — persist locally so the dashboard reflects it. If
-    // the audit insert fails after the API succeeded the operator
-    // sees a stale "Reply" button on next render; one-shot semantics
-    // mean a re-send would 409 against Google or no-op cleanly.
-    await db.transaction(async (tx) => {
-      await tx
-        .update(reviews)
-        .set({ responseCipher, respondedAt: sql`now()`, respondedByUserId: userId })
-        .where(eq(reviews.id, row.id));
-      await audit.log({
-        organisationId: orgId,
-        actorUserId: userId,
-        action: "review.responded",
-        targetType: "review",
-        targetId: row.id,
-        metadata: { venueId, source: "google" },
-      });
+    await audit.log({
+      organisationId: orgId,
+      actorUserId: userId,
+      action: "review.responded",
+      targetType: "review",
+      targetId: row.id,
+      metadata: { venueId, source: "google" },
     });
   } else {
+    await rollbackClaim(row.id);
     return { status: "error", message: "Replies for this source aren't supported yet." };
   }
 
   revalidatePath(`/dashboard/venues/${venueId}/reviews`);
   return { status: "saved" };
+}
+
+// Release a previously-claimed reply row so a retry can win. Both
+// columns nulled together to keep reviews_response_consistency_check
+// satisfied; respondedByUserId nulled for hygiene.
+async function rollbackClaim(reviewRowId: string): Promise<void> {
+  await adminDb()
+    .update(reviews)
+    .set({ responseCipher: null, respondedAt: null, respondedByUserId: null })
+    .where(eq(reviews.id, reviewRowId));
 }
