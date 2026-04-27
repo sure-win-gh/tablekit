@@ -1,5 +1,5 @@
 // Pure ADMIN_EMAILS parser. Shared by lib/server/admin/auth.ts (server
-// components / actions) and middleware.ts (edge runtime), so it must
+// components / actions) and proxy.ts (edge runtime), so it must
 // NOT import server-only or any Node-only API.
 //
 // ADMIN_EMAILS is comma- or whitespace-separated; entries are trimmed

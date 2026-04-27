@@ -4,11 +4,15 @@
 // deprecation warning on the old name. The exported function is named
 // `proxy` to match the new convention.
 //
-// Two jobs:
+// Three jobs:
 //   1. Keep the Supabase session cookie fresh. Without the
 //      getUser() call + cookie plumbing below, the sb-* cookies go
 //      stale on idle and users get silently logged out.
 //   2. Gate /dashboard/* behind an authenticated session.
+//   3. Gate /admin/* behind the ADMIN_EMAILS allowlist (Tablekit-staff
+//      only). Returns 404 to non-allowlisted users so the surface
+//      stays unadvertised. Defense in depth: every (admin) server
+//      component also calls requirePlatformAdmin().
 //
 // Matcher excludes static assets, the health endpoint, and the auth
 // callback (which has its own server-side session exchange).
@@ -16,15 +20,25 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { isPlatformAdminEmail } from "@/lib/server/admin/allowlist";
+
+function notFound(): NextResponse {
+  return new NextResponse(null, { status: 404 });
+}
+
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
+
+  const isAdminRoute = request.nextUrl.pathname.startsWith("/admin");
 
   const supabaseUrl = process.env["NEXT_PUBLIC_SUPABASE_URL"];
   const supabaseKey = process.env["NEXT_PUBLIC_SUPABASE_ANON_KEY"];
   if (!supabaseUrl || !supabaseKey) {
-    // Misconfigured env — let the request through so the server can
-    // render its own "requireEnv" error rather than silently 500ing
-    // from the edge (which is harder to debug).
+    // /admin must fail closed even when env is misconfigured — losing
+    // the gate to an env typo would be a worst-case outcome.
+    if (isAdminRoute) return notFound();
+    // Other routes: let through so the server can render its own
+    // "requireEnv" error rather than silently 500ing from the edge.
     return response;
   }
 
@@ -48,6 +62,10 @@ export async function proxy(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  if (isAdminRoute) {
+    if (!user || !isPlatformAdminEmail(user.email)) return notFound();
+  }
 
   if (!user && request.nextUrl.pathname.startsWith("/dashboard")) {
     const url = request.nextUrl.clone();

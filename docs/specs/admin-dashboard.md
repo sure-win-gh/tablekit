@@ -34,7 +34,7 @@ Layout has a distinct red/orange "ADMIN" pill in the top bar so it's never confu
 ## Auth gate (defense in depth)
 
 - New `lib/admin/auth.ts` exposing `requirePlatformAdmin()`.
-- `middleware.ts` extended to gate `/admin/*` at the edge against `process.env.ADMIN_EMAILS`.
+- `proxy.ts` extended to gate `/admin/*` at the edge against `process.env.ADMIN_EMAILS`.
 - Every `(admin)` server component / action also calls `requirePlatformAdmin()` — belt and braces.
 - Every admin login writes `platform_admin.login` to the audit log via `adminDb()`.
 - All `(admin)` queries use the existing `adminDb()` (service role, RLS bypass) from `lib/server/admin/db.ts`. The `(admin)` directory is added to the existing `adminDb` import allowlist enforced by `code-reviewer`.
@@ -136,20 +136,20 @@ Layout has a distinct red/orange "ADMIN" pill in the top bar so it's never confu
 - `app/(admin)/admin/feature-adoption/page.tsx` — % adoption per feature.
 - `app/(admin)/admin/audit/page.tsx` — audit feed.
 - `lib/server/admin/auth.ts` — `requirePlatformAdmin()`.
-- `lib/server/admin/allowlist.ts` — pure `ADMIN_EMAILS` parser shared with middleware (no `server-only` import).
+- `lib/server/admin/allowlist.ts` — pure `ADMIN_EMAILS` parser shared with proxy (no `server-only` import).
 - `lib/server/admin/dashboard/audit.ts` — platform audit writer (separate from org-scoped `lib/server/admin/audit.ts`).
 - `lib/server/admin/dashboard/metrics/{signups,bookings,messages,activation-funnel,feature-adoption,activity-score,top-orgs,connect-funnel,venues-search,operations,platform-audit}.ts` — typed query functions; signature `(db: AdminDb, bounds: Bounds) => Promise<T>`.
 - `lib/server/admin/dashboard/stripe-billing.ts` — live Stripe MRR + sub mix with 5-min cache + degraded fallback.
 - `lib/server/admin/dashboard/filter.ts` — UTC-fixed sibling of `lib/reports/filter.ts`.
 - `lib/server/admin/dashboard/csv.ts` — re-exports `lib/reports/csv.ts` so admin paths don't reach across into operator code.
-- `middleware.ts` (extend) — edge gate for `/admin/*`.
-- `tests/integration/admin-auth.test.ts` — non-allowlisted email is rejected (defense in depth verified at both middleware and server-component layers).
+- `proxy.ts` (extend) — edge gate for `/admin/*`.
+- `tests/integration/admin-auth.test.ts` — non-allowlisted email is rejected (defense in depth verified at both proxy and server-component layers).
 - `tests/integration/admin-metrics.test.ts` — seeded queries return expected shape.
 
 ## Acceptance criteria
 
 - [ ] `/admin/*` unreachable for any user not in `ADMIN_EMAILS` (integration test).
-- [ ] Allowlist enforced in middleware **and** in every `(admin)` server component.
+- [ ] Allowlist enforced in proxy **and** in every `(admin)` server component.
 - [ ] Every admin login records `platform_admin.login` in audit log via `adminDb()`.
 - [ ] Overview loads in <1s at 10k bookings / 1k orgs (Stripe cache hit).
 - [ ] Stripe API failure does not break the dashboard — financials degrade to last cached value + warning banner.

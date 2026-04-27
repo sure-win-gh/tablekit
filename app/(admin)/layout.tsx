@@ -5,7 +5,7 @@ import { requirePlatformAdmin } from "@/lib/server/admin/auth";
 // Tablekit-staff admin chrome. Distinct from operator dashboard:
 // rose-coloured ADMIN pill so this surface can never be mistaken for
 // a customer-facing view. Every (admin) page also calls
-// requirePlatformAdmin() in its server component — middleware.ts is
+// requirePlatformAdmin() in its server component — proxy.ts is
 // the first line of defence; this layout is the second.
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {

@@ -5,7 +5,7 @@
 //   - missing session  -> redirect /login (recoverable UX path)
 //   - non-allowlisted  -> throw (security probe; surfaces in Sentry)
 //
-// Defense in depth: middleware.ts also blocks /admin/* at the edge for
+// Defense in depth: proxy.ts also blocks /admin/* at the edge for
 // non-allowlisted users. Both layers must be in place — losing one
 // mustn't open the door.
 //
