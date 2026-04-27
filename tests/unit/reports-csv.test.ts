@@ -55,4 +55,31 @@ describe("toCsv", () => {
     const out = toCsv([] as Array<{ a: number }>, [{ header: "a", value: (r) => r.a }]);
     expect(out).toBe(BOM + "a\r\n");
   });
+
+  it("guards string cells starting with =, +, -, @ against spreadsheet formula execution", () => {
+    const out = toCsv(
+      [
+        { v: "=HYPERLINK(0)" },
+        { v: "+SUM(A1)" },
+        { v: "-cmd|calc" },
+        { v: "@import" },
+        { v: "\tlead-tab" },
+      ],
+      [{ header: "v", value: (r) => r.v }],
+    );
+    expect(out).toBe(
+      BOM +
+        "v\r\n" +
+        "'=HYPERLINK(0)\r\n" +
+        "'+SUM(A1)\r\n" +
+        "'-cmd|calc\r\n" +
+        "'@import\r\n" +
+        "'\tlead-tab\r\n",
+    );
+  });
+
+  it("does not guard numeric cells — negative numbers stay summable", () => {
+    const out = toCsv([{ n: -150 }], [{ header: "n", value: (r) => r.n }]);
+    expect(out).toBe(BOM + "n\r\n-150\r\n");
+  });
 });

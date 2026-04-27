@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Clock,
   CreditCard,
+  Database,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -70,6 +71,7 @@ export function SidebarShell({
     { href: "/dashboard/overview", label: "Overview", icon: LayoutDashboard, show: data.org.multiVenue },
     { href: "/dashboard/organisation", label: "Organisation", icon: Building2 },
     { href: "/dashboard/guests", label: "Guests", icon: Users, show: data.org.groupCrmEnabled },
+    { href: "/dashboard/data", label: "Data", icon: Database },
     { href: "/dashboard/privacy-requests", label: "Privacy requests", icon: ShieldCheck },
   ];
 

@@ -84,6 +84,8 @@ export type AuditAction =
   // multi-venue phase
   | "org.group_crm.enabled"
   | "org.group_crm.disabled"
+  // import-export phase
+  | "data.exported"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
@@ -105,7 +107,8 @@ export type AuditTargetType =
   | "message"
   | "waitlist"
   | "dsar_request"
-  | "review";
+  | "review"
+  | "export";
 
 export type AuditInput = {
   organisationId: string;
