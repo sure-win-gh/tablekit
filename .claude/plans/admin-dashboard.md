@@ -25,14 +25,15 @@ PR1 includes a one-line spec edit to update the path references. No functional i
 
 ## Plan size & PR split
 
-**Estimated total diff: ~1,900–2,500 LoC across ~30 files.** Well over the 300-line guideline. Splitting into **four PRs** as below.
+**Estimated total diff: ~1,900–2,500 LoC across ~30 files.** Well over the 300-line guideline. Splitting into **five PRs** as below (revised after PR1 — original Overview+Venues PR was too big to keep under the limit so venues split out into its own PR).
 
-| PR | Goal | Est. diff |
-|---|---|---|
-| **PR1 — Foundation** | Auth gate, proxy, platform audit log table, "coming soon" placeholder. Ships a hard auth boundary; nothing functional yet. | ~250 LoC |
-| **PR2 — Overview & Venues** | KPI tiles + searchable venue list + drill-down. No charts; tables only. | ~300 LoC |
-| **PR3 — Financials + recharts** | Live Stripe MRR + sub mix + Connect funnel. Adds `recharts`. Sparklines on overview. | ~250 LoC |
-| **PR4 — Operations / Feature adoption / Audit feed** | The remaining four pages + CSV exports. Spec → `shipped`. | ~300 LoC |
+| PR | Goal | Est. diff | Status |
+|---|---|---|---|
+| **PR1 — Foundation** | Auth gate, proxy.ts integration, platform audit log table, "coming soon" placeholder. Ships a hard auth boundary; nothing functional yet. | ~250 LoC | shipped (`70e85e8` + `f76fc2e`, fix `0e9d308`) |
+| **PR2 — Overview KPIs** | Filter + CSV helpers, signups/bookings/messages metric queries, KPI tiles on overview page. Cross-org aggregation + no-decrypt invariant test. | ~500 LoC | in progress |
+| **PR3 — Venues search + drill-down** | Venues list with org/email/slug search + activity score; per-org drill-down (counts, members, audit feed, Stripe Connect status). No decryption. | ~400 LoC | pending |
+| **PR4 — Financials + recharts** | Live Stripe MRR + sub mix + Connect funnel. Adds `recharts` (code-split). Sparklines on overview. | ~250 LoC | pending |
+| **PR5 — Operations / Feature adoption / Audit feed** | Remaining three pages + CSV exports. Spec → `shipped`. | ~300 LoC | pending |
 
 Each PR is independently reviewable, ships in working order (no half-broken UI), and is reversible by `git revert`.
 
