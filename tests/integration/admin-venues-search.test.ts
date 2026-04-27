@@ -150,6 +150,17 @@ describe("searchVenues", () => {
     expect(b?.activityScore).toBe(0);
     expect(b?.bookings14d).toBe(0);
   });
+
+  it("date columns are Date objects, not strings", async () => {
+    // Regression: db.execute(sql`...`) doesn't apply the column type
+    // parser, so timestamptz comes back as ISO string. Mapper must
+    // coerce to Date so the page layer can call toISOString().
+    const rows = await searchVenues(db, "");
+    const a = rows.find((r) => r.orgId === orgAId);
+    expect(a?.createdAt).toBeInstanceOf(Date);
+    expect(a?.lastBookingAt).toBeInstanceOf(Date);
+    expect(a?.lastLoginAt).toBeInstanceOf(Date);
+  });
 });
 
 describe("getOrgDetail", () => {

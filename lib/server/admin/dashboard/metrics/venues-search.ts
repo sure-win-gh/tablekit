@@ -38,20 +38,29 @@ export type VenueSearchRow = {
   activityScore: number;
 };
 
+// pg returns timestamptz columns as Date when going through Drizzle's
+// schema-typed query builder, but as ISO strings when going through
+// db.execute(sql`...`) — that path doesn't apply the column type
+// parser. Accept both shapes; normalise to Date in the mapper below.
 type Row = {
   org_id: string;
   org_name: string;
   slug: string;
   plan: string;
-  created_at: Date;
+  created_at: Date | string;
   venue_count: string | number;
   owner_email: string | null;
-  last_booking_at: Date | null;
-  last_login_at: Date | null;
+  last_booking_at: Date | string | null;
+  last_login_at: Date | string | null;
   bookings_14d: string | number;
   logins_14d: string | number;
   messages_14d: string | number;
 };
+
+function toDate(v: Date | string | null): Date | null {
+  if (v === null) return null;
+  return v instanceof Date ? v : new Date(v);
+}
 
 function activityScore(b: number, l: number, m: number): number {
   const bookings = Math.min(b / 20, 1) * 50;
@@ -130,11 +139,11 @@ export async function searchVenues(
       orgName: r.org_name,
       slug: r.slug,
       plan: r.plan,
-      createdAt: r.created_at,
+      createdAt: toDate(r.created_at) as Date,
       venueCount: Number(r.venue_count),
       ownerEmail: r.owner_email,
-      lastBookingAt: r.last_booking_at,
-      lastLoginAt: r.last_login_at,
+      lastBookingAt: toDate(r.last_booking_at),
+      lastLoginAt: toDate(r.last_login_at),
       bookings14d: b,
       logins14d: l,
       messages14d: m,
