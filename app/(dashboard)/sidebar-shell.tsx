@@ -195,10 +195,15 @@ export function SidebarShell({
         </div>
       </aside>
 
-      {/* Push the main content to the right of the sidebar at md+ */}
+      {/* Push the main content to the right of the sidebar at md+.
+          Sidebar widths are w-16 / w-60; the spacer is w-20 / w-64
+          so there's a 16px gutter between the sidebar's right edge
+          and the content area's left edge. The page's own px-8
+          padding stacks on top, giving ~48px from sidebar to the
+          first content element. */}
       <div
         aria-hidden
-        className={cn("hidden md:block", collapsed ? "w-16" : "w-60")}
+        className={cn("hidden md:block", collapsed ? "w-20" : "w-64")}
       />
     </>
   );
