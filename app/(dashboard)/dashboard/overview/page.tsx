@@ -98,7 +98,7 @@ export default async function OverviewPage() {
   );
 
   return (
-    <main className="flex flex-1 flex-col py-6">
+    <main className="flex flex-1 flex-col py-6 pr-8">
       <header className="border-b border-hairline pb-4">
         <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-ink">
           <LayoutDashboard className="h-6 w-6 text-coral" aria-hidden />

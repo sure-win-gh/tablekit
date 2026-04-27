@@ -29,7 +29,7 @@ export default async function VenuesPage() {
   });
 
   return (
-    <main className="flex flex-1 flex-col py-6">
+    <main className="flex flex-1 flex-col py-6 pr-8">
       <header className="flex flex-wrap items-baseline justify-between gap-3 border-b border-hairline pb-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-ink">Venues</h1>
