@@ -8,6 +8,8 @@ import { requireRole } from "@/lib/auth/require-role";
 import { areas, venueTables, venues } from "@/lib/db/schema";
 import { adminDb } from "@/lib/server/admin/db";
 
+import type { ActionState } from "./types";
+
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
@@ -46,8 +48,6 @@ async function assertTableInOrg(tableId: string, orgId: string): Promise<{ venue
   if (!row) throw new Error("table not found or not in your organisation");
   return { venueId: row.venueId };
 }
-
-type ActionState = { status: "idle" } | { status: "error"; message: string } | { status: "saved" };
 
 // ---------------------------------------------------------------------------
 // Areas
@@ -259,6 +259,3 @@ export async function deleteTable(_prev: ActionState, formData: FormData): Promi
   revalidatePath(`/dashboard/venues/${venueId}/floor-plan`);
   return { status: "saved" };
 }
-
-// Re-export ActionState so client components can type their useActionState.
-export type { ActionState };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import {
   createArea,
@@ -9,8 +9,8 @@ import {
   deleteTable,
   updateArea,
   updateTable,
-  type ActionState,
 } from "./actions";
+import type { ActionState } from "./types";
 
 const idle: ActionState = { status: "idle" };
 
@@ -24,6 +24,59 @@ function FormMessage({ state }: { state: ActionState }) {
     );
   }
   return null;
+}
+
+// Two-step inline delete confirmation. Click the trigger → it morphs
+// into "Yes, delete" + "No, cancel". Mirrors the RefundButton pattern
+// in bookings/forms.tsx — avoids a modal for an MVP UI while
+// preventing one-click accidents.
+function ConfirmDelete({
+  action,
+  pending,
+  hiddenName,
+  hiddenValue,
+  idleLabel,
+}: {
+  action: (payload: FormData) => void;
+  pending: boolean;
+  hiddenName: string;
+  hiddenValue: string;
+  idleLabel: string;
+}) {
+  const [armed, setArmed] = useState(false);
+
+  if (!armed) {
+    return (
+      <button
+        type="button"
+        onClick={() => setArmed(true)}
+        className="text-xs text-red-600 hover:underline"
+      >
+        {idleLabel}
+      </button>
+    );
+  }
+
+  return (
+    <form action={action} className="flex items-center gap-2">
+      <input type="hidden" name={hiddenName} value={hiddenValue} />
+      <button
+        type="submit"
+        disabled={pending}
+        className="text-xs font-medium text-red-600 hover:underline disabled:opacity-50"
+      >
+        {pending ? "…" : "Yes, delete"}
+      </button>
+      <button
+        type="button"
+        onClick={() => setArmed(false)}
+        disabled={pending}
+        className="text-xs text-ash hover:text-ink disabled:opacity-50"
+      >
+        No, cancel
+      </button>
+    </form>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -84,16 +137,13 @@ export function AreaHeader({ areaId, name }: { areaId: string; name: string }) {
           {updatePending ? "…" : "Save"}
         </button>
       </form>
-      <form action={deleteAction}>
-        <input type="hidden" name="area_id" value={areaId} />
-        <button
-          type="submit"
-          disabled={deletePending}
-          className="text-xs text-red-600 hover:underline disabled:opacity-50"
-        >
-          {deletePending ? "…" : "Delete area"}
-        </button>
-      </form>
+      <ConfirmDelete
+        action={deleteAction}
+        pending={deletePending}
+        hiddenName="area_id"
+        hiddenValue={areaId}
+        idleLabel="Delete area"
+      />
       <FormMessage state={updateState.status === "error" ? updateState : deleteState} />
     </div>
   );
@@ -218,16 +268,13 @@ export function TableRow({
           {updatePending ? "…" : "Save"}
         </button>
       </form>
-      <form action={deleteAction}>
-        <input type="hidden" name="table_id" value={tableId} />
-        <button
-          type="submit"
-          disabled={deletePending}
-          className="text-xs text-red-600 hover:underline disabled:opacity-50"
-        >
-          {deletePending ? "…" : "Delete"}
-        </button>
-      </form>
+      <ConfirmDelete
+        action={deleteAction}
+        pending={deletePending}
+        hiddenName="table_id"
+        hiddenValue={tableId}
+        idleLabel="Delete"
+      />
       <FormMessage state={updateState.status === "error" ? updateState : deleteState} />
     </div>
   );
