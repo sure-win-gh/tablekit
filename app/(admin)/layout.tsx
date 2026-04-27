@@ -14,13 +14,18 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between border-b border-hairline bg-white px-6 py-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <span className="rounded-full bg-rose px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-white">
             Admin
           </span>
-          <Link href="/admin" className="text-sm font-medium text-ink">
-            Tablekit platform
-          </Link>
+          <nav className="flex items-center gap-3 text-sm">
+            <Link href="/admin" className="font-medium text-ink hover:underline">
+              Overview
+            </Link>
+            <Link href="/admin/venues" className="font-medium text-ink hover:underline">
+              Venues
+            </Link>
+          </nav>
         </div>
         <div className="text-xs text-ash">{session.email}</div>
       </header>
