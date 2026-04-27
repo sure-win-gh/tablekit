@@ -150,7 +150,7 @@ async function upsertReviews(
   if (fetchedReviews.length === 0) return 0;
   const db = adminDb();
   const externalUrl = buildExternalUrl(placeId);
-  let count = 0;
+  const upsertedIds: string[] = [];
   for (const r of fetchedReviews) {
     const commentCipher = r.comment
       ? await encryptPii(organisationId, r.comment)
@@ -184,12 +184,14 @@ async function upsertReviews(
         },
       })
       .returning({ id: reviews.id });
-    // Fire escalation alert for low ratings. Idempotent on
-    // escalation_alert_at, so re-running on the same row is safe.
-    if (upserted) {
-      await sendEscalationAlertIfNeeded(upserted.id);
-    }
-    count++;
+    if (upserted) upsertedIds.push(upserted.id);
   }
-  return count;
+  // Fire escalation alerts in parallel after the upsert loop.
+  // Idempotent on escalation_alert_at — re-running on the same row
+  // is safe. allSettled so a single transient send failure can't
+  // abort the rest of the batch.
+  if (upsertedIds.length > 0) {
+    await Promise.allSettled(upsertedIds.map((id) => sendEscalationAlertIfNeeded(id)));
+  }
+  return upsertedIds.length;
 }

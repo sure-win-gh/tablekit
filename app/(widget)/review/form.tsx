@@ -70,8 +70,13 @@ export function ReviewForm({
             className="mt-0.5 h-4 w-4 rounded border-hairline"
           />
           <span>
-            Let the venue show your first name, rating, and comment on their public booking
-            page. You can ask them to take it down at any time.
+            Let the venue display your first name, rating, and comment on their public booking
+            page. The venue may turn this surface on at a later date. To withdraw later, contact
+            the venue and they&apos;ll ask TableKit to remove it. See our{" "}
+            <a href="/privacy" className="underline">
+              privacy notice
+            </a>{" "}
+            for how we handle this.
           </span>
         </label>
       ) : null}

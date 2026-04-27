@@ -7,7 +7,7 @@
 
 import "server-only";
 
-import { and, desc, eq, gte, isNotNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, isNull, lt, sql } from "drizzle-orm";
 
 import { bookingTables, guests, reviews, services, venueTables, venues } from "@/lib/db/schema";
 import { adminDb } from "@/lib/server/admin/db";
@@ -173,6 +173,11 @@ export async function loadPublicShowcase(venueId: string): Promise<PublicShowcas
         isNotNull(reviews.showcaseConsentAt),
         isNotNull(reviews.commentCipher),
         sql`${reviews.rating} >= 4`,
+        // Belt-and-braces: erasure scrubs comment_cipher (which the
+        // predicate above already drops), but the contract is that
+        // erased guests do not appear on public surfaces regardless
+        // of the cipher state.
+        isNull(guests.erasedAt),
       ),
     )
     .orderBy(desc(reviews.submittedAt))
@@ -182,8 +187,8 @@ export async function loadPublicShowcase(venueId: string): Promise<PublicShowcas
     rows.map(async (r) => {
       // Decrypt failures are skipped — the showcase silently drops
       // unreadable rows rather than surface "[error]" placeholders to
-      // public visitors. Operator-side dashboard already flags
-      // decrypt issues.
+      // public visitors. We do log so corruption is observable in
+      // ops telemetry; only review id + venue id, never the cipher.
       try {
         const comment = await decryptPii(venue.organisationId, r.commentCipher as Ciphertext);
         return {
@@ -194,6 +199,10 @@ export async function loadPublicShowcase(venueId: string): Promise<PublicShowcas
           submittedAt: r.submittedAt,
         } satisfies PublicShowcaseReview;
       } catch {
+        console.error("[lib/public/venue.ts] showcase decrypt failed", {
+          reviewId: r.id,
+          venueId,
+        });
         return null;
       }
     }),

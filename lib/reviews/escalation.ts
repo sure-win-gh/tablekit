@@ -73,7 +73,9 @@ async function trySendAlert(reviewId: string): Promise<void> {
   // Claim the alert atomically — the conditional UPDATE means a
   // concurrent caller (re-sync after a failed first attempt) can't
   // both send. If we win, we proceed to render+send; if we lose, we
-  // bail.
+  // bail. On any post-claim failure we roll the claim back so a
+  // retry can win — otherwise a transient render/send error would
+  // permanently silence the alert for this row.
   const claimed = await db
     .update(reviews)
     .set({ escalationAlertAt: sql`now()` })
@@ -81,52 +83,63 @@ async function trySendAlert(reviewId: string): Promise<void> {
     .returning({ id: reviews.id });
   if (claimed.length === 0) return;
 
-  let commentSnippet: string | null = null;
-  if (row.commentCipher) {
-    try {
-      const full = await decryptPii(row.organisationId, row.commentCipher as Ciphertext);
-      commentSnippet =
-        full.length > COMMENT_SNIPPET_LEN ? full.slice(0, COMMENT_SNIPPET_LEN - 1) + "…" : full;
-    } catch {
-      commentSnippet = null;
+  try {
+    let commentSnippet: string | null = null;
+    if (row.commentCipher) {
+      try {
+        const full = await decryptPii(row.organisationId, row.commentCipher as Ciphertext);
+        commentSnippet =
+          full.length > COMMENT_SNIPPET_LEN ? full.slice(0, COMMENT_SNIPPET_LEN - 1) + "…" : full;
+      } catch {
+        commentSnippet = null;
+      }
     }
+
+    const appUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "http://localhost:3000";
+    const dashboardUrl = `${appUrl}/dashboard/venues/${row.venueId}/reviews`;
+    // Unsubscribe-from-alerts URL points at venue settings — operators
+    // toggle the feature off there. Re-uses the layout's unsubscribe
+    // slot rather than introducing a new email-shape just for alerts.
+    const unsubscribeUrl = `${appUrl}/dashboard/venues/${row.venueId}/settings#escalation`;
+
+    const rendered = await renderReviewEscalationAlert({
+      venueName: row.venueName,
+      rating: row.rating,
+      source: row.source,
+      commentSnippet,
+      reviewerName: row.reviewerDisplayName,
+      dashboardUrl,
+      unsubscribeUrl,
+    });
+
+    await sendEmail({
+      to: recipient,
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      unsubscribeUrl,
+      // Operational alert — not a guest opt-out flow; mailbox
+      // providers must not POST against the dashboard URL.
+      oneClickUnsubscribe: false,
+      // Idempotency at the provider level too: review id is stable.
+      idempotencyKey: `review-escalation-${row.id}`,
+    });
+
+    await audit.log({
+      organisationId: row.organisationId,
+      actorUserId: null,
+      action: "review.escalated",
+      targetType: "review",
+      targetId: row.id,
+      metadata: { rating: row.rating, source: row.source, venueId: row.venueId },
+    });
+  } catch (err) {
+    await db
+      .update(reviews)
+      .set({ escalationAlertAt: null })
+      .where(eq(reviews.id, row.id));
+    throw err;
   }
-
-  const appUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "http://localhost:3000";
-  const dashboardUrl = `${appUrl}/dashboard/venues/${row.venueId}/reviews`;
-  // Unsubscribe-from-alerts URL points at venue settings — operators
-  // toggle the feature off there. Re-uses the layout's unsubscribe
-  // slot rather than introducing a new email-shape just for alerts.
-  const unsubscribeUrl = `${appUrl}/dashboard/venues/${row.venueId}/settings#escalation`;
-
-  const rendered = await renderReviewEscalationAlert({
-    venueName: row.venueName,
-    rating: row.rating,
-    source: row.source,
-    commentSnippet,
-    reviewerName: row.reviewerDisplayName,
-    dashboardUrl,
-    unsubscribeUrl,
-  });
-
-  await sendEmail({
-    to: recipient,
-    subject: rendered.subject,
-    html: rendered.html,
-    text: rendered.text,
-    unsubscribeUrl,
-    // Idempotency at the provider level too: review id is stable.
-    idempotencyKey: `review-escalation-${row.id}`,
-  });
-
-  await audit.log({
-    organisationId: row.organisationId,
-    actorUserId: null,
-    action: "review.escalated",
-    targetType: "review",
-    targetId: row.id,
-    metadata: { rating: row.rating, source: row.source, venueId: row.venueId },
-  });
 }
 
 function parseThreshold(raw: unknown): number {
@@ -140,7 +153,10 @@ async function resolveRecipient(
 ): Promise<string | null> {
   const configured = settings["escalationEmail"];
   if (typeof configured === "string" && configured.length > 0) return configured;
-  // Fallback: an owner's email (plaintext per existing convention).
+  // Fallback: the org's first owner by membership creation time.
+  // orderBy is required — Postgres makes no order guarantee, and a
+  // multi-owner org should get the same recipient on every alert
+  // rather than shifting between rows.
   const db = adminDb();
   const [row] = await db
     .select({ email: users.email })
@@ -149,6 +165,7 @@ async function resolveRecipient(
     .where(
       and(eq(memberships.organisationId, organisationId), eq(memberships.role, "owner")),
     )
+    .orderBy(memberships.createdAt)
     .limit(1);
   return row?.email ?? null;
 }

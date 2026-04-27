@@ -21,6 +21,13 @@ export type SendEmailInput = {
   // channel) by the dispatch layer so the same guest can opt out of
   // one venue without affecting another.
   unsubscribeUrl: string;
+  // RFC 8058 one-click compatibility. Default true — guest-facing
+  // emails accept POST against the unsubscribe URL. Operational
+  // alerts (escalation alerts to operators) should set this to false:
+  // their unsubscribe URL is a dashboard settings link that 405s on
+  // POST, and a mismatched header would let mailbox providers
+  // downgrade sender reputation.
+  oneClickUnsubscribe?: boolean;
   // Forwarded to Resend so they can dedupe on retries.
   idempotencyKey: string;
 };
@@ -47,6 +54,14 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
     throw new EmailSendError("messaging kill-switch engaged", "messaging-disabled", false);
   }
 
+  const oneClick = input.oneClickUnsubscribe !== false;
+  const headers: Record<string, string> = {
+    "List-Unsubscribe": `<${input.unsubscribeUrl}>`,
+  };
+  if (oneClick) {
+    headers["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
+  }
+
   try {
     const r = await resend().emails.send(
       {
@@ -55,10 +70,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
         subject: input.subject,
         html: input.html,
         ...(input.text ? { text: input.text } : {}),
-        headers: {
-          "List-Unsubscribe": `<${input.unsubscribeUrl}>`,
-          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-        },
+        headers,
       },
       { idempotencyKey: input.idempotencyKey },
     );

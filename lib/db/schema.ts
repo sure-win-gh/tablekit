@@ -433,15 +433,21 @@ export const bookingEvents = pgTable(
 // where booking_id is always set (unique).
 //
 // Erasure: when a guest is erased (guests.erased_at set), the future
-// scrub job MUST null `comment_cipher` AND `response_cipher` AND
-// `responded_by_user_id` AND `responded_at` (the latter to keep the
-// reviews_response_consistency_check satisfied), and overwrite
-// `rating` to 0 (sentinel; CHECK allows 1..5 only on insert/update,
-// but a SECURITY DEFINER scrub function with the constraint deferred
-// can null/zero it). Operator attribution is dropped on guest
-// erasure to leave no path back to the data subject. Cascade-delete
-// is a defence-in-depth fallback for org-delete, not the primary
-// erasure path. See docs/playbooks/gdpr.md §DSAR.
+// scrub job MUST null all of the following (and overwrite `rating` to
+// 0 as a sentinel — CHECK allows 1..5, so a SECURITY DEFINER scrub
+// function with the constraint deferred is needed):
+//   - comment_cipher
+//   - response_cipher, responded_at, responded_by_user_id
+//     (cleared together to keep reviews_response_consistency_check)
+//   - recovery_message_cipher, recovery_offer_at,
+//     recovery_offered_by_user_id (cleared together to keep
+//     reviews_recovery_consistency_check)
+//   - showcase_consent_at (consent record no longer references a
+//     living data subject)
+// Operator attribution is dropped on guest erasure to leave no path
+// back to the data subject. Cascade-delete is a defence-in-depth
+// fallback for org-delete, not the primary erasure path. See
+// docs/playbooks/gdpr.md §DSAR.
 
 export const reviewSource = pgEnum("review_source", [
   "internal",

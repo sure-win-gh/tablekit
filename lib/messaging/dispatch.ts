@@ -16,7 +16,7 @@ import "server-only";
 
 import { eq, sql } from "drizzle-orm";
 
-import { messages } from "@/lib/db/schema";
+import { messages, reviews } from "@/lib/db/schema";
 import { EmailSendError, sendEmail } from "@/lib/email/send";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
@@ -179,6 +179,18 @@ async function markFailed(row: ClaimedRow, reason: string): Promise<"failed"> {
       reason,
     },
   });
+  // Recovery offers claim review.recovery_offer_at + persist the
+  // cipher BEFORE the message reaches the dispatcher (Phase 6 action).
+  // If we exhaust retries or hit a permanent reject, the operator's
+  // dashboard would otherwise show "Recovery offer sent." forever.
+  // Reset both columns together to keep reviews_recovery_consistency_check
+  // satisfied so a retry can be triggered manually.
+  if (row.template === "review.recovery_offer") {
+    await db
+      .update(reviews)
+      .set({ recoveryMessageCipher: null, recoveryOfferAt: null, recoveryOfferedByUserId: null })
+      .where(eq(reviews.bookingId, row.bookingId));
+  }
   return "failed";
 }
 

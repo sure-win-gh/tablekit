@@ -70,6 +70,7 @@ export async function loadMessageContext(input: LoadContextInput): Promise<LoadC
       guestPhoneInvalid: guests.phoneInvalid,
       guestEmailUnsubVenues: guests.emailUnsubscribedVenues,
       guestSmsUnsubVenues: guests.smsUnsubscribedVenues,
+      guestErasedAt: guests.erasedAt,
     })
     .from(bookings)
     .innerJoin(services, eq(services.id, bookings.serviceId))
@@ -79,6 +80,14 @@ export async function loadMessageContext(input: LoadContextInput): Promise<LoadC
     .limit(1);
 
   if (!row) return { ok: false, reason: "booking-not-found" };
+
+  // Erased-guest gate. Belt-and-braces: the future scrub job nulls
+  // the guest's email_cipher (which the decrypt below would also
+  // catch), but a queued message landing on an erased guest must
+  // never fire regardless of cipher state. Surfaces as
+  // missing-recipient so the dispatch worker marks failed without
+  // surfacing PII or special-casing the audit trail.
+  if (row.guestErasedAt) return { ok: false, reason: "missing-recipient" };
 
   // Per-channel suppression check — don't even build the context if
   // we shouldn't send. Lets the worker mark the row 'failed' with a

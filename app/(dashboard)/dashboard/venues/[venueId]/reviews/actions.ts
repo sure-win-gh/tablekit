@@ -255,6 +255,7 @@ export async function sendRecoveryOffer(
       and(
         eq(reviews.id, row.id),
         eq(reviews.organisationId, orgId),
+        eq(reviews.venueId, venueId),
         sql`${reviews.recoveryOfferAt} is null`,
       ),
     )
