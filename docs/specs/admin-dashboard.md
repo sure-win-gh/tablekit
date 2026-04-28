@@ -1,6 +1,6 @@
 # Spec: Internal admin dashboard (Tablekit-staff)
 
-**Status:** draft
+**Status:** shipped (2026-04-28) — CSV export + recharts sparklines deferred (see Out of scope)
 **Depends on:** `auth.md`, `bookings.md`, `messaging.md`, `payments.md`, `reporting.md` (operator-facing — distinct surface)
 
 ## What we're building
@@ -159,10 +159,14 @@ Layout has a distinct red/orange "ADMIN" pill in the top bar so it's never confu
 
 ## Out of scope (future work)
 
+- **CSV export per metric** — generic `lib/server/admin/dashboard/csv.ts` re-export is in the codebase but no `/admin/export/[metric]/route.ts` is wired yet. Drop in when the founder wants to share data outside the dashboard.
+- **Recharts sparklines on overview** — recharts not installed yet. Tables-only suffices for year-1 volumes; add when the page feels too dense for at-a-glance trends.
+- **Per-org MRR contribution** — pending confirmation of `organisations.stripe_customer_id` semantics (Connect customer vs billing customer). Add `stripe_billing_customer_id` if needed.
 - **`subscriptions` table + Stripe webhook sync** — promote when live-pull becomes a bottleneck or cohort analysis is needed.
 - **Trial state columns** on `organisations` — needed for real trial-conversion metrics.
 - **Cohort retention by signup month** — needs a denormalised cohort table to be cheap.
 - **SMS/Email cost-margin tracking** — needs Twilio/Resend cost columns on `messages`.
+- **`platform_audit_log` events surfaced in the audit feed** — currently only `audit_log` (org-scoped) is shown. Add a "Platform admin actions" section once we have more than `login` / `viewed_org` / `searched` events.
 - **Impersonation / "view as operator"** — significant security surface; defer.
 - **Manual subscription / refund actions** — do those in Stripe directly today; no admin write surface in v1.
 - **Push alerts / email digests** — pull-only dashboard for v1.

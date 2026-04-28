@@ -33,7 +33,7 @@ This folder holds the source of truth for every feature. Claude should read the 
 
 | #  | Spec                                       | Notes |
 |----|--------------------------------------------|-------|
-| 99 | [`admin-dashboard.md`](admin-dashboard.md) | Founder-only platform metrics, ops health, venue search. Live Stripe pull for MRR; env allowlist auth. |
+| 99 | [`admin-dashboard.md`](admin-dashboard.md) | shipped — founder-only platform metrics, ops health, venue search. Live Stripe pull for MRR; env allowlist auth. CSV export + recharts deferred. |
 
 ## How to use
 
