@@ -14,6 +14,7 @@ import { bookings } from "@/lib/db/schema";
 
 import { lastNDays, todayUtc } from "../filter";
 import type { AdminDb } from "../types";
+import type { DailyBucket } from "./signups";
 
 export type BookingCounts = {
   today: number;
@@ -58,4 +59,30 @@ export async function getBookingCounts(
   ]);
 
   return { today, last7d, last30d, sourceMix7d };
+}
+
+// Daily booking creation buckets, gap-filled with zeros. See the
+// matching helper in metrics/signups.ts — same SQL pattern.
+export async function getBookingsByDay(
+  db: AdminDb,
+  days = 30,
+  now: Date = new Date(),
+): Promise<DailyBucket[]> {
+  const bounds = lastNDays(days, now);
+  const result = await db.execute<{ day: string; n: string | number }>(sql`
+    SELECT to_char(d.day, 'YYYY-MM-DD') AS day, COALESCE(c.n, 0)::int AS n
+    FROM generate_series(
+      date_trunc('day', ${bounds.fromUtc}::timestamptz at time zone 'UTC')::date,
+      date_trunc('day', ${bounds.toUtc}::timestamptz at time zone 'UTC')::date,
+      '1 day'::interval
+    ) AS d(day)
+    LEFT JOIN (
+      SELECT date_trunc('day', created_at at time zone 'UTC')::date AS bucket, count(*)::int AS n
+      FROM bookings
+      WHERE created_at >= ${bounds.fromUtc} AND created_at <= ${bounds.toUtc}
+      GROUP BY 1
+    ) c ON c.bucket = d.day
+    ORDER BY d.day
+  `);
+  return result.rows.map((r) => ({ day: r.day, n: Number(r.n) }));
 }
