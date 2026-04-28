@@ -1,3 +1,4 @@
+import { Download } from "lucide-react";
 import Link from "next/link";
 
 import { Card, CardBody, CardHeader, CardTitle, Input } from "@/components/ui";
@@ -69,6 +70,13 @@ export default async function AdminAuditPage({
       <Card padding="lg">
         <CardHeader>
           <CardTitle>{rows.length} events</CardTitle>
+          <a
+            href={`/admin/export/audit${buildExportQs({ prefix, org_id })}`}
+            className="inline-flex items-center gap-1.5 rounded-pill border border-hairline bg-white px-3 py-1 text-xs font-semibold text-ink transition hover:border-ink"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden />
+            CSV
+          </a>
         </CardHeader>
         <CardBody>
           {rows.length === 0 ? (
@@ -121,4 +129,11 @@ export default async function AdminAuditPage({
       </Card>
     </div>
   );
+}
+
+function buildExportQs(params: { prefix: string; org_id: string }): string {
+  const parts: string[] = [];
+  if (params.prefix) parts.push(`prefix=${encodeURIComponent(params.prefix)}`);
+  if (params.org_id) parts.push(`org_id=${encodeURIComponent(params.org_id)}`);
+  return parts.length === 0 ? "" : `?${parts.join("&")}`;
 }
