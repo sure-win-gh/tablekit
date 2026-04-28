@@ -34,6 +34,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/admin/feature-adoption" className="font-medium text-ink hover:underline">
               Adoption
             </Link>
+            <Link href="/admin/audit" className="font-medium text-ink hover:underline">
+              Audit
+            </Link>
           </nav>
         </div>
         <div className="text-xs text-ash">{session.email}</div>
