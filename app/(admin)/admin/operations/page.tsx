@@ -1,3 +1,5 @@
+import { Download } from "lucide-react";
+
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui";
 import { requirePlatformAdmin } from "@/lib/server/admin/auth";
 import { adminDb } from "@/lib/server/admin/db";
@@ -66,6 +68,13 @@ export default async function AdminOperationsPage() {
       <Card padding="lg">
         <CardHeader>
           <CardTitle>Payment failures — last 7 days</CardTitle>
+          <a
+            href="/admin/export/payment-failures"
+            className="inline-flex items-center gap-1.5 rounded-pill border border-hairline bg-white px-3 py-1 text-xs font-semibold text-ink transition hover:border-ink"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden />
+            CSV
+          </a>
         </CardHeader>
         <CardBody>
           {snap.paymentFailures7d.length === 0 ? (

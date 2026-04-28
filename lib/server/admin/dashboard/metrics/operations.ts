@@ -55,6 +55,29 @@ export type OperationsSnapshot = {
 const FAILED_PAYMENT_STATUSES = ["failed", "requires_payment_method"];
 const OPEN_DSAR_STATUSES = ["pending", "in_progress"];
 
+// Exported standalone so the CSV export route can fire just this
+// query rather than the full snapshot (one round-trip, not four).
+export async function getPaymentFailures7d(db: AdminDb): Promise<PaymentFailureRow[]> {
+  const sevenDays = lastNDays(7);
+  return db
+    .select({
+      orgId: payments.organisationId,
+      orgName: organisations.name,
+      count: count(),
+      lastFailureAt: max(payments.createdAt),
+    })
+    .from(payments)
+    .innerJoin(organisations, eq(organisations.id, payments.organisationId))
+    .where(
+      and(
+        inArray(payments.status, FAILED_PAYMENT_STATUSES),
+        gte(payments.createdAt, sevenDays.fromUtc),
+      ),
+    )
+    .groupBy(payments.organisationId, organisations.name)
+    .orderBy(desc(count()));
+}
+
 export async function getOperationsSnapshot(db: AdminDb): Promise<OperationsSnapshot> {
   const sevenDays = lastNDays(7);
   const oneDay = lastNDays(1);
@@ -72,23 +95,7 @@ export async function getOperationsSnapshot(db: AdminDb): Promise<OperationsSnap
         .from(messages)
         .where(gte(messages.createdAt, sevenDays.fromUtc))
         .groupBy(messages.channel, messages.status),
-      db
-        .select({
-          orgId: payments.organisationId,
-          orgName: organisations.name,
-          count: count(),
-          lastFailureAt: max(payments.createdAt),
-        })
-        .from(payments)
-        .innerJoin(organisations, eq(organisations.id, payments.organisationId))
-        .where(
-          and(
-            inArray(payments.status, FAILED_PAYMENT_STATUSES),
-            gte(payments.createdAt, sevenDays.fromUtc),
-          ),
-        )
-        .groupBy(payments.organisationId, organisations.name)
-        .orderBy(desc(count())),
+      getPaymentFailures7d(db),
       db.select({ n: count() }).from(stripeEvents).where(gte(stripeEvents.receivedAt, oneDay.fromUtc)),
       db
         .select({ n: count() })
