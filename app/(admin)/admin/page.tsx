@@ -1,10 +1,17 @@
+import { Sparkline } from "@/components/admin/sparkline";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui";
 import { requirePlatformAdmin } from "@/lib/server/admin/auth";
 import { adminDb } from "@/lib/server/admin/db";
 import { platformAudit } from "@/lib/server/admin/dashboard/audit";
-import { getBookingCounts } from "@/lib/server/admin/dashboard/metrics/bookings";
+import {
+  getBookingCounts,
+  getBookingsByDay,
+} from "@/lib/server/admin/dashboard/metrics/bookings";
 import { getMessageVolume7d } from "@/lib/server/admin/dashboard/metrics/messages";
-import { getSignupCounts } from "@/lib/server/admin/dashboard/metrics/signups";
+import {
+  getSignupCounts,
+  getSignupsByDay,
+} from "@/lib/server/admin/dashboard/metrics/signups";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +20,11 @@ export default async function AdminOverviewPage() {
   await platformAudit.log({ actorEmail: session.email, action: "login" });
 
   const db = adminDb();
-  const [signups, bookings, messages] = await Promise.all([
+  const [signups, signupsByDay, bookings, bookingsByDay, messages] = await Promise.all([
     getSignupCounts(db),
+    getSignupsByDay(db, 30),
     getBookingCounts(db),
+    getBookingsByDay(db, 30),
     getMessageVolume7d(db),
   ]);
 
@@ -32,7 +41,7 @@ export default async function AdminOverviewPage() {
         <div className="grid grid-cols-3 gap-3">
           <Stat label="Today" value={signups.today.toString()} />
           <Stat label="Last 7 days" value={signups.last7d.toString()} />
-          <Stat label="Last 30 days" value={signups.last30d.toString()} />
+          <Stat label="Last 30 days" value={signups.last30d.toString()} sparkline={signupsByDay} />
         </div>
       </Section>
 
@@ -40,7 +49,11 @@ export default async function AdminOverviewPage() {
         <div className="grid grid-cols-3 gap-3">
           <Stat label="Today" value={bookings.today.toString()} />
           <Stat label="Last 7 days" value={bookings.last7d.toString()} />
-          <Stat label="Last 30 days" value={bookings.last30d.toString()} />
+          <Stat
+            label="Last 30 days"
+            value={bookings.last30d.toString()}
+            sparkline={bookingsByDay}
+          />
         </div>
         {bookings.sourceMix7d.length === 0 ? (
           <Empty message="No bookings in the last 7 days." />
@@ -103,11 +116,24 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({
+  label,
+  value,
+  sparkline,
+}: {
+  label: string;
+  value: string;
+  sparkline?: { day: string; n: number }[];
+}) {
   return (
     <div className="rounded-card border border-hairline bg-white px-3 py-2">
       <div className="text-xs text-ash">{label}</div>
       <div className="text-2xl font-bold tabular-nums tracking-tight text-ink">{value}</div>
+      {sparkline && sparkline.length > 0 ? (
+        <div className="mt-1">
+          <Sparkline data={sparkline} />
+        </div>
+      ) : null}
     </div>
   );
 }

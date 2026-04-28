@@ -160,7 +160,7 @@ Layout has a distinct red/orange "ADMIN" pill in the top bar so it's never confu
 ## Out of scope (future work)
 
 - **CSV export per metric** — venues / audit feed / payment failures / Connect funnel are wired. Remaining (overview KPIs, feature adoption, org drill-down) are small enough to add when the need arises.
-- **Recharts sparklines on overview** — recharts not installed yet. Tables-only suffices for year-1 volumes; add when the page feels too dense for at-a-glance trends.
+- **Headline trend charts** — sparklines on the overview KPI tiles ship today (signups + bookings, 30-day daily buckets, recharts code-split into admin chunks). A larger trend chart (e.g. MRR over time) is still on the table when the data shape warrants it.
 - **Per-org MRR contribution** — pending confirmation of `organisations.stripe_customer_id` semantics (Connect customer vs billing customer). Add `stripe_billing_customer_id` if needed.
 - **`subscriptions` table + Stripe webhook sync** — promote when live-pull becomes a bottleneck or cohort analysis is needed.
 - **Trial state columns** on `organisations` — needed for real trial-conversion metrics.
