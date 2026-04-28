@@ -159,7 +159,7 @@ Layout has a distinct red/orange "ADMIN" pill in the top bar so it's never confu
 
 ## Out of scope (future work)
 
-- **CSV export per metric** — generic `lib/server/admin/dashboard/csv.ts` re-export is in the codebase but no `/admin/export/[metric]/route.ts` is wired yet. Drop in when the founder wants to share data outside the dashboard.
+- **CSV export per metric** — venues / audit feed / payment failures / Connect funnel are wired. Remaining (overview KPIs, feature adoption, org drill-down) are small enough to add when the need arises.
 - **Recharts sparklines on overview** — recharts not installed yet. Tables-only suffices for year-1 volumes; add when the page feels too dense for at-a-glance trends.
 - **Per-org MRR contribution** — pending confirmation of `organisations.stripe_customer_id` semantics (Connect customer vs billing customer). Add `stripe_billing_customer_id` if needed.
 - **`subscriptions` table + Stripe webhook sync** — promote when live-pull becomes a bottleneck or cohort analysis is needed.

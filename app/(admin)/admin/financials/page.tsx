@@ -1,3 +1,5 @@
+import { Download } from "lucide-react";
+
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui";
 import { requirePlatformAdmin } from "@/lib/server/admin/auth";
 import { adminDb } from "@/lib/server/admin/db";
@@ -64,6 +66,13 @@ export default async function AdminFinancialsPage() {
       <Card padding="lg">
         <CardHeader>
           <CardTitle>Stripe Connect onboarding funnel</CardTitle>
+          <a
+            href="/admin/export/connect-funnel"
+            className="inline-flex items-center gap-1.5 rounded-pill border border-hairline bg-white px-3 py-1 text-xs font-semibold text-ink transition hover:border-ink"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden />
+            CSV
+          </a>
         </CardHeader>
         <CardBody>
           <table className="w-full text-xs">
