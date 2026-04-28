@@ -1,3 +1,4 @@
+import { Download } from "lucide-react";
 import Link from "next/link";
 
 import { Card, CardBody, CardHeader, CardTitle, Input } from "@/components/ui";
@@ -69,6 +70,13 @@ export default async function AdminVenuesPage({
             {rows.length} {rows.length === 1 ? "organisation" : "organisations"}
             {q ? <span className="text-ash"> matching “{q}”</span> : null}
           </CardTitle>
+          <a
+            href={`/admin/export/venues${q ? `?q=${encodeURIComponent(q)}` : ""}`}
+            className="inline-flex items-center gap-1.5 rounded-pill border border-hairline bg-white px-3 py-1 text-xs font-semibold text-ink transition hover:border-ink"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden />
+            CSV
+          </a>
         </CardHeader>
         <CardBody>
           {rows.length === 0 ? (
