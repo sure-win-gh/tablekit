@@ -243,6 +243,54 @@ export async function updateTable(_prev: ActionState, formData: FormData): Promi
   return { status: "saved" };
 }
 
+// Position-only update for the canvas drag-to-reposition flow.
+// Separate from updateTable() so the canvas doesn't have to round-trip
+// label/cover/shape on every drag-end.
+const TablePositionSchema = z.object({
+  tableId: z.uuid(),
+  x: z.coerce.number().int().min(0).max(100),
+  y: z.coerce.number().int().min(0).max(100),
+  w: z.coerce.number().int().min(1).max(40),
+  h: z.coerce.number().int().min(1).max(40),
+});
+
+export async function saveTablePosition(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = TablePositionSchema.safeParse({
+    tableId: formData.get("table_id"),
+    x: formData.get("x"),
+    y: formData.get("y"),
+    w: formData.get("w"),
+    h: formData.get("h"),
+  });
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: parsed.error.issues[0]?.message ?? "Bad position.",
+    };
+  }
+
+  const { orgId } = await requireRole("manager");
+  const { venueId } = await assertTableInOrg(parsed.data.tableId, orgId);
+
+  await adminDb()
+    .update(venueTables)
+    .set({
+      position: {
+        x: parsed.data.x,
+        y: parsed.data.y,
+        w: parsed.data.w,
+        h: parsed.data.h,
+      },
+    })
+    .where(and(eq(venueTables.id, parsed.data.tableId), eq(venueTables.organisationId, orgId)));
+
+  revalidatePath(`/dashboard/venues/${venueId}/floor-plan`);
+  return { status: "saved" };
+}
+
 const TableDeleteSchema = z.object({ tableId: z.uuid() });
 
 export async function deleteTable(_prev: ActionState, formData: FormData): Promise<ActionState> {
