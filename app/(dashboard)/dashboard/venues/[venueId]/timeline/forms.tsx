@@ -19,6 +19,7 @@ import {
 
 import { Button, Field, IconButton, Input, Textarea, cn } from "@/components/ui";
 import { nextActions, type BookingStatus } from "@/lib/bookings/state";
+import { STATUS_FILL } from "@/lib/bookings/status-style";
 
 import {
   refundBookingAction,
@@ -286,17 +287,6 @@ function useTimelineCtx(): DragCtx {
   if (!ctx) throw new Error("useTimelineCtx: missing TimelineDragProvider");
   return ctx;
 }
-
-// Status → block fill (mirror of the constants in page.tsx so the
-// client component is self-contained).
-const STATUS_FILL: Record<BookingStatus, string> = {
-  requested: "bg-amber-100 border-amber-300 text-amber-900",
-  confirmed: "bg-blue-100 border-blue-300 text-blue-900",
-  seated: "bg-emerald-100 border-emerald-300 text-emerald-900",
-  finished: "bg-neutral-100 border-neutral-300 text-neutral-700",
-  cancelled: "bg-stone-100 border-stone-200 text-ash line-through",
-  no_show: "bg-rose-100 border-rose-300 text-rose-900",
-};
 
 export type TimelineBookingBlock = {
   id: string;

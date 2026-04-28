@@ -12,6 +12,7 @@ import {
   venueLocalDayRange,
 } from "@/lib/bookings/time";
 import type { BookingStatus } from "@/lib/bookings/state";
+import { STATUS_FILL } from "@/lib/bookings/status-style";
 import { withUser } from "@/lib/db/client";
 import {
   areas,
@@ -49,18 +50,6 @@ export const metadata = { title: "Timeline · TableKit" };
 // Day window: derived from the venue's services (min start, max end)
 // rounded to the nearest hour. Falls back to 09:00–23:00 when no
 // services are configured.
-
-// Status → block fill (background tint) + border. Distinct from the
-// Badge tones used on the bookings list so the timeline reads at a
-// glance without colliding with row status pills.
-const STATUS_FILL: Record<BookingStatus, string> = {
-  requested: "bg-amber-100 border-amber-300 text-amber-900",
-  confirmed: "bg-blue-100 border-blue-300 text-blue-900",
-  seated: "bg-emerald-100 border-emerald-300 text-emerald-900",
-  finished: "bg-neutral-100 border-neutral-300 text-neutral-700",
-  cancelled: "bg-stone-100 border-stone-200 text-ash line-through",
-  no_show: "bg-rose-100 border-rose-300 text-rose-900",
-};
 
 type SearchParams = { date?: string };
 
