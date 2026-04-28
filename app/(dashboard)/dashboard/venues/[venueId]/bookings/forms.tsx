@@ -1,11 +1,11 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 
-import { Badge, Button, IconButton, Input, Select } from "@/components/ui";
-import { type BookingStatus } from "@/lib/bookings/state";
+import { Badge, Button, IconButton, Input, Select, cn } from "@/components/ui";
+import { BOOKING_STATUSES, type BookingStatus } from "@/lib/bookings/state";
 
 import {
   reassignTableAction,
@@ -210,6 +210,103 @@ export function DateNav({ venueId, date }: { venueId: string; date: string }) {
       <IconButton aria-label="Next day" size="sm" onClick={() => shift(1)}>
         <ChevronRight className="h-3.5 w-3.5" aria-hidden />
       </IconButton>
+    </div>
+  );
+}
+
+// Search + status-chip filters above the day's bookings. URL-driven —
+// every change pushes a new URL so back/forward and bookmarks survive.
+// Search debounces by 250 ms so each keystroke isn't a navigation.
+export function BookingsFilters({
+  venueId,
+  date,
+  initialQuery,
+  activeStatuses,
+}: {
+  venueId: string;
+  date: string;
+  initialQuery: string;
+  activeStatuses: BookingStatus[];
+}) {
+  const router = useRouter();
+  const [query, setQuery] = useState(initialQuery);
+
+  function pushParams(next: { q?: string; status?: BookingStatus[] }) {
+    const params = new URLSearchParams();
+    if (date) params.set("date", date);
+    const nextQ = next.q !== undefined ? next.q : query;
+    if (nextQ.trim()) params.set("q", nextQ.trim());
+    const nextStatuses = next.status ?? activeStatuses;
+    if (nextStatuses.length > 0) params.set("status", nextStatuses.join(","));
+    router.push(`/dashboard/venues/${venueId}/bookings?${params.toString()}`);
+  }
+
+  // Debounced URL push for the search box.
+  useEffect(() => {
+    if (query === initialQuery) return;
+    const t = setTimeout(() => pushParams({ q: query }), 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  const toggleStatus = (s: BookingStatus) => {
+    const next = activeStatuses.includes(s)
+      ? activeStatuses.filter((x) => x !== s)
+      : [...activeStatuses, s];
+    pushParams({ status: next });
+  };
+
+  const clearAll = () => {
+    setQuery("");
+    pushParams({ q: "", status: [] });
+  };
+
+  const filtersActive = query.trim().length > 0 || activeStatuses.length > 0;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-card border border-hairline bg-white p-2">
+      <div className="relative flex-1 min-w-[200px]">
+        <Search
+          className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ash"
+          aria-hidden
+        />
+        <Input
+          type="search"
+          size="sm"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search first name, email, or notes…"
+          aria-label="Search bookings"
+          className="pl-7"
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {BOOKING_STATUSES.map((s) => {
+          const on = activeStatuses.includes(s);
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => toggleStatus(s)}
+              aria-pressed={on}
+              className={cn(
+                "rounded-pill border px-2.5 py-1 text-xs font-medium transition",
+                on
+                  ? "border-ink bg-ink text-white"
+                  : "border-hairline bg-white text-ink hover:border-ink",
+              )}
+            >
+              {STATUS_LABEL[s]}
+            </button>
+          );
+        })}
+      </div>
+      {filtersActive ? (
+        <Button variant="ghost" size="sm" onClick={clearAll}>
+          <X className="h-3.5 w-3.5" aria-hidden />
+          Clear
+        </Button>
+      ) : null}
     </div>
   );
 }

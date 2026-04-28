@@ -1,10 +1,11 @@
-import { and, asc, eq, gte, inArray, lt } from "drizzle-orm";
+import { and, asc, eq, gte, ilike, inArray, lt, or, type SQL } from "drizzle-orm";
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Button } from "@/components/ui";
 import { requireRole } from "@/lib/auth/require-role";
+import { classifySearchInput, parseStatusFilter } from "@/lib/bookings/list-filters";
 import {
   formatVenueDateLong,
   formatVenueTime,
@@ -25,8 +26,9 @@ import {
 } from "@/lib/db/schema";
 import { processNextBatch } from "@/lib/messaging/dispatch";
 import { sweepDueNoShowCaptures } from "@/lib/payments/no-show";
+import { hashForLookup } from "@/lib/security/crypto";
 
-import { BookingRow, DateNav } from "./forms";
+import { BookingsFilters, BookingRow, DateNav } from "./forms";
 
 // Per-day bookings list. Defaults to today in the venue's timezone.
 // `?date=YYYY-MM-DD` overrides — used by the future calendar UI and
@@ -34,7 +36,7 @@ import { BookingRow, DateNav } from "./forms";
 
 export const metadata = { title: "Bookings · TableKit" };
 
-type SearchParams = { date?: string };
+type SearchParams = { date?: string; q?: string; status?: string };
 
 export default async function BookingsPage({
   params,
@@ -45,7 +47,10 @@ export default async function BookingsPage({
 }) {
   await requireRole("host");
   const { venueId } = await params;
-  const { date: dateParam } = await searchParams;
+  const { date: dateParam, q: rawQuery, status: rawStatus } = await searchParams;
+  const search = classifySearchInput(rawQuery);
+  const statusFilter = parseStatusFilter(rawStatus);
+  const filtersActive = search.kind !== "empty" || statusFilter.length > 0;
 
   const venue = await withUser(async (db) => {
     const rows = await db
@@ -81,6 +86,20 @@ export default async function BookingsPage({
     });
   }
 
+  const filterPredicates: SQL[] = [];
+  if (search.kind === "email") {
+    filterPredicates.push(eq(guests.emailHash, hashForLookup(search.raw, "email")));
+  } else if (search.kind === "freetext") {
+    const freetext = or(
+      ilike(guests.firstName, search.pattern),
+      ilike(bookings.notes, search.pattern),
+    );
+    if (freetext) filterPredicates.push(freetext);
+  }
+  if (statusFilter.length > 0) {
+    filterPredicates.push(inArray(bookings.status, statusFilter));
+  }
+
   const rows = await withUser(async (db) => {
     return db
       .select({
@@ -102,6 +121,7 @@ export default async function BookingsPage({
           eq(bookings.venueId, venueId),
           gte(bookings.startAt, startUtc),
           lt(bookings.startAt, endUtc),
+          ...filterPredicates,
         ),
       )
       .orderBy(asc(bookings.startAt));
@@ -197,7 +217,7 @@ export default async function BookingsPage({
   }
 
   return (
-    <section className="flex flex-col gap-6">
+    <section className="flex flex-col gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-ink">
@@ -205,8 +225,10 @@ export default async function BookingsPage({
           </h2>
           <p className="mt-0.5 text-xs text-ash">
             {rows.length === 0
-              ? "No bookings yet."
-              : `${rows.length} booking${rows.length === 1 ? "" : "s"}`}
+              ? filtersActive
+                ? "No bookings match these filters."
+                : "No bookings yet."
+              : `${rows.length} booking${rows.length === 1 ? "" : "s"}${filtersActive ? " (filtered)" : ""}`}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -220,9 +242,18 @@ export default async function BookingsPage({
         </div>
       </header>
 
+      <BookingsFilters
+        venueId={venueId}
+        date={date}
+        initialQuery={rawQuery ?? ""}
+        activeStatuses={statusFilter}
+      />
+
       {rows.length === 0 ? (
         <p className="rounded-card border border-dashed border-hairline p-8 text-center text-sm text-ash">
-          Nothing on the books for this day. Click &ldquo;New booking&rdquo; to add one.
+          {filtersActive
+            ? "No bookings match these filters. Try clearing the search or status chips."
+            : "Nothing on the books for this day. Click “New booking” to add one."}
         </p>
       ) : (
         <div className="flex flex-col gap-6">
