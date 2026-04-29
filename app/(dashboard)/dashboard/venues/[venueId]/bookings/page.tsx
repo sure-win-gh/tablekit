@@ -111,6 +111,7 @@ export default async function BookingsPage({
         notes: bookings.notes,
         areaId: bookings.areaId,
         serviceName: services.name,
+        guestId: bookings.guestId,
         guestFirstName: guests.firstName,
       })
       .from(bookings)
@@ -285,6 +286,7 @@ export default async function BookingsPage({
                       partySize={b.partySize}
                       status={b.status as BookingStatus}
                       actions={nextActions(b.status as BookingStatus)}
+                      guestId={b.guestId}
                       guestFirstName={b.guestFirstName}
                       notes={b.notes}
                       serviceName={b.serviceName}

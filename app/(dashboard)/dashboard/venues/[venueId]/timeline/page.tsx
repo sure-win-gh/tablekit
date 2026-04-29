@@ -104,6 +104,7 @@ export default async function TimelinePage({
           endAt: bookings.endAt,
           partySize: bookings.partySize,
           status: bookings.status,
+          guestId: bookings.guestId,
           guestFirstName: guests.firstName,
           serviceName: services.name,
           notes: bookings.notes,
@@ -357,6 +358,7 @@ export default async function TimelinePage({
                               wallEnd: formatVenueTime(b.endAt, {
                                 timezone: venue.timezone,
                               }),
+                              guestId: b.guestId,
                               guestFirstName: b.guestFirstName,
                               partySize: b.partySize,
                               notes: b.notes,

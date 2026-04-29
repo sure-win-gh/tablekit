@@ -292,6 +292,7 @@ export type TimelineBookingBlock = {
   status: BookingStatus;
   wallStart: string;
   wallEnd: string;
+  guestId: string;
   guestFirstName: string;
   partySize: number;
   notes: string | null;
@@ -1187,6 +1188,7 @@ export function BookingDetailModal({
     wallStart: detailBlock.wallStart,
     wallEnd: detailBlock.wallEnd,
     durationMinutes: detailBlock.span * 15, // 15-min grid → minutes
+    guestId: detailBlock.guestId,
     guestFirstName: detailBlock.guestFirstName,
     partySize: detailBlock.partySize,
     notes: detailBlock.notes,

@@ -59,6 +59,7 @@ type BookingRowProps = {
   partySize: number;
   status: BookingStatus;
   actions: BookingStatus[];
+  guestId: string;
   guestFirstName: string;
   notes: string | null;
   serviceName: string;
@@ -81,6 +82,7 @@ export function BookingRow({
   partySize,
   status,
   actions,
+  guestId,
   guestFirstName,
   notes,
   serviceName,
@@ -156,6 +158,7 @@ export function BookingRow({
             wallStart,
             wallEnd,
             durationMinutes,
+            guestId,
             guestFirstName,
             partySize,
             notes,

@@ -1,6 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 
@@ -268,7 +269,9 @@ function BookingDetailDialogBody({
       <header className="flex items-start justify-between gap-2 border-b border-hairline px-5 py-4">
         <div>
           <h3 className="text-base font-bold tracking-tight text-ink">
-            {booking.guestFirstName}
+            <Link href={`/dashboard/guests/${booking.guestId}`} className="hover:underline">
+              {booking.guestFirstName}
+            </Link>
           </h3>
           <p className="mt-0.5 text-xs text-ash">
             {booking.wallStart}–{booking.wallEnd} · {booking.tableLabel} · {booking.serviceName}

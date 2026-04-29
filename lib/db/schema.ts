@@ -319,7 +319,13 @@ export const guests = pgTable(
     // until manually cleared.
     emailInvalid: boolean("email_invalid").notNull().default(false),
     phoneInvalid: boolean("phone_invalid").notNull().default(false),
+    // Legacy single-channel consent. Kept alongside the per-channel
+    // pair below for one release per the forward-only migration rule
+    // — new writes mirror to it; the next migration drops it once
+    // every reader has moved to the per-channel columns.
     marketingConsentAt: timestamp("marketing_consent_at", { withTimezone: true }),
+    marketingConsentEmailAt: timestamp("marketing_consent_email_at", { withTimezone: true }),
+    marketingConsentSmsAt: timestamp("marketing_consent_sms_at", { withTimezone: true }),
     erasedAt: timestamp("erased_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

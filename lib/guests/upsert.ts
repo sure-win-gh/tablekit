@@ -63,6 +63,7 @@ export async function upsertGuest(
     const patch: {
       phoneCipher?: string;
       marketingConsentAt?: Date;
+      marketingConsentEmailAt?: Date;
       firstName?: string;
       lastNameCipher?: string;
     } = {};
@@ -71,7 +72,12 @@ export async function upsertGuest(
       patch.phoneCipher = await encryptPii(organisationId, input.phone);
     }
     if (input.marketingConsentAt && existing.marketingConsentAt === null) {
+      // Mirror to both the legacy single-channel column and the new
+      // per-channel email column. Booking-form / widget input has
+      // historically meant email opt-in; SMS stays separate and
+      // never gets ticked from this path.
       patch.marketingConsentAt = input.marketingConsentAt;
+      patch.marketingConsentEmailAt = input.marketingConsentAt;
     }
     // First name and last name: always refresh to the caller's version
     // — the caller is the source of truth (widget signup, host edit).
@@ -107,6 +113,7 @@ export async function upsertGuest(
       emailHash,
       phoneCipher,
       marketingConsentAt: input.marketingConsentAt ?? null,
+      marketingConsentEmailAt: input.marketingConsentAt ?? null,
     })
     .returning({ id: guests.id });
 

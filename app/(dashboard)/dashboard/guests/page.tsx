@@ -115,21 +115,26 @@ export default async function GuestsPage() {
       ) : (
         <ul className="mt-6 flex flex-col gap-2">
           {rows.map((g) => (
-            <li
-              key={g.id}
-              className="rounded-card border border-hairline bg-white px-4 py-3"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex flex-col">
-                  <span className="text-sm font-semibold text-ink">{g.firstName}</span>
-                  <span className="text-xs text-ash">
-                    {g.visits} {g.visits === 1 ? "visit" : "visits"}
-                    {" · "}
-                    {g.venuesVisited} {g.venuesVisited === 1 ? "venue" : "venues"}
-                    {g.lastVisit ? ` · last seen ${g.lastVisit.toLocaleDateString("en-GB")}` : ""}
-                  </span>
+            <li key={g.id}>
+              <Link
+                href={`/dashboard/guests/${g.id}`}
+                className="block rounded-card border border-hairline bg-white px-4 py-3 transition hover:border-ink"
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-ink">{g.firstName}</span>
+                    <span className="text-xs text-ash">
+                      {g.visits} {g.visits === 1 ? "visit" : "visits"}
+                      {" · "}
+                      {g.venuesVisited} {g.venuesVisited === 1 ? "venue" : "venues"}
+                      {g.lastVisit
+                        ? ` · last seen ${g.lastVisit.toLocaleDateString("en-GB")}`
+                        : ""}
+                    </span>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-stone" aria-hidden />
                 </div>
-              </div>
+              </Link>
             </li>
           ))}
         </ul>

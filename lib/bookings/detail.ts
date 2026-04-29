@@ -12,6 +12,7 @@ export type BookingDetailPayload = {
   wallStart: string;
   wallEnd: string;
   durationMinutes: number;
+  guestId: string;
   guestFirstName: string;
   partySize: number;
   notes: string | null;

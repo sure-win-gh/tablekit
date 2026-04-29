@@ -32,6 +32,12 @@ export type AuditAction =
   | "guest.created"
   | "guest.reused"
   | "guest.updated"
+  | "guest.contact_updated"
+  | "guest.consent.email.on"
+  | "guest.consent.email.off"
+  | "guest.consent.sms.on"
+  | "guest.consent.sms.off"
+  | "guest.erasure_requested"
   // bookings phase
   | "booking.created"
   | "booking.transitioned"
