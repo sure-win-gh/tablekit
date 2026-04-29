@@ -270,23 +270,31 @@ export default async function BookingsPage({
                     (t) =>
                       t.areaId === b.areaId && t.maxCover >= b.partySize && !assignedIds.has(t.id),
                   );
+                  const durationMinutes = Math.round(
+                    (b.endAt.getTime() - b.startAt.getTime()) / 60000,
+                  );
                   return (
                     <BookingRow
                       key={b.id}
                       venueId={venueId}
+                      date={date}
                       bookingId={b.id}
                       wallStart={formatVenueTime(b.startAt, { timezone: venue.timezone })}
                       wallEnd={formatVenueTime(b.endAt, { timezone: venue.timezone })}
+                      durationMinutes={durationMinutes}
                       partySize={b.partySize}
                       status={b.status as BookingStatus}
                       actions={nextActions(b.status as BookingStatus)}
                       guestFirstName={b.guestFirstName}
                       notes={b.notes}
+                      serviceName={b.serviceName}
+                      areaId={b.areaId}
                       refundable={refundableSet.has(b.id)}
                       cardHold={cardHoldSet.has(b.id)}
                       noShowOutcome={noShowOutcomes.get(b.id) ?? null}
                       assignedTables={assignedTables}
                       moveTargets={moveTargets}
+                      allVenueTables={allVenueTables}
                     />
                   );
                 })}

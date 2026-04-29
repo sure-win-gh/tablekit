@@ -4,7 +4,9 @@ import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
 
+import { BookingDetailDialog } from "@/components/bookings/booking-detail-dialog";
 import { Badge, Button, IconButton, Input, Select, cn } from "@/components/ui";
+import type { VenueTableForDetail } from "@/lib/bookings/detail";
 import { BOOKING_STATUSES, type BookingStatus } from "@/lib/bookings/state";
 
 import {
@@ -49,37 +51,50 @@ const ACTION_LABEL: Record<BookingStatus, string> = {
 
 type BookingRowProps = {
   venueId: string;
+  date: string;
   bookingId: string;
   wallStart: string;
   wallEnd: string;
+  durationMinutes: number;
   partySize: number;
   status: BookingStatus;
   actions: BookingStatus[];
   guestFirstName: string;
   notes: string | null;
+  serviceName: string;
+  areaId: string;
   refundable: boolean;
   cardHold: boolean;
   noShowOutcome: "captured" | "failed" | null;
   assignedTables: Array<{ id: string; label: string; areaName: string }>;
   moveTargets: Array<{ id: string; label: string; areaName: string }>;
+  allVenueTables: VenueTableForDetail[];
 };
 
 export function BookingRow({
   venueId,
+  date,
   bookingId,
   wallStart,
   wallEnd,
+  durationMinutes,
   partySize,
   status,
   actions,
   guestFirstName,
   notes,
+  serviceName,
+  areaId,
   refundable,
   cardHold,
   noShowOutcome,
   assignedTables,
   moveTargets,
+  allVenueTables,
 }: BookingRowProps) {
+  const [detailOpen, setDetailOpen] = useState(false);
+  const primaryTable = assignedTables[0];
+
   return (
     <li className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-4">
@@ -123,7 +138,37 @@ export function BookingRow({
           />
         ))}
         {refundable ? <RefundButton venueId={venueId} bookingId={bookingId} /> : null}
+        {primaryTable ? (
+          <Button variant="ghost" size="sm" onClick={() => setDetailOpen(true)}>
+            Details
+          </Button>
+        ) : null}
       </div>
+      {detailOpen && primaryTable ? (
+        <BookingDetailDialog
+          venueId={venueId}
+          date={date}
+          allVenueTables={allVenueTables}
+          onClose={() => setDetailOpen(false)}
+          booking={{
+            id: bookingId,
+            status,
+            wallStart,
+            wallEnd,
+            durationMinutes,
+            guestFirstName,
+            partySize,
+            notes,
+            serviceName,
+            tableId: primaryTable.id,
+            tableLabel: primaryTable.label,
+            areaId,
+            refundable,
+            cardHold,
+            noShowOutcome,
+          }}
+        />
+      ) : null}
     </li>
   );
 }

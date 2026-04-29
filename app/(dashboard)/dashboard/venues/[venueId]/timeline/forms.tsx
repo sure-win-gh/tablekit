@@ -17,20 +17,17 @@ import {
   type ReactNode,
 } from "react";
 
+import { BookingDetailDialog } from "@/components/bookings/booking-detail-dialog";
 import { Button, Field, IconButton, Input, Textarea, cn } from "@/components/ui";
-import { nextActions, type BookingStatus } from "@/lib/bookings/state";
+import type { BookingDetailPayload, VenueTableForDetail } from "@/lib/bookings/detail";
+import { type BookingStatus } from "@/lib/bookings/state";
 import { STATUS_FILL } from "@/lib/bookings/status-style";
 
-import {
-  refundBookingAction,
-  transitionBookingAction,
-} from "../bookings/actions";
 import {
   createFromTimeline,
   reassignFromTimeline,
   resizeFromTimeline,
   shiftFromTimeline,
-  updateDetailsFromTimeline,
 } from "./actions";
 
 // ===========================================================================
@@ -148,8 +145,8 @@ type DragCtx = {
   modalDraft: NewBookingDraft | null;
   closeModal: () => void;
 
-  detailBlock: BookingDetailPayload | null;
-  openDetail: (block: BookingDetailPayload) => void;
+  detailBlock: TimelineDetailBlock | null;
+  openDetail: (block: TimelineDetailBlock) => void;
   closeDetail: () => void;
 };
 
@@ -159,7 +156,7 @@ export function TimelineDragProvider({ children }: { children: ReactNode }) {
   const [source, setSource] = useState<DragSource>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [modalDraft, setModalDraft] = useState<NewBookingDraft | null>(null);
-  const [detailBlock, setDetailBlock] = useState<BookingDetailPayload | null>(null);
+  const [detailBlock, setDetailBlock] = useState<TimelineDetailBlock | null>(null);
 
   const startSelection = useCallback(
     (s: { tableId: string; tableLabel: string; areaId: string; anchorSlot: number }) => {
@@ -203,7 +200,7 @@ export function TimelineDragProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const openDetail = useCallback((b: BookingDetailPayload) => setDetailBlock(b), []);
+  const openDetail = useCallback((b: TimelineDetailBlock) => setDetailBlock(b), []);
   const closeDetail = useCallback(() => setDetailBlock(null), []);
 
   const closeModal = useCallback(() => setModalDraft(null), []);
@@ -310,7 +307,7 @@ export type TimelineBookingBlock = {
 // Detail-modal payload — a TimelineBookingBlock plus the row's
 // identifying bits (the block doesn't carry table_id / label /
 // area_id because the row that renders it owns those).
-export type BookingDetailPayload = TimelineBookingBlock & {
+export type TimelineDetailBlock = TimelineBookingBlock & {
   tableId: string;
   tableLabel: string;
   areaId: string;
@@ -1166,34 +1163,13 @@ function ModalBody({
 // query intentionally skips.
 // ===========================================================================
 
-const STATUS_LABEL: Record<BookingStatus, string> = {
-  requested: "Requested",
-  confirmed: "Confirmed",
-  seated: "Seated",
-  finished: "Finished",
-  cancelled: "Cancelled",
-  no_show: "No-show",
-};
+// Re-exported for the timeline page so it can keep importing this
+// type by name. The dialog itself lives in components/bookings/.
+export type TimelineVenueTable = VenueTableForDetail;
 
-// Verb-form labels for transition buttons — what the operator is
-// *doing* when they click. Mirrors the bookings list's mapping.
-const ACTION_LABEL: Record<BookingStatus, string> = {
-  requested: "Request",
-  confirmed: "Confirm",
-  seated: "Seat",
-  finished: "Finish",
-  cancelled: "Cancel",
-  no_show: "No-show",
-};
-
-export type TimelineVenueTable = {
-  id: string;
-  label: string;
-  areaId: string;
-  areaName: string;
-  maxCover: number;
-};
-
+// Thin wrapper that bridges the timeline's drag-context (which owns
+// `detailBlock`) to the shared <BookingDetailDialog>. The dialog is
+// view-agnostic — it only needs the booking payload + a way to close.
 export function BookingDetailModal({
   venueId,
   date,
@@ -1201,621 +1177,38 @@ export function BookingDetailModal({
 }: {
   venueId: string;
   date: string;
-  allVenueTables: TimelineVenueTable[];
+  allVenueTables: VenueTableForDetail[];
 }) {
   const { detailBlock, closeDetail } = useTimelineCtx();
-
-  useEffect(() => {
-    if (!detailBlock) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeDetail();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [detailBlock, closeDetail]);
-
   if (!detailBlock) return null;
-
+  const booking: BookingDetailPayload = {
+    id: detailBlock.id,
+    status: detailBlock.status,
+    wallStart: detailBlock.wallStart,
+    wallEnd: detailBlock.wallEnd,
+    durationMinutes: detailBlock.span * 15, // 15-min grid → minutes
+    guestFirstName: detailBlock.guestFirstName,
+    partySize: detailBlock.partySize,
+    notes: detailBlock.notes,
+    serviceName: detailBlock.serviceName,
+    tableId: detailBlock.tableId,
+    tableLabel: detailBlock.tableLabel,
+    areaId: detailBlock.areaId,
+    refundable: detailBlock.refundable,
+    cardHold: detailBlock.cardHold,
+    noShowOutcome: detailBlock.noShowOutcome,
+  };
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Booking detail"
-      onClick={closeDetail}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-card border border-hairline bg-white shadow-panel"
-      >
-        {/* Keyed by booking id so transient form state (mode toggle,
-            time input) resets cleanly when a different block opens
-            the modal. Mirrors the new-booking modal's pattern. */}
-        <DetailModalBody
-          key={detailBlock.id}
-          venueId={venueId}
-          date={date}
-          allVenueTables={allVenueTables}
-        />
-      </div>
-    </div>
+    <BookingDetailDialog
+      venueId={venueId}
+      date={date}
+      booking={booking}
+      allVenueTables={allVenueTables}
+      onClose={closeDetail}
+    />
   );
 }
 
-function DetailModalBody({
-  venueId,
-  date,
-  allVenueTables,
-}: {
-  venueId: string;
-  date: string;
-  allVenueTables: TimelineVenueTable[];
-}) {
-  const router = useRouter();
-  const { detailBlock, closeDetail } = useTimelineCtx();
-  const [pending, startTransition] = useTransition();
-  const [mode, setMode] = useState<
-    "view" | "edit-time" | "edit-details" | "refund" | "cancel-with-reason" | "reassign-table"
-  >("view");
-  const [error, setError] = useState<string | null>(null);
-  // Initialise the time input from the booking's current wall start.
-  // Stays static-derived from detailBlock so a re-render on the same
-  // draft doesn't clobber typed-in changes — the modal body
-  // remounts via the parent's `key` when a new draft opens.
-  const [newWallStart, setNewWallStart] = useState(detailBlock?.wallStart ?? "");
-  const [refundReason, setRefundReason] = useState("");
-  const [cancelReason, setCancelReason] = useState("");
-  const [draftPartySize, setDraftPartySize] = useState(detailBlock?.partySize ?? 1);
-  const [draftNotes, setDraftNotes] = useState(detailBlock?.notes ?? "");
-  const [reassignTo, setReassignTo] = useState("");
-
-  if (!detailBlock) return null;
-
-  const editable =
-    detailBlock.status !== "cancelled" &&
-    detailBlock.status !== "no_show" &&
-    detailBlock.status !== "finished";
-  const transitionsAvailable = nextActions(detailBlock.status);
-
-  // Same-area, capacity ≥ party, not the current table.
-  const moveTargets = allVenueTables.filter(
-    (t) =>
-      t.areaId === detailBlock.areaId &&
-      t.maxCover >= detailBlock.partySize &&
-      t.id !== detailBlock.tableId,
-  );
-
-  function onSaveTime() {
-    if (!detailBlock || !newWallStart || newWallStart === detailBlock.wallStart) {
-      setMode("view");
-      return;
-    }
-    setError(null);
-    startTransition(async () => {
-      const r = await shiftFromTimeline({
-        venueId,
-        bookingId: detailBlock.id,
-        date,
-        wallStart: newWallStart,
-      });
-      if (!r.ok) {
-        setError(shiftErrorMessage(r.reason));
-        return;
-      }
-      closeDetail();
-      router.refresh();
-    });
-  }
-
-  // Status transitions — synthesises a FormData and calls the
-  // existing transitionBookingAction (which the bookings list
-  // also uses). Cancellation routes through onConfirmCancel below
-  // so we can capture a reason.
-  function onTransition(to: BookingStatus) {
-    if (!detailBlock) return;
-    if (to === "cancelled") {
-      setMode("cancel-with-reason");
-      setCancelReason("");
-      setError(null);
-      return;
-    }
-    setError(null);
-    startTransition(async () => {
-      const fd = new FormData();
-      fd.set("venueId", venueId);
-      fd.set("bookingId", detailBlock.id);
-      fd.set("to", to);
-      const r = await transitionBookingAction({ status: "idle" }, fd);
-      if (r.status === "error") {
-        setError(r.message);
-        return;
-      }
-      closeDetail();
-      router.refresh();
-    });
-  }
-
-  // Cancel with reason — same action as a normal transition; the
-  // optional cancelledReason field gets carried through.
-  function onConfirmCancel() {
-    if (!detailBlock) return;
-    setError(null);
-    startTransition(async () => {
-      const fd = new FormData();
-      fd.set("venueId", venueId);
-      fd.set("bookingId", detailBlock.id);
-      fd.set("to", "cancelled");
-      if (cancelReason.trim()) fd.set("cancelledReason", cancelReason.trim());
-      const r = await transitionBookingAction({ status: "idle" }, fd);
-      if (r.status === "error") {
-        setError(r.message);
-        return;
-      }
-      closeDetail();
-      router.refresh();
-    });
-  }
-
-  // Edit details — notes + party size, both optional. A submit with
-  // both unchanged is a no-op + close.
-  function onSaveDetails() {
-    if (!detailBlock) return;
-    const notesChanged = draftNotes !== (detailBlock.notes ?? "");
-    const partyChanged = draftPartySize !== detailBlock.partySize;
-    if (!notesChanged && !partyChanged) {
-      setMode("view");
-      return;
-    }
-    setError(null);
-    startTransition(async () => {
-      const r = await updateDetailsFromTimeline({
-        venueId,
-        bookingId: detailBlock.id,
-        ...(notesChanged ? { notes: draftNotes.trim() === "" ? null : draftNotes } : {}),
-        ...(partyChanged ? { partySize: draftPartySize } : {}),
-      });
-      if (!r.ok) {
-        setError(r.message ?? "Couldn't save.");
-        return;
-      }
-      closeDetail();
-      router.refresh();
-    });
-  }
-
-  // Reassign table — single-table swap within the same area.
-  function onConfirmReassign() {
-    if (!detailBlock || !reassignTo) return;
-    setError(null);
-    startTransition(async () => {
-      const r = await reassignFromTimeline({
-        venueId,
-        bookingId: detailBlock.id,
-        fromTableId: detailBlock.tableId,
-        toTableId: reassignTo,
-      });
-      if (!r.ok) {
-        setError(reassignErrorMessage(r.reason));
-        return;
-      }
-      closeDetail();
-      router.refresh();
-    });
-  }
-
-  // Refund — two-step: arm via "Refund" button → reason input
-  // appears → "Confirm refund" submits. Reuses refundBookingAction
-  // (server enforces ≥3 chars).
-  function onConfirmRefund() {
-    if (!detailBlock) return;
-    if (refundReason.trim().length < 3) {
-      setError("Reason must be at least 3 characters.");
-      return;
-    }
-    setError(null);
-    startTransition(async () => {
-      const fd = new FormData();
-      fd.set("venueId", venueId);
-      fd.set("bookingId", detailBlock.id);
-      fd.set("reason", refundReason.trim());
-      const r = await refundBookingAction({ status: "idle" }, fd);
-      if (r.status === "error") {
-        setError(r.message);
-        return;
-      }
-      closeDetail();
-      router.refresh();
-    });
-  }
-
-  return (
-    <>
-      <header className="flex items-start justify-between gap-2 border-b border-hairline px-5 py-4">
-        <div>
-          <h3 className="text-base font-bold tracking-tight text-ink">
-            {detailBlock.guestFirstName}
-          </h3>
-          <p className="mt-0.5 text-xs text-ash">
-            {detailBlock.wallStart}–{detailBlock.wallEnd} · {detailBlock.tableLabel} ·{" "}
-            {detailBlock.serviceName}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={closeDetail}
-          aria-label="Close"
-          className="-mr-1 -mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-ash transition hover:bg-cloud hover:text-ink"
-        >
-          <X className="h-4 w-4" aria-hidden />
-        </button>
-      </header>
-
-      <div className="flex flex-col gap-3 px-5 py-4 text-sm text-charcoal">
-        <DetailRow label="Status">
-          <div className="flex items-center gap-2">
-            <span
-              className={cn(
-                "inline-flex items-center rounded-pill border px-2 py-0.5 text-[11px] font-semibold",
-                STATUS_FILL[detailBlock.status],
-              )}
-            >
-              {STATUS_LABEL[detailBlock.status]}
-            </span>
-            {mode === "view" && transitionsAvailable.length > 0
-              ? transitionsAvailable.map((to) => (
-                  <Button
-                    key={to}
-                    type="button"
-                    size="sm"
-                    variant={to === "cancelled" ? "destructive" : "secondary"}
-                    onClick={() => onTransition(to)}
-                    disabled={pending}
-                  >
-                    {ACTION_LABEL[to]}
-                  </Button>
-                ))
-              : null}
-          </div>
-        </DetailRow>
-        <DetailRow label="Party size">
-          <span className="font-mono tabular-nums">{detailBlock.partySize}</span>
-        </DetailRow>
-        {detailBlock.notes ? (
-          <DetailRow label="Notes">
-            <span className="whitespace-pre-line">{detailBlock.notes}</span>
-          </DetailRow>
-        ) : null}
-
-        {/* Payment-shape badges + actions. */}
-        {detailBlock.cardHold && !detailBlock.noShowOutcome ? (
-          <DetailRow label="Card on file">
-            <span className="text-xs text-ash">Hold succeeded — captured only on no-show.</span>
-          </DetailRow>
-        ) : null}
-        {detailBlock.noShowOutcome === "captured" ? (
-          <DetailRow label="No-show">
-            <span className="text-xs text-emerald-700">Capture succeeded.</span>
-          </DetailRow>
-        ) : null}
-        {detailBlock.noShowOutcome === "failed" ? (
-          <DetailRow label="No-show">
-            <span className="text-xs text-rose">Capture failed — see Stripe.</span>
-          </DetailRow>
-        ) : null}
-
-        {mode === "edit-time" ? (
-          <div className="mt-2 flex flex-col gap-2 rounded-card border border-hairline bg-cloud p-3">
-            <Field
-              label="New start time"
-              htmlFor="bdm-time"
-              hint={`Duration ${detailBlock.span * 15} min — preserved.`}
-            >
-              <Input
-                id="bdm-time"
-                type="time"
-                step={900}
-                value={newWallStart}
-                onChange={(e) => setNewWallStart(e.target.value)}
-                size="sm"
-                className="w-32"
-              />
-            </Field>
-            {error ? <p className="text-xs text-rose">{error}</p> : null}
-          </div>
-        ) : null}
-
-        {mode === "refund" ? (
-          <div className="mt-2 flex flex-col gap-2 rounded-card border border-rose/30 bg-rose/5 p-3">
-            <Field
-              label="Refund reason"
-              htmlFor="bdm-refund-reason"
-              hint="Required — at least 3 characters. Recorded in the audit log."
-            >
-              <Input
-                id="bdm-refund-reason"
-                type="text"
-                value={refundReason}
-                onChange={(e) => setRefundReason(e.target.value)}
-                minLength={3}
-                maxLength={200}
-                size="sm"
-              />
-            </Field>
-            {error ? <p className="text-xs text-rose">{error}</p> : null}
-          </div>
-        ) : null}
-
-        {mode === "cancel-with-reason" ? (
-          <div className="mt-2 flex flex-col gap-2 rounded-card border border-rose/30 bg-rose/5 p-3">
-            <Field
-              label="Cancellation reason"
-              htmlFor="bdm-cancel-reason"
-              hint="Optional — recorded on the booking + audit log."
-              optional
-            >
-              <Input
-                id="bdm-cancel-reason"
-                type="text"
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-                maxLength={200}
-                size="sm"
-              />
-            </Field>
-            {error ? <p className="text-xs text-rose">{error}</p> : null}
-          </div>
-        ) : null}
-
-        {mode === "edit-details" ? (
-          <div className="mt-2 flex flex-col gap-3 rounded-card border border-hairline bg-cloud p-3">
-            <Field label="Party size" htmlFor="bdm-party">
-              <Input
-                id="bdm-party"
-                type="number"
-                min={1}
-                max={20}
-                value={draftPartySize}
-                onChange={(e) =>
-                  setDraftPartySize(Math.max(1, Math.min(20, Number(e.target.value) || 1)))
-                }
-                size="sm"
-                className="w-24"
-              />
-            </Field>
-            <Field label="Notes" htmlFor="bdm-notes" optional>
-              <Textarea
-                id="bdm-notes"
-                value={draftNotes}
-                onChange={(e) => setDraftNotes(e.target.value)}
-                rows={3}
-                maxLength={500}
-              />
-            </Field>
-            {error ? <p className="text-xs text-rose">{error}</p> : null}
-          </div>
-        ) : null}
-
-        {mode === "reassign-table" ? (
-          <div className="mt-2 flex flex-col gap-2 rounded-card border border-hairline bg-cloud p-3">
-            {moveTargets.length === 0 ? (
-              <p className="text-xs text-ash">
-                No same-area tables with capacity ≥ {detailBlock.partySize}. Use drag-to-reassign on
-                the timeline if you want to move across capacity.
-              </p>
-            ) : (
-              <Field
-                label="Move to table"
-                htmlFor="bdm-reassign"
-                hint="Same area, capacity ≥ party. Cross-area moves stay drag-only."
-              >
-                <select
-                  id="bdm-reassign"
-                  value={reassignTo}
-                  onChange={(e) => setReassignTo(e.target.value)}
-                  className="w-full rounded-input border border-hairline bg-white px-2 py-1 text-sm text-ink focus:border-ink focus:outline-none focus:ring-2 focus:ring-ink"
-                >
-                  <option value="">Pick a table…</option>
-                  {moveTargets.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.areaName} · {t.label} (cap {t.maxCover})
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            )}
-            {error ? <p className="text-xs text-rose">{error}</p> : null}
-          </div>
-        ) : null}
-
-        {mode === "view" && error ? <p className="text-xs text-rose">{error}</p> : null}
-      </div>
-
-      <footer className="flex items-center justify-end gap-2 border-t border-hairline px-5 py-3">
-        {mode === "edit-time" ? (
-          <>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setMode("view");
-                setNewWallStart(detailBlock.wallStart);
-                setError(null);
-              }}
-              disabled={pending}
-            >
-              Cancel
-            </Button>
-            <Button type="button" size="sm" onClick={onSaveTime} disabled={pending}>
-              {pending ? "Saving…" : "Save time"}
-            </Button>
-          </>
-        ) : mode === "refund" ? (
-          <>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setMode("view");
-                setRefundReason("");
-                setError(null);
-              }}
-              disabled={pending}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              onClick={onConfirmRefund}
-              disabled={pending || refundReason.trim().length < 3}
-            >
-              {pending ? "Refunding…" : "Confirm refund"}
-            </Button>
-          </>
-        ) : mode === "cancel-with-reason" ? (
-          <>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setMode("view");
-                setCancelReason("");
-                setError(null);
-              }}
-              disabled={pending}
-            >
-              Back
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              onClick={onConfirmCancel}
-              disabled={pending}
-            >
-              {pending ? "Cancelling…" : "Confirm cancel"}
-            </Button>
-          </>
-        ) : mode === "edit-details" ? (
-          <>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setMode("view");
-                setDraftPartySize(detailBlock.partySize);
-                setDraftNotes(detailBlock.notes ?? "");
-                setError(null);
-              }}
-              disabled={pending}
-            >
-              Cancel
-            </Button>
-            <Button type="button" size="sm" onClick={onSaveDetails} disabled={pending}>
-              {pending ? "Saving…" : "Save details"}
-            </Button>
-          </>
-        ) : mode === "reassign-table" ? (
-          <>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setMode("view");
-                setReassignTo("");
-                setError(null);
-              }}
-              disabled={pending}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={onConfirmReassign}
-              disabled={pending || !reassignTo}
-            >
-              {pending ? "Moving…" : "Move table"}
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button variant="secondary" size="sm" onClick={closeDetail}>
-              Close
-            </Button>
-            {editable ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  setMode("edit-details");
-                  setDraftPartySize(detailBlock.partySize);
-                  setDraftNotes(detailBlock.notes ?? "");
-                  setError(null);
-                }}
-              >
-                Edit details
-              </Button>
-            ) : null}
-            {editable && moveTargets.length > 0 ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  setMode("reassign-table");
-                  setReassignTo("");
-                  setError(null);
-                }}
-              >
-                Move table
-              </Button>
-            ) : null}
-            {editable ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  setMode("edit-time");
-                  setError(null);
-                }}
-              >
-                Edit time
-              </Button>
-            ) : null}
-            {detailBlock.refundable ? (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => {
-                  setMode("refund");
-                  setRefundReason("");
-                  setError(null);
-                }}
-              >
-                Refund
-              </Button>
-            ) : null}
-          </>
-        )}
-      </footer>
-    </>
-  );
-}
-
-function DetailRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-ash">{label}</span>
-      <span className="text-sm text-ink">{children}</span>
-    </div>
-  );
-}
 
 function createErrorMessage(r: { reason: string; message?: string | undefined }): string {
   switch (r.reason) {
