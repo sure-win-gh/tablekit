@@ -2,7 +2,7 @@
 
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { Button, Field, Input, Textarea, cn } from "@/components/ui";
@@ -27,6 +27,11 @@ export function SlotPicker({
   picked: { serviceId: string; wallStart: string } | null;
 }) {
   const router = useRouter();
+  // Stay on the current path so the same forms work when mounted at
+  // /book/<venueId> (hosted page) and at /embed/<venueId> (iframe
+  // target). Navigating to a hard-coded /book path from the embed
+  // would jump the iframe out of the embed surface.
+  const pathname = usePathname();
 
   function navigate(
     patch: Partial<{ date: string; party: number; serviceId: string; wallStart: string }>,
@@ -36,7 +41,8 @@ export function SlotPicker({
     sp.set("party", String(patch.party ?? partySize));
     if (patch.serviceId) sp.set("serviceId", patch.serviceId);
     if (patch.wallStart) sp.set("wallStart", patch.wallStart);
-    router.push(`/book/${venueId}?${sp.toString()}`);
+    const base = pathname ?? `/book/${venueId}`;
+    router.push(`${base}?${sp.toString()}`);
   }
 
   const byService = new Map<string, SlotLite[]>();
