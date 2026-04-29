@@ -47,7 +47,7 @@ export default async function NewBookingPage({
   const date = sp.date ?? todayInZone(venue.timezone);
   const partySize = sp.party ? Math.max(1, Math.min(20, Number(sp.party))) : 2;
 
-  // Load enough to render the slot grid.
+  // Load enough to render the slot grid + show table-option labels.
   const [serviceRows, tableRows] = await withUser(async (db) => {
     const svc = await db
       .select({
@@ -61,6 +61,7 @@ export default async function NewBookingPage({
     const tbl = await db
       .select({
         id: venueTables.id,
+        label: venueTables.label,
         areaId: venueTables.areaId,
         minCover: venueTables.minCover,
         maxCover: venueTables.maxCover,
@@ -69,6 +70,7 @@ export default async function NewBookingPage({
       .where(eq(venueTables.venueId, venueId));
     return [svc, tbl] as const;
   });
+  const tableLabelById = new Map(tableRows.map((t) => [t.id, t.label]));
 
   const { startUtc, endUtc } = venueLocalDayRange(date, venue.timezone);
   const occupied = await withUser(async (db) =>
@@ -127,6 +129,16 @@ export default async function NewBookingPage({
           serviceId: s.serviceId,
           serviceName: s.serviceName,
           wallStart: s.wallStart,
+          // Carry every offered option so the picker can render
+          // "T4 + T5" labels and let the user choose between options
+          // when more than one fits. Bounded by buildTableOptions —
+          // realistic venues see ≤ ~5 options per slot.
+          options: s.options.map((opt) => ({
+            tableIds: opt.tableIds,
+            tableLabels: opt.tableIds
+              .map((id) => tableLabelById.get(id) ?? "?")
+              .map((label) => `T${label}`),
+          })),
         }))}
         picked={picked ? { serviceId: picked.serviceId, wallStart: picked.wallStart } : null}
       />
@@ -138,6 +150,12 @@ export default async function NewBookingPage({
           date={date}
           wallStart={picked.wallStart}
           partySize={partySize}
+          options={picked.options.map((opt) => ({
+            tableIds: opt.tableIds,
+            tableLabels: opt.tableIds
+              .map((id) => tableLabelById.get(id) ?? "?")
+              .map((label) => `T${label}`),
+          }))}
         />
       ) : null}
     </section>

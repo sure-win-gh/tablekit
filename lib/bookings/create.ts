@@ -55,6 +55,13 @@ export type CreateBookingInput = {
   guest: UpsertGuestRawInput;
   notes?: string;
   source: BookingSource;
+  // Optional explicit table set the caller wants (e.g. host clicked
+  // "T4 + T5" in the slot picker). When supplied, must match one of
+  // the slot's offered options exactly — same set, ignoring order.
+  // If it doesn't match (e.g. someone else just took T5) we return
+  // slot-taken so the host re-picks. When omitted, the engine first-
+  // -fits like before.
+  preferredTableIds?: string[];
 };
 
 export type DepositResponse =
@@ -205,9 +212,25 @@ export async function createBooking(
   );
   if (!slot) return { ok: false, reason: "no-availability" };
 
-  // Pick the first option (smallest-sufficient). The UI can refine
-  // later by letting the host choose, but for now "first fit" is fine.
-  const option: TableOption | undefined = slot.options[0];
+  // Pick the option. If the caller supplied a preferred table set,
+  // match it against the offered options (same membership, any order)
+  // — the slot may have multiple valid options and we honour the
+  // one the host actually picked in the UI. Otherwise first-fit
+  // (smallest-sufficient).
+  let option: TableOption | undefined;
+  if (input.preferredTableIds && input.preferredTableIds.length > 0) {
+    const wanted = [...input.preferredTableIds].sort().join(",");
+    option = slot.options.find(
+      (o) => [...o.tableIds].sort().join(",") === wanted,
+    );
+    // Preferred set no longer matches an offered option — concurrent
+    // booker grabbed one of the tables, or the input is bogus. Treat
+    // as slot-taken so the host re-picks rather than silently
+    // re-assigning to a different table set.
+    if (!option) return { ok: false, reason: "slot-taken" };
+  } else {
+    option = slot.options[0];
+  }
   if (!option) return { ok: false, reason: "no-availability" };
 
   // Resolve deposit requirement BEFORE the booking transaction so the

@@ -14,6 +14,10 @@ import { refundBooking } from "@/lib/payments/refunds";
 
 // Shape of the form post from /bookings/new. The guest fields feed
 // straight into lib/guests — no second Zod pass needed.
+//
+// `preferredTableIds` arrives as a comma-separated string (FormData is
+// flat) and is split + uuid-validated below. Optional — when absent
+// the booking engine first-fits.
 const CreateBookingForm = z.object({
   venueId: z.string().uuid(),
   serviceId: z.string().uuid(),
@@ -22,6 +26,7 @@ const CreateBookingForm = z.object({
   partySize: z.coerce.number().int().min(1).max(20),
   notes: z.string().max(500).optional(),
   guest: upsertGuestInput,
+  preferredTableIds: z.array(z.string().uuid()).max(4).optional(),
 });
 
 export type CreateBookingActionState =
@@ -46,6 +51,11 @@ export async function createBookingAction(
   }
 
   // FormData → nested shape. The guest subfields arrive flat.
+  const rawPreferred = formData.get("preferredTableIds");
+  const preferredTableIds =
+    typeof rawPreferred === "string" && rawPreferred.length > 0
+      ? rawPreferred.split(",").map((s) => s.trim()).filter(Boolean)
+      : undefined;
   const raw = {
     venueId: formData.get("venueId"),
     serviceId: formData.get("serviceId"),
@@ -59,6 +69,7 @@ export async function createBookingAction(
       email: formData.get("email"),
       phone: formData.get("phone") || undefined,
     },
+    ...(preferredTableIds ? { preferredTableIds } : {}),
   };
 
   const parsed = CreateBookingForm.safeParse(raw);
@@ -78,6 +89,9 @@ export async function createBookingAction(
     guest: parsed.data.guest,
     source: "host",
     ...(parsed.data.notes ? { notes: parsed.data.notes } : {}),
+    ...(parsed.data.preferredTableIds
+      ? { preferredTableIds: parsed.data.preferredTableIds }
+      : {}),
   });
 
   if (!r.ok) {
