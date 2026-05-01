@@ -7,7 +7,7 @@ This folder holds the source of truth for every feature. Claude should read the 
 | # | Spec                        | Status | Notes |
 |---|-----------------------------|--------|-------|
 | 1 | [`auth.md`](auth.md)         | draft  | Sign up, login, organisations, roles |
-| 2 | [`venues.md`](venues.md)     | partial | Venue + service + floor plan model; URL slug routing shipped (no slug-specific spec written) |
+| 2 | [`venues.md`](venues.md)     | partial | Venue + service + floor plan model. URL slug routing split out into `venue-slug.md` |
 | 3 | [`bookings.md`](bookings.md) | partial | Day list with search/filter, detail/edit dialog, table picker shipped; full acceptance-criteria sweep still pending |
 | 4 | [`widget.md`](widget.md)     | partial | Embeddable iframe loader + `/embed` route + dashboard snippet shipped; remaining acceptance criteria pending |
 | 5 | [`payments.md`](payments.md) | draft  | Deposits, Stripe Connect, no-show capture — charter |
@@ -20,6 +20,7 @@ This folder holds the source of truth for every feature. Claude should read the 
 |11 | [`timeline.md`](timeline.md) | shipped | Per-table time-blocks view + drag-to-reassign |
 |12 | [`floor-plan-visual.md`](floor-plan-visual.md) | partial | SVG canvas + booking-status overlay shipped; edit-mode drag-persist + pan/zoom + viewport-fit pending |
 |13 | [`reviews.md`](reviews.md)   | partial | Phase 1, 2, 3a–c, 6, 7a shipped; Phase 4 + 5 deferred; Phase 7b cut |
+|14 | [`venue-slug.md`](venue-slug.md) | shipped | Friendly public URLs (`book.tablekit.uk/jane-cafe`); UUID URLs keep working + 308-redirect |
 
 ## Plus-tier features (weeks 13–24)
 
