@@ -22,7 +22,11 @@ export type SignupCounts = {
 export type DailyBucket = { day: string; n: number };
 
 export async function getSignupCounts(db: AdminDb, now: Date = new Date()): Promise<SignupCounts> {
-  const [todayBounds, weekBounds, monthBounds] = [todayUtc(now), lastNDays(7, now), lastNDays(30, now)];
+  const [todayBounds, weekBounds, monthBounds] = [
+    todayUtc(now),
+    lastNDays(7, now),
+    lastNDays(30, now),
+  ];
 
   const at = async (from: Date, to: Date) => {
     const [row] = await db

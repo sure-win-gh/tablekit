@@ -19,16 +19,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
-import {
-  bookingsToCsv,
-  bookingsToJson,
-  loadBookingsForExport,
-} from "@/lib/export/bookings";
-import {
-  guestsToCsv,
-  guestsToJson,
-  loadGuestsForExport,
-} from "@/lib/export/guests";
+import { bookingsToCsv, bookingsToJson, loadBookingsForExport } from "@/lib/export/bookings";
+import { guestsToCsv, guestsToJson, loadGuestsForExport } from "@/lib/export/guests";
 import { audit } from "@/lib/server/admin/audit";
 
 export const dynamic = "force-dynamic";
@@ -39,10 +31,7 @@ const FORMATS = ["csv", "json"] as const;
 type Entity = (typeof ENTITIES)[number];
 type Format = (typeof FORMATS)[number];
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ entity: string }> },
-) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ entity: string }> }) {
   const { orgId, userId } = await requireRole("manager");
   const { entity } = await params;
   if (!isEntity(entity)) {

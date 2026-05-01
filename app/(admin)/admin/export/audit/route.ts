@@ -26,9 +26,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const prefix = url.searchParams.get("prefix") ?? "";
   const orgId = url.searchParams.get("org_id") ?? "";
   const requestedLimit = Number(url.searchParams.get("limit") ?? "");
-  const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
-    ? Math.min(requestedLimit, MAX_EXPORT_ROWS)
-    : 1000;
+  const limit =
+    Number.isFinite(requestedLimit) && requestedLimit > 0
+      ? Math.min(requestedLimit, MAX_EXPORT_ROWS)
+      : 1000;
 
   const rows = await getAuditFeed(adminDb(), {
     actionPrefix: prefix || undefined,

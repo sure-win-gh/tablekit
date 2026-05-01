@@ -37,11 +37,7 @@ export function NewVenueForm() {
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
-      <Field
-        label="Venue name"
-        htmlFor="venue-name"
-        error={fieldErrors?.["name"]?.[0]}
-      >
+      <Field label="Venue name" htmlFor="venue-name" error={fieldErrors?.["name"]?.[0]}>
         <Input
           id="venue-name"
           name="name"
@@ -53,12 +49,12 @@ export function NewVenueForm() {
       </Field>
 
       <fieldset className="flex flex-col gap-2">
-        <legend className="text-xs font-semibold text-ink">Venue type</legend>
+        <legend className="text-ink text-xs font-semibold">Venue type</legend>
         <div className="flex flex-col gap-2">
           {TYPE_OPTIONS.map((opt) => (
             <label
               key={opt.value}
-              className="flex cursor-pointer items-start gap-3 rounded-card border border-hairline p-3 transition has-checked:border-ink has-checked:bg-cloud"
+              className="rounded-card border-hairline has-checked:border-ink has-checked:bg-cloud flex cursor-pointer items-start gap-3 border p-3 transition"
             >
               <input
                 type="radio"
@@ -66,17 +62,17 @@ export function NewVenueForm() {
                 value={opt.value}
                 required
                 defaultChecked={opt.value === "cafe"}
-                className="mt-1 accent-ink"
+                className="accent-ink mt-1"
               />
               <span className="flex flex-col gap-0.5">
-                <span className="text-sm font-semibold text-ink">{opt.label}</span>
-                <span className="text-xs text-ash">{opt.hint}</span>
+                <span className="text-ink text-sm font-semibold">{opt.label}</span>
+                <span className="text-ash text-xs">{opt.hint}</span>
               </span>
             </label>
           ))}
         </div>
         {fieldErrors?.["venueType"] ? (
-          <span role="alert" className="text-[11px] text-rose">
+          <span role="alert" className="text-rose text-[11px]">
             {fieldErrors["venueType"][0]}
           </span>
         ) : null}
@@ -104,12 +100,12 @@ export function NewVenueForm() {
       </div>
 
       {state.status === "error" && !fieldErrors ? (
-        <p role="alert" className="text-sm text-rose">
+        <p role="alert" className="text-rose text-sm">
           {state.message}
         </p>
       ) : null}
 
-      <div className="flex justify-end gap-3 border-t border-hairline pt-4">
+      <div className="border-hairline flex justify-end gap-3 border-t pt-4">
         <Button type="submit" disabled={pending}>
           {pending ? "Creating…" : "Create venue"}
         </Button>

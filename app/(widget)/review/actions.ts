@@ -86,8 +86,7 @@ export async function submitReview(
 
   if (!existing) {
     const trimmed = (parsed.data.comment ?? "").trim();
-    const commentCipher =
-      trimmed.length > 0 ? await encryptPii(row.organisationId, trimmed) : null;
+    const commentCipher = trimmed.length > 0 ? await encryptPii(row.organisationId, trimmed) : null;
 
     const [inserted] = await db
       .insert(reviews)

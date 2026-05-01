@@ -34,28 +34,28 @@ export default async function DataPage() {
 
   return (
     <main className="flex flex-1 flex-col px-8 py-6">
-      <nav className="flex items-center gap-1.5 text-xs text-ash">
+      <nav className="text-ash flex items-center gap-1.5 text-xs">
         <Link href="/dashboard" className="hover:text-ink">
           Dashboard
         </Link>
-        <ChevronRight className="h-3.5 w-3.5 text-stone" aria-hidden />
+        <ChevronRight className="text-stone h-3.5 w-3.5" aria-hidden />
         <span className="text-ink">Data</span>
       </nav>
 
-      <header className="mt-3 border-b border-hairline pb-4">
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-ink">
-          <Database className="h-6 w-6 text-coral" aria-hidden />
+      <header className="border-hairline mt-3 border-b pb-4">
+        <h1 className="text-ink flex items-center gap-2 text-2xl font-bold tracking-tight">
+          <Database className="text-coral h-6 w-6" aria-hidden />
           Data
         </h1>
-        <p className="mt-1 text-sm text-ash">
+        <p className="text-ash mt-1 text-sm">
           Export your guests and bookings in CSV or JSON. Encrypted personal data is decrypted in
-          the export — only members of this organisation can run it. Every export is recorded in
-          the audit log.
+          the export — only members of this organisation can run it. Every export is recorded in the
+          audit log.
         </p>
       </header>
 
       {!canExport ? (
-        <p className="mt-6 flex items-center gap-2 rounded-card border border-hairline bg-cloud p-4 text-sm text-ash">
+        <p className="rounded-card border-hairline bg-cloud text-ash mt-6 flex items-center gap-2 border p-4 text-sm">
           <Lock className="h-4 w-4" aria-hidden />
           Exporting requires manager or owner role. Ask the account owner to run an export.
         </p>
@@ -79,8 +79,8 @@ export default async function DataPage() {
       )}
 
       <section className="mt-10 flex flex-col gap-2">
-        <h2 className="text-sm font-semibold tracking-tight text-ink">Coming soon</h2>
-        <p className="text-sm text-ash">
+        <h2 className="text-ink text-sm font-semibold tracking-tight">Coming soon</h2>
+        <p className="text-ash text-sm">
           Messages, payments, and a single-zip full-organisation backup land in the next release.
           Imports from OpenTable, ResDiary, and SevenRooms follow on the Plus plan.
         </p>
@@ -103,14 +103,14 @@ function ExportCard({
   disabled: boolean;
 }) {
   return (
-    <article className="flex flex-col gap-3 rounded-card border border-hairline bg-white p-4">
+    <article className="rounded-card border-hairline flex flex-col gap-3 border bg-white p-4">
       <header className="flex items-baseline justify-between gap-2">
-        <h3 className="text-base font-semibold tracking-tight text-ink">{title}</h3>
-        <span className="text-xs text-ash">
+        <h3 className="text-ink text-base font-semibold tracking-tight">{title}</h3>
+        <span className="text-ash text-xs">
           {count.toLocaleString("en-GB")} {count === 1 ? "row" : "rows"}
         </span>
       </header>
-      <p className="text-sm text-ash">{description}</p>
+      <p className="text-ash text-sm">{description}</p>
       <div className="mt-auto flex gap-2">
         <DownloadLink entity={entity} format="csv" disabled={disabled} />
         <DownloadLink entity={entity} format="json" disabled={disabled} />
@@ -132,7 +132,7 @@ function DownloadLink({
     "inline-flex items-center gap-1.5 rounded-input border border-hairline px-3 py-1.5 text-sm transition";
   if (disabled) {
     return (
-      <span className={`${base} cursor-not-allowed text-mute`} aria-disabled>
+      <span className={`${base} text-mute cursor-not-allowed`} aria-disabled>
         <Download className="h-4 w-4" aria-hidden />
         {format.toUpperCase()}
       </span>
@@ -141,7 +141,7 @@ function DownloadLink({
   return (
     <a
       href={`/dashboard/data/export/${entity}?format=${format}`}
-      className={`${base} bg-white text-ink hover:border-ink`}
+      className={`${base} text-ink hover:border-ink bg-white`}
       // download attribute is informational — Content-Disposition on
       // the response sets the actual filename (with today's date).
       download

@@ -55,10 +55,10 @@ export function GroupCrmToggle({
 
   return (
     <div className="mt-2 flex flex-col gap-2">
-      <div className="flex items-center justify-between rounded-card border border-hairline bg-white px-4 py-3">
+      <div className="rounded-card border-hairline flex items-center justify-between border bg-white px-4 py-3">
         <div className="flex flex-col">
-          <span className="text-sm font-semibold text-ink">Cross-venue guest list</span>
-          <span className="text-xs text-ash">
+          <span className="text-ink text-sm font-semibold">Cross-venue guest list</span>
+          <span className="text-ash text-xs">
             Off — guests are scoped per venue. On — operators see all guests across the org.
           </span>
         </div>
@@ -83,12 +83,10 @@ export function GroupCrmToggle({
         </button>
       </div>
       {ownerOnlyHint ? (
-        <p className="text-[11px] text-ash">Only owners can change this setting.</p>
+        <p className="text-ash text-[11px]">Only owners can change this setting.</p>
       ) : null}
-      {pending ? <p className="text-xs text-ash">Saving…</p> : null}
-      {state.status === "error" ? (
-        <p className="text-xs text-rose">{state.message}</p>
-      ) : null}
+      {pending ? <p className="text-ash text-xs">Saving…</p> : null}
+      {state.status === "error" ? <p className="text-rose text-xs">{state.message}</p> : null}
       {state.status === "saved" && !pending ? (
         <p className="text-xs text-emerald-700">Saved.</p>
       ) : null}

@@ -91,27 +91,29 @@ export default async function GuestProfilePage({
 
   return (
     <main className="flex flex-1 flex-col px-8 py-6">
-      <nav className="flex items-center gap-1.5 text-xs text-ash">
+      <nav className="text-ash flex items-center gap-1.5 text-xs">
         <Link href="/dashboard" className="hover:text-ink">
           Dashboard
         </Link>
-        <ChevronRight className="h-3.5 w-3.5 text-stone" aria-hidden />
+        <ChevronRight className="text-stone h-3.5 w-3.5" aria-hidden />
         <Link href="/dashboard/guests" className="hover:text-ink">
           Guests
         </Link>
-        <ChevronRight className="h-3.5 w-3.5 text-stone" aria-hidden />
+        <ChevronRight className="text-stone h-3.5 w-3.5" aria-hidden />
         <span className="text-ink">{guest.firstName}</span>
       </nav>
 
-      <header className="mt-3 flex flex-wrap items-start justify-between gap-3 border-b border-hairline pb-4">
+      <header className="border-hairline mt-3 flex flex-wrap items-start justify-between gap-3 border-b pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink">{fullName}</h1>
-          <p className="mt-1 text-sm text-ash">
+          <h1 className="text-ink text-2xl font-bold tracking-tight">{fullName}</h1>
+          <p className="text-ash mt-1 text-sm">
             Member since {guest.createdAt.toLocaleDateString("en-GB")} ·{" "}
-            {visits.length === 0 ? "no visits yet" : `${visits.length} visit${visits.length === 1 ? "" : "s"}`}
+            {visits.length === 0
+              ? "no visits yet"
+              : `${visits.length} visit${visits.length === 1 ? "" : "s"}`}
           </p>
           {guest.erasedAt ? (
-            <p className="mt-1 text-xs text-rose">
+            <p className="text-rose mt-1 text-xs">
               Erased on {guest.erasedAt.toLocaleDateString("en-GB")} — DSAR scrub pending.
             </p>
           ) : null}
@@ -141,19 +143,17 @@ export default async function GuestProfilePage({
       </section>
 
       <section className="mt-8">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-ash">
-          Visit history
-        </h2>
+        <h2 className="text-ash text-sm font-semibold tracking-wider uppercase">Visit history</h2>
         {visits.length === 0 ? (
-          <p className="mt-3 rounded-card border border-dashed border-hairline p-6 text-center text-sm text-ash">
+          <p className="rounded-card border-hairline text-ash mt-3 border border-dashed p-6 text-center text-sm">
             No bookings yet for this guest.
           </p>
         ) : (
-          <ul className="mt-3 divide-y divide-hairline rounded-card border border-hairline bg-white">
+          <ul className="divide-hairline rounded-card border-hairline mt-3 divide-y border bg-white">
             {visits.map((v) => (
               <li key={v.id} className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
                 <div className="flex flex-col">
-                  <span className="font-mono tabular-nums text-ink">
+                  <span className="text-ink font-mono tabular-nums">
                     {v.startAt.toLocaleString("en-GB", {
                       timeZone: v.venueTimezone,
                       day: "2-digit",
@@ -162,13 +162,13 @@ export default async function GuestProfilePage({
                       minute: "2-digit",
                     })}
                   </span>
-                  <span className="text-xs text-ash">
+                  <span className="text-ash text-xs">
                     {v.venueName} · {v.serviceName} · party of {v.partySize}
                   </span>
                 </div>
                 <Link
                   href={`/dashboard/venues/${v.venueId}/bookings?date=${v.startAt.toISOString().slice(0, 10)}`}
-                  className="rounded-pill border border-hairline px-2.5 py-0.5 text-xs font-medium text-ink hover:border-ink"
+                  className="rounded-pill border-hairline text-ink hover:border-ink border px-2.5 py-0.5 text-xs font-medium"
                 >
                   {v.status}
                 </Link>

@@ -98,25 +98,25 @@ export default async function PrivacyRequestDetailPage({
 
   return (
     <main className="flex flex-1 flex-col px-8 py-6">
-      <nav className="flex items-center gap-1.5 text-xs text-ash">
+      <nav className="text-ash flex items-center gap-1.5 text-xs">
         <Link href="/dashboard" className="hover:text-ink">
           Dashboard
         </Link>
-        <ChevronRight className="h-3.5 w-3.5 text-stone" aria-hidden />
+        <ChevronRight className="text-stone h-3.5 w-3.5" aria-hidden />
         <Link href="/dashboard/privacy-requests" className="hover:text-ink">
           Privacy requests
         </Link>
-        <ChevronRight className="h-3.5 w-3.5 text-stone" aria-hidden />
-        <span className="font-mono text-ink">{row.id.slice(0, 8)}</span>
+        <ChevronRight className="text-stone h-3.5 w-3.5" aria-hidden />
+        <span className="text-ink font-mono">{row.id.slice(0, 8)}</span>
       </nav>
 
-      <header className="mt-3 flex flex-wrap items-start justify-between gap-3 border-b border-hairline pb-4">
+      <header className="border-hairline mt-3 flex flex-wrap items-start justify-between gap-3 border-b pb-4">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-ink">
-            <ShieldCheck className="h-6 w-6 text-coral" aria-hidden />
+          <h1 className="text-ink flex items-center gap-2 text-2xl font-bold tracking-tight">
+            <ShieldCheck className="text-coral h-6 w-6" aria-hidden />
             {kindLabel(row.kind)}
           </h1>
-          <p className="mt-1 text-sm text-ash">
+          <p className="text-ash mt-1 text-sm">
             Requested {row.requestedAt.toLocaleDateString("en-GB", { dateStyle: "long" })}
             {" · due "}
             {row.dueAt.toLocaleDateString("en-GB", { dateStyle: "long" })}
@@ -133,18 +133,18 @@ export default async function PrivacyRequestDetailPage({
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2">
         <Field label="Requester email">
-          <p className="font-mono text-sm text-ink">{requesterEmail}</p>
+          <p className="text-ink font-mono text-sm">{requesterEmail}</p>
         </Field>
         <Field label="Matched guest">
           {row.guestId ? (
             <Link
               href={`/dashboard/venues`}
-              className="text-sm font-semibold text-ink underline underline-offset-4 hover:text-coral"
+              className="text-ink hover:text-coral text-sm font-semibold underline underline-offset-4"
             >
               {row.guestFirstName ?? "Open profile"}
             </Link>
           ) : (
-            <p className="text-sm text-ash">No matching profile in this organisation.</p>
+            <p className="text-ash text-sm">No matching profile in this organisation.</p>
           )}
         </Field>
       </section>
@@ -152,11 +152,11 @@ export default async function PrivacyRequestDetailPage({
       <section className="mt-6">
         <Field label="Message from requester">
           {message ? (
-            <p className="whitespace-pre-line rounded-card border border-hairline bg-cloud p-4 text-sm text-charcoal">
+            <p className="rounded-card border-hairline bg-cloud text-charcoal border p-4 text-sm whitespace-pre-line">
               {message}
             </p>
           ) : (
-            <p className="text-sm text-ash">No additional message.</p>
+            <p className="text-ash text-sm">No additional message.</p>
           )}
         </Field>
       </section>
@@ -164,14 +164,14 @@ export default async function PrivacyRequestDetailPage({
       {row.resolutionNotes ? (
         <section className="mt-6">
           <Field label="Resolution notes">
-            <p className="whitespace-pre-line rounded-card border border-hairline bg-white p-4 text-sm text-charcoal">
+            <p className="rounded-card border-hairline text-charcoal border bg-white p-4 text-sm whitespace-pre-line">
               {row.resolutionNotes}
             </p>
           </Field>
         </section>
       ) : null}
 
-      <section className="mt-8 border-t border-hairline pt-6">
+      <section className="border-hairline mt-8 border-t pt-6">
         <RequestActions
           dsarId={row.id}
           status={row.status as "pending" | "in_progress" | "completed" | "rejected"}
@@ -192,7 +192,7 @@ function serverNow(): number {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="text-xs font-semibold uppercase tracking-wider text-ash">{label}</p>
+      <p className="text-ash text-xs font-semibold tracking-wider uppercase">{label}</p>
       {children}
     </div>
   );

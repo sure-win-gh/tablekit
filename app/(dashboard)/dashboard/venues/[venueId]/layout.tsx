@@ -48,19 +48,19 @@ export default async function VenueLayout({
 
   return (
     <div className="flex flex-1 flex-col px-8 py-6">
-      <nav className="flex items-center justify-between gap-1.5 text-xs text-ash">
+      <nav className="text-ash flex items-center justify-between gap-1.5 text-xs">
         <div className="flex items-center gap-1.5">
           <Link href="/dashboard/venues" className="hover:text-ink">
             Venues
           </Link>
-          <ChevronRight className="h-3.5 w-3.5 text-stone" aria-hidden />
+          <ChevronRight className="text-stone h-3.5 w-3.5" aria-hidden />
           <span className="text-ink">{venue.name}</span>
         </div>
         <VenueSwitcher currentVenueId={venue.id} venues={siblings} />
       </nav>
 
-      <header className="mt-3 border-b border-hairline pb-4">
-        <h1 className="text-2xl font-bold tracking-tight text-ink">{venue.name}</h1>
+      <header className="border-hairline mt-3 border-b pb-4">
+        <h1 className="text-ink text-2xl font-bold tracking-tight">{venue.name}</h1>
       </header>
 
       <div className="mt-6">{children}</div>

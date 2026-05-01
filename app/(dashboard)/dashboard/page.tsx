@@ -63,20 +63,20 @@ export default async function DashboardPage() {
   // Zero-venue state.
   return (
     <main className="flex flex-1 flex-col px-8 py-6">
-      <header className="border-b border-hairline pb-4">
-        <h1 className="text-2xl font-bold tracking-tight text-ink">{data.org.name}</h1>
-        <p className="mt-0.5 text-sm text-ash">
+      <header className="border-hairline border-b pb-4">
+        <h1 className="text-ink text-2xl font-bold tracking-tight">{data.org.name}</h1>
+        <p className="text-ash mt-0.5 text-sm">
           {data.org.plan} plan · slug <span className="font-mono">{data.org.slug}</span>
         </p>
       </header>
 
-      <section className="mt-10 flex flex-col items-center gap-4 rounded-card border border-dashed border-hairline p-12 text-center">
-        <Store className="h-8 w-8 text-stone" aria-hidden />
+      <section className="rounded-card border-hairline mt-10 flex flex-col items-center gap-4 border border-dashed p-12 text-center">
+        <Store className="text-stone h-8 w-8" aria-hidden />
         <div className="flex flex-col gap-1.5">
-          <h2 className="text-lg font-bold tracking-tight text-ink">
+          <h2 className="text-ink text-lg font-bold tracking-tight">
             Welcome. Let&apos;s set up your first venue.
           </h2>
-          <p className="max-w-md text-sm text-ash">
+          <p className="text-ash max-w-md text-sm">
             Pick a type (café, restaurant, or bar / pub) and we&apos;ll seed a floor plan and a
             service schedule so you can start taking bookings today. Everything&apos;s editable
             afterwards.

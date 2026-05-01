@@ -23,9 +23,13 @@ const Schema = z.object({
   locale: z.string().min(1).max(20),
   // Reviews — Phase 1. All optional so legacy form posts still parse.
   reviewRequestEnabled: z.coerce.boolean().optional(),
-  reviewRequestDelayHours: z.coerce.number().int().refine((v) => [24, 48, 72].includes(v), {
-    message: "Pick 24, 48 or 72",
-  }).optional(),
+  reviewRequestDelayHours: z.coerce
+    .number()
+    .int()
+    .refine((v) => [24, 48, 72].includes(v), {
+      message: "Pick 24, 48 or 72",
+    })
+    .optional(),
   // Place IDs are URL-safe base64-ish: letters, digits, `_`, `-`. Reject
   // pasted URLs / typos early so we don't ship a broken Google deep
   // link to guests.

@@ -47,8 +47,7 @@ export default async function VenueSettingsPage({
   });
   if (!venue) notFound();
 
-  const publicBaseUrl =
-    process.env["NEXT_PUBLIC_APP_URL"] ?? "https://book.tablekit.uk";
+  const publicBaseUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "https://book.tablekit.uk";
 
   const settings = (venue.settings ?? {}) as Record<string, unknown>;
   const delayHours: 24 | 48 | 72 =
@@ -65,11 +64,7 @@ export default async function VenueSettingsPage({
   };
 
   const escalationThreshold: 1 | 2 | 3 =
-    settings["escalationThreshold"] === 1
-      ? 1
-      : settings["escalationThreshold"] === 3
-        ? 3
-        : 2;
+    settings["escalationThreshold"] === 1 ? 1 : settings["escalationThreshold"] === 3 ? 3 : 2;
   const escalationSettings = {
     enabled: settings["escalationEnabled"] !== false,
     threshold: escalationThreshold,
@@ -154,8 +149,8 @@ export default async function VenueSettingsPage({
   return (
     <section className="flex flex-col gap-8">
       <div>
-        <p className="mb-6 text-sm text-ash">
-          Venue type is <span className="font-mono text-charcoal">{venue.venueType}</span> —
+        <p className="text-ash mb-6 text-sm">
+          Venue type is <span className="text-charcoal font-mono">{venue.venueType}</span> —
           changing type isn&apos;t supported yet.
         </p>
 

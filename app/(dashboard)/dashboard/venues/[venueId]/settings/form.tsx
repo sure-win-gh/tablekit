@@ -55,15 +55,14 @@ export function VenueSettingsForm({
         error={fieldErrors?.["name"]?.[0]}
       />
 
-      <fieldset className="flex flex-col gap-2 border-t border-hairline pt-4">
-        <legend className="text-sm font-semibold text-ink">Booking URL slug</legend>
-        <p className="text-xs text-ash">
-          Lowercase letters, digits and single hyphens. 3–60 characters. Leave
-          blank to use the UUID URL. Once set, old QR codes pointing at the UUID
-          still work and redirect to the slug URL.
+      <fieldset className="border-hairline flex flex-col gap-2 border-t pt-4">
+        <legend className="text-ink text-sm font-semibold">Booking URL slug</legend>
+        <p className="text-ash text-xs">
+          Lowercase letters, digits and single hyphens. 3–60 characters. Leave blank to use the UUID
+          URL. Once set, old QR codes pointing at the UUID still work and redirect to the slug URL.
         </p>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-ink">Slug</span>
+          <span className="text-ink font-medium">Slug</span>
           <input
             name="slug"
             type="text"
@@ -72,7 +71,7 @@ export function VenueSettingsForm({
             maxLength={60}
             placeholder="jane-cafe"
             aria-invalid={Boolean(fieldErrors?.["slug"]?.[0])}
-            className="rounded-md border border-hairline px-3 py-2 text-sm outline-none focus:border-neutral-900"
+            className="border-hairline rounded-md border px-3 py-2 text-sm outline-none focus:border-neutral-900"
           />
           {fieldErrors?.["slug"]?.[0] ? (
             <span role="alert" className="text-xs text-red-600">
@@ -80,7 +79,7 @@ export function VenueSettingsForm({
             </span>
           ) : null}
         </label>
-        <p className="text-xs text-ash">
+        <p className="text-ash text-xs">
           {draftSlug.trim().length > 0
             ? `Public URL: ${publicBaseUrl}/book/${draftSlug.trim().toLowerCase()}`
             : `Public URL: ${publicBaseUrl}/book/${venueId} (UUID — set a slug to shorten)`}
@@ -108,19 +107,19 @@ export function VenueSettingsForm({
         />
       </div>
 
-      <fieldset className="flex flex-col gap-3 border-t border-hairline pt-4">
-        <legend className="text-sm font-semibold text-ink">Review requests</legend>
-        <p className="text-xs text-ash">
+      <fieldset className="border-hairline flex flex-col gap-3 border-t pt-4">
+        <legend className="text-ink text-sm font-semibold">Review requests</legend>
+        <p className="text-ash text-xs">
           Sent automatically after a booking finishes. You can adjust the delay or turn it off.
-          Guests are always offered both a Google link and a private-feedback option, regardless
-          of rating.
+          Guests are always offered both a Google link and a private-feedback option, regardless of
+          rating.
         </p>
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
             name="review_request_enabled"
             defaultChecked={reviewRequestEnabled}
-            className="h-4 w-4 rounded border-hairline"
+            className="border-hairline h-4 w-4 rounded"
           />
           <span>Send review requests after dining</span>
         </label>
@@ -139,7 +138,7 @@ export function VenueSettingsForm({
             optional
           />
         </div>
-        <p className="text-xs text-ash">
+        <p className="text-ash text-xs">
           Find your Place ID at{" "}
           <a
             href="https://developers.google.com/maps/documentation/places/web-service/place-id"
@@ -153,27 +152,27 @@ export function VenueSettingsForm({
         </p>
       </fieldset>
 
-      <fieldset className="flex flex-col gap-3 border-t border-hairline pt-4">
-        <legend className="text-sm font-semibold text-ink">Public review showcase</legend>
-        <p className="text-xs text-ash">
-          Show recent 4★ and 5★ reviews on this venue&apos;s booking page. Only reviews where
-          the guest ticked the consent box appear; we display first name + rating + comment,
-          never email or last name.
+      <fieldset className="border-hairline flex flex-col gap-3 border-t pt-4">
+        <legend className="text-ink text-sm font-semibold">Public review showcase</legend>
+        <p className="text-ash text-xs">
+          Show recent 4★ and 5★ reviews on this venue&apos;s booking page. Only reviews where the
+          guest ticked the consent box appear; we display first name + rating + comment, never email
+          or last name.
         </p>
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
             name="showcase_enabled"
             defaultChecked={showcaseEnabled}
-            className="h-4 w-4 rounded border-hairline"
+            className="border-hairline h-4 w-4 rounded"
           />
           <span>Show consented reviews on the booking page</span>
         </label>
       </fieldset>
 
-      <fieldset id="escalation" className="flex flex-col gap-3 border-t border-hairline pt-4">
-        <legend className="text-sm font-semibold text-ink">Negative review alerts</legend>
-        <p className="text-xs text-ash">
+      <fieldset id="escalation" className="border-hairline flex flex-col gap-3 border-t pt-4">
+        <legend className="text-ink text-sm font-semibold">Negative review alerts</legend>
+        <p className="text-ash text-xs">
           Email a manager when a low-star review lands so you can reply or send a recovery offer
           quickly.
         </p>
@@ -182,7 +181,7 @@ export function VenueSettingsForm({
             type="checkbox"
             name="escalation_enabled"
             defaultChecked={escalationEnabled}
-            className="h-4 w-4 rounded border-hairline"
+            className="border-hairline h-4 w-4 rounded"
           />
           <span>Send an alert when a review at or below the threshold lands</span>
         </label>
@@ -201,7 +200,7 @@ export function VenueSettingsForm({
             optional
           />
         </div>
-        <p className="text-xs text-ash">
+        <p className="text-ash text-xs">
           Threshold is the highest rating that triggers an alert (e.g. 2 alerts on 1- and 2-star).
           Leave the email blank to fall back to the org owner&apos;s address.
         </p>
@@ -218,11 +217,11 @@ export function VenueSettingsForm({
         </p>
       ) : null}
 
-      <div className="flex justify-end border-t border-hairline pt-4">
+      <div className="border-hairline flex justify-end border-t pt-4">
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-ink px-4 py-2 text-sm font-medium text-white transition hover:bg-charcoal disabled:opacity-50"
+          className="bg-ink hover:bg-charcoal rounded-md px-4 py-2 text-sm font-medium text-white transition disabled:opacity-50"
         >
           {pending ? "Saving…" : "Save changes"}
         </button>
@@ -246,14 +245,14 @@ function Field({
 }) {
   return (
     <label className="flex flex-col gap-1 text-sm">
-      <span className="font-medium text-ink">{label}</span>
+      <span className="text-ink font-medium">{label}</span>
       <input
         name={name}
         type="text"
         defaultValue={defaultValue}
         required={!optional}
         aria-invalid={Boolean(error)}
-        className="rounded-md border border-hairline px-3 py-2 text-sm outline-none focus:border-neutral-900"
+        className="border-hairline rounded-md border px-3 py-2 text-sm outline-none focus:border-neutral-900"
       />
       {error ? (
         <span role="alert" className="text-xs text-red-600">
@@ -277,11 +276,11 @@ function Select({
 }) {
   return (
     <label className="flex flex-col gap-1 text-sm">
-      <span className="font-medium text-ink">{label}</span>
+      <span className="text-ink font-medium">{label}</span>
       <select
         name={name}
         defaultValue={defaultValue}
-        className="rounded-md border border-hairline px-3 py-2 text-sm outline-none focus:border-neutral-900"
+        className="border-hairline rounded-md border px-3 py-2 text-sm outline-none focus:border-neutral-900"
       >
         {options.map((o) => (
           <option key={o} value={o}>

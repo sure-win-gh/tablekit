@@ -30,10 +30,7 @@ export async function getActiveGoogleConnection(
     .select()
     .from(venueOauthConnections)
     .where(
-      and(
-        eq(venueOauthConnections.venueId, venueId),
-        eq(venueOauthConnections.provider, "google"),
-      ),
+      and(eq(venueOauthConnections.venueId, venueId), eq(venueOauthConnections.provider, "google")),
     )
     .limit(1);
   if (!row) return null;
@@ -79,9 +76,6 @@ export async function markVenueSynced(venueId: string): Promise<void> {
     .update(venueOauthConnections)
     .set({ lastSyncedAt: new Date() })
     .where(
-      and(
-        eq(venueOauthConnections.venueId, venueId),
-        eq(venueOauthConnections.provider, "google"),
-      ),
+      and(eq(venueOauthConnections.venueId, venueId), eq(venueOauthConnections.provider, "google")),
     );
 }

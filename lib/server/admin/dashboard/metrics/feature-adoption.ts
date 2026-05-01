@@ -51,10 +51,7 @@ export async function getFeatureAdoption(db: AdminDb): Promise<FeatureAdoption> 
       ) s
     `),
     db.select({ n: countDistinct(reviews.organisationId) }).from(reviews),
-    db
-      .select({ n: count() })
-      .from(stripeAccounts)
-      .where(eq(stripeAccounts.payoutsEnabled, true)),
+    db.select({ n: count() }).from(stripeAccounts).where(eq(stripeAccounts.payoutsEnabled, true)),
     db.select({ n: countDistinct(messages.organisationId) }).from(messages),
     db.execute<{ n: string | number }>(sql`
       select count(*)::int as n from (

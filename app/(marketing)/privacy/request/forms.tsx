@@ -47,16 +47,14 @@ export function DsarRequestForm({ orgSlug, orgName }: { orgSlug: string; orgName
       <input type="hidden" name="orgSlug" value={orgSlug} />
 
       <fieldset className="flex flex-col gap-2">
-        <legend className="text-xs font-semibold text-ink">What kind of request?</legend>
+        <legend className="text-ink text-xs font-semibold">What kind of request?</legend>
         <div className="flex flex-col gap-2">
           {KIND_OPTIONS.map((opt) => (
             <label
               key={opt.value}
               className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-card border p-3 transition",
-                kind === opt.value
-                  ? "border-ink bg-cloud"
-                  : "border-hairline hover:border-ink",
+                "rounded-card flex cursor-pointer items-start gap-3 border p-3 transition",
+                kind === opt.value ? "border-ink bg-cloud" : "border-hairline hover:border-ink",
               )}
             >
               <input
@@ -66,25 +64,23 @@ export function DsarRequestForm({ orgSlug, orgName }: { orgSlug: string; orgName
                 required
                 checked={kind === opt.value}
                 onChange={(e) => setKind(e.target.value)}
-                className="mt-1 accent-ink"
+                className="accent-ink mt-1"
               />
               <span className="flex flex-col gap-0.5">
-                <span className="text-sm font-semibold text-ink">{opt.label}</span>
-                <span className="text-xs text-ash">{opt.hint}</span>
+                <span className="text-ink text-sm font-semibold">{opt.label}</span>
+                <span className="text-ash text-xs">{opt.hint}</span>
               </span>
             </label>
           ))}
         </div>
       </fieldset>
 
-      <Field label="Your email" htmlFor="dsar-email" hint="The address the venue used for your booking.">
-        <Input
-          id="dsar-email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-        />
+      <Field
+        label="Your email"
+        htmlFor="dsar-email"
+        hint="The address the venue used for your booking."
+      >
+        <Input id="dsar-email" name="email" type="email" autoComplete="email" required />
       </Field>
 
       <Field label="Anything else we should know" htmlFor="dsar-message" optional>
@@ -98,13 +94,13 @@ export function DsarRequestForm({ orgSlug, orgName }: { orgSlug: string; orgName
       </Field>
 
       {state.status === "error" ? (
-        <p role="alert" className="text-sm text-rose">
+        <p role="alert" className="text-rose text-sm">
           {state.message}
         </p>
       ) : null}
 
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[11px] text-ash">
+        <p className="text-ash text-[11px]">
           Submitted requests are encrypted in transit and at rest. The venue, not TableKit, will
           contact you.
         </p>

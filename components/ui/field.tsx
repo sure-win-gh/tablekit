@@ -22,16 +22,16 @@ export function Field({ label, htmlFor, hint, error, optional, className, childr
     <div className={cn("flex flex-col gap-1.5", className)}>
       <label
         htmlFor={htmlFor}
-        className="flex items-baseline justify-between text-xs font-semibold text-ink"
+        className="text-ink flex items-baseline justify-between text-xs font-semibold"
       >
         <span>{label}</span>
-        {optional ? <span className="text-[11px] font-medium text-ash">Optional</span> : null}
+        {optional ? <span className="text-ash text-[11px] font-medium">Optional</span> : null}
       </label>
       {children}
       {error ? (
-        <p className="text-[11px] text-rose">{error}</p>
+        <p className="text-rose text-[11px]">{error}</p>
       ) : hint ? (
-        <p className="text-[11px] text-ash">{hint}</p>
+        <p className="text-ash text-[11px]">{hint}</p>
       ) : null}
     </div>
   );

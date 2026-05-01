@@ -3,11 +3,7 @@
 import { useState, type PointerEvent, type RefObject } from "react";
 
 import type { BookingStatus } from "@/lib/bookings/state";
-import {
-  EMPTY_TABLE_SVG,
-  STATUS_SVG_FILL,
-  type SvgStatusStyle,
-} from "@/lib/bookings/status-style";
+import { EMPTY_TABLE_SVG, STATUS_SVG_FILL, type SvgStatusStyle } from "@/lib/bookings/status-style";
 
 export type TablePosition = { x: number; y: number; w: number; h: number };
 

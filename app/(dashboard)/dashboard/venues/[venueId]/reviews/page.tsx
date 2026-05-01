@@ -133,8 +133,7 @@ export default async function ReviewsPage({
     })),
   );
 
-  const responseRate =
-    stats.total > 0 ? Math.round((stats.responded / stats.total) * 100) : null;
+  const responseRate = stats.total > 0 ? Math.round((stats.responded / stats.total) * 100) : null;
   const avg = stats.avgRating ? stats.avgRating.toFixed(1) : "—";
 
   return (
@@ -156,7 +155,7 @@ export default async function ReviewsPage({
 
       <ul className="flex flex-col gap-3">
         {display.length === 0 ? (
-          <li className="rounded-card border border-hairline bg-cloud p-6 text-sm text-ash">
+          <li className="rounded-card border-hairline bg-cloud text-ash border p-6 text-sm">
             No reviews match the current filter.
           </li>
         ) : (
@@ -164,7 +163,7 @@ export default async function ReviewsPage({
         )}
       </ul>
       {display.length === 100 ? (
-        <p className="text-center text-xs text-ash">
+        <p className="text-ash text-center text-xs">
           Showing the 100 most recent reviews. Pagination lands in a later phase.
         </p>
       ) : null}
@@ -174,10 +173,10 @@ export default async function ReviewsPage({
 
 function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <div className="rounded-card border border-hairline bg-white p-4">
-      <p className="text-xs uppercase tracking-wider text-ash">{label}</p>
-      <p className="mt-1 text-3xl font-semibold tracking-tight text-ink">{value}</p>
-      <p className="mt-1 text-xs text-ash">{sub}</p>
+    <div className="rounded-card border-hairline border bg-white p-4">
+      <p className="text-ash text-xs tracking-wider uppercase">{label}</p>
+      <p className="text-ink mt-1 text-3xl font-semibold tracking-tight">{value}</p>
+      <p className="text-ash mt-1 text-xs">{sub}</p>
     </div>
   );
 }
@@ -210,14 +209,9 @@ function Filters({
     <div className="flex flex-wrap gap-2 text-xs">
       <FilterPill label="All ratings" href={ratingHref(null)} active={rating === null} />
       {[5, 4, 3, 2, 1].map((n) => (
-        <FilterPill
-          key={n}
-          label={`${n}★`}
-          href={ratingHref(n)}
-          active={rating === n}
-        />
+        <FilterPill key={n} label={`${n}★`} href={ratingHref(n)} active={rating === n} />
       ))}
-      <span className="mx-2 self-center text-stone">·</span>
+      <span className="text-stone mx-2 self-center">·</span>
       <FilterPill label="Any" href={repliedHref(null)} active={replied === null} />
       <FilterPill label="Awaiting reply" href={repliedHref("no")} active={replied === false} />
       <FilterPill label="Replied" href={repliedHref("yes")} active={replied === true} />
@@ -225,22 +219,14 @@ function Filters({
   );
 }
 
-function FilterPill({
-  label,
-  href,
-  active,
-}: {
-  label: string;
-  href: string;
-  active: boolean;
-}) {
+function FilterPill({ label, href, active }: { label: string; href: string; active: boolean }) {
   return (
     <a
       href={href}
       className={`rounded-full border px-3 py-1 transition ${
         active
           ? "border-ink bg-ink text-white"
-          : "border-hairline bg-white text-ash hover:border-ink hover:text-ink"
+          : "border-hairline text-ash hover:border-ink hover:text-ink bg-white"
       }`}
     >
       {label}

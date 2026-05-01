@@ -56,7 +56,7 @@ export default async function ReportsPage({
     return (
       <section className="flex flex-col gap-4">
         <DateRangeNav venueId={venueId} fromDate={fromDate} toDate={toDate} />
-        <p className="rounded-card border border-rose/30 bg-rose/5 p-4 text-sm text-rose">
+        <p className="rounded-card border-rose/30 bg-rose/5 text-rose border p-4 text-sm">
           Invalid date range — pick a from/to where from ≤ to and both are YYYY-MM-DD.
         </p>
       </section>
@@ -80,8 +80,8 @@ export default async function ReportsPage({
     <section className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-ink">Reports</h2>
-          <p className="mt-0.5 text-sm text-ash">
+          <h2 className="text-ink text-xl font-bold tracking-tight">Reports</h2>
+          <p className="text-ash mt-0.5 text-sm">
             Covers, no-shows, deposits, source mix, and returning guests for the date range below.
             Times are in this venue&apos;s local zone.
           </p>

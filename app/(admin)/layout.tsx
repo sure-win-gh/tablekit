@@ -13,33 +13,33 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-hairline bg-white px-6 py-3">
+      <header className="border-hairline flex items-center justify-between border-b bg-white px-6 py-3">
         <div className="flex items-center gap-4">
-          <span className="rounded-full bg-rose px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-white">
+          <span className="bg-rose rounded-full px-2 py-0.5 text-xs font-semibold tracking-wide text-white uppercase">
             Admin
           </span>
           <nav className="flex items-center gap-3 text-sm">
-            <Link href="/admin" className="font-medium text-ink hover:underline">
+            <Link href="/admin" className="text-ink font-medium hover:underline">
               Overview
             </Link>
-            <Link href="/admin/venues" className="font-medium text-ink hover:underline">
+            <Link href="/admin/venues" className="text-ink font-medium hover:underline">
               Venues
             </Link>
-            <Link href="/admin/financials" className="font-medium text-ink hover:underline">
+            <Link href="/admin/financials" className="text-ink font-medium hover:underline">
               Financials
             </Link>
-            <Link href="/admin/operations" className="font-medium text-ink hover:underline">
+            <Link href="/admin/operations" className="text-ink font-medium hover:underline">
               Operations
             </Link>
-            <Link href="/admin/feature-adoption" className="font-medium text-ink hover:underline">
+            <Link href="/admin/feature-adoption" className="text-ink font-medium hover:underline">
               Adoption
             </Link>
-            <Link href="/admin/audit" className="font-medium text-ink hover:underline">
+            <Link href="/admin/audit" className="text-ink font-medium hover:underline">
               Audit
             </Link>
           </nav>
         </div>
-        <div className="text-xs text-ash">{session.email}</div>
+        <div className="text-ash text-xs">{session.email}</div>
       </header>
       <main className="flex flex-1 flex-col p-6">{children}</main>
     </div>

@@ -92,11 +92,11 @@ export function BookingDetailDialog(props: Props) {
       aria-modal="true"
       aria-label="Booking detail"
       onClick={props.onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
+      className="bg-ink/40 fixed inset-0 z-50 flex items-center justify-center p-4"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-card border border-hairline bg-white shadow-panel"
+        className="rounded-card border-hairline shadow-panel w-full max-w-md border bg-white"
       >
         <BookingDetailDialogBody key={props.booking.id} {...props} />
       </div>
@@ -104,13 +104,7 @@ export function BookingDetailDialog(props: Props) {
   );
 }
 
-function BookingDetailDialogBody({
-  venueId,
-  date,
-  booking,
-  allVenueTables,
-  onClose,
-}: Props) {
+function BookingDetailDialogBody({ venueId, date, booking, allVenueTables, onClose }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [mode, setMode] = useState<
@@ -125,16 +119,12 @@ function BookingDetailDialogBody({
   const [reassignTo, setReassignTo] = useState("");
 
   const editable =
-    booking.status !== "cancelled" &&
-    booking.status !== "no_show" &&
-    booking.status !== "finished";
+    booking.status !== "cancelled" && booking.status !== "no_show" && booking.status !== "finished";
   const transitionsAvailable = nextActions(booking.status);
 
   const moveTargets = allVenueTables.filter(
     (t) =>
-      t.areaId === booking.areaId &&
-      t.maxCover >= booking.partySize &&
-      t.id !== booking.tableId,
+      t.areaId === booking.areaId && t.maxCover >= booking.partySize && t.id !== booking.tableId,
   );
 
   function onSaveTime() {
@@ -266,14 +256,14 @@ function BookingDetailDialogBody({
 
   return (
     <>
-      <header className="flex items-start justify-between gap-2 border-b border-hairline px-5 py-4">
+      <header className="border-hairline flex items-start justify-between gap-2 border-b px-5 py-4">
         <div>
-          <h3 className="text-base font-bold tracking-tight text-ink">
+          <h3 className="text-ink text-base font-bold tracking-tight">
             <Link href={`/dashboard/guests/${booking.guestId}`} className="hover:underline">
               {booking.guestFirstName}
             </Link>
           </h3>
-          <p className="mt-0.5 text-xs text-ash">
+          <p className="text-ash mt-0.5 text-xs">
             {booking.wallStart}–{booking.wallEnd} · {booking.tableLabel} · {booking.serviceName}
           </p>
         </div>
@@ -281,18 +271,18 @@ function BookingDetailDialogBody({
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="-mr-1 -mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-ash transition hover:bg-cloud hover:text-ink"
+          className="text-ash hover:bg-cloud hover:text-ink -mt-1 -mr-1 inline-flex h-7 w-7 items-center justify-center rounded-full transition"
         >
           <X className="h-4 w-4" aria-hidden />
         </button>
       </header>
 
-      <div className="flex flex-col gap-3 px-5 py-4 text-sm text-charcoal">
+      <div className="text-charcoal flex flex-col gap-3 px-5 py-4 text-sm">
         <DetailRow label="Status">
           <div className="flex items-center gap-2">
             <span
               className={cn(
-                "inline-flex items-center rounded-pill border px-2 py-0.5 text-[11px] font-semibold",
+                "rounded-pill inline-flex items-center border px-2 py-0.5 text-[11px] font-semibold",
                 STATUS_FILL[booking.status],
               )}
             >
@@ -325,7 +315,7 @@ function BookingDetailDialogBody({
 
         {booking.cardHold && !booking.noShowOutcome ? (
           <DetailRow label="Card on file">
-            <span className="text-xs text-ash">Hold succeeded — captured only on no-show.</span>
+            <span className="text-ash text-xs">Hold succeeded — captured only on no-show.</span>
           </DetailRow>
         ) : null}
         {booking.noShowOutcome === "captured" ? (
@@ -335,12 +325,12 @@ function BookingDetailDialogBody({
         ) : null}
         {booking.noShowOutcome === "failed" ? (
           <DetailRow label="No-show">
-            <span className="text-xs text-rose">Capture failed — see Stripe.</span>
+            <span className="text-rose text-xs">Capture failed — see Stripe.</span>
           </DetailRow>
         ) : null}
 
         {mode === "edit-time" ? (
-          <div className="mt-2 flex flex-col gap-2 rounded-card border border-hairline bg-cloud p-3">
+          <div className="rounded-card border-hairline bg-cloud mt-2 flex flex-col gap-2 border p-3">
             <Field
               label="New start time"
               htmlFor="bdm-time"
@@ -356,12 +346,12 @@ function BookingDetailDialogBody({
                 className="w-32"
               />
             </Field>
-            {error ? <p className="text-xs text-rose">{error}</p> : null}
+            {error ? <p className="text-rose text-xs">{error}</p> : null}
           </div>
         ) : null}
 
         {mode === "refund" ? (
-          <div className="mt-2 flex flex-col gap-2 rounded-card border border-rose/30 bg-rose/5 p-3">
+          <div className="rounded-card border-rose/30 bg-rose/5 mt-2 flex flex-col gap-2 border p-3">
             <Field
               label="Refund reason"
               htmlFor="bdm-refund-reason"
@@ -377,12 +367,12 @@ function BookingDetailDialogBody({
                 size="sm"
               />
             </Field>
-            {error ? <p className="text-xs text-rose">{error}</p> : null}
+            {error ? <p className="text-rose text-xs">{error}</p> : null}
           </div>
         ) : null}
 
         {mode === "cancel-with-reason" ? (
-          <div className="mt-2 flex flex-col gap-2 rounded-card border border-rose/30 bg-rose/5 p-3">
+          <div className="rounded-card border-rose/30 bg-rose/5 mt-2 flex flex-col gap-2 border p-3">
             <Field
               label="Cancellation reason"
               htmlFor="bdm-cancel-reason"
@@ -398,12 +388,12 @@ function BookingDetailDialogBody({
                 size="sm"
               />
             </Field>
-            {error ? <p className="text-xs text-rose">{error}</p> : null}
+            {error ? <p className="text-rose text-xs">{error}</p> : null}
           </div>
         ) : null}
 
         {mode === "edit-details" ? (
-          <div className="mt-2 flex flex-col gap-3 rounded-card border border-hairline bg-cloud p-3">
+          <div className="rounded-card border-hairline bg-cloud mt-2 flex flex-col gap-3 border p-3">
             <Field label="Party size" htmlFor="bdm-party">
               <Input
                 id="bdm-party"
@@ -427,14 +417,14 @@ function BookingDetailDialogBody({
                 maxLength={500}
               />
             </Field>
-            {error ? <p className="text-xs text-rose">{error}</p> : null}
+            {error ? <p className="text-rose text-xs">{error}</p> : null}
           </div>
         ) : null}
 
         {mode === "reassign-table" ? (
-          <div className="mt-2 flex flex-col gap-2 rounded-card border border-hairline bg-cloud p-3">
+          <div className="rounded-card border-hairline bg-cloud mt-2 flex flex-col gap-2 border p-3">
             {moveTargets.length === 0 ? (
-              <p className="text-xs text-ash">
+              <p className="text-ash text-xs">
                 No same-area tables with capacity ≥ {booking.partySize}.
               </p>
             ) : (
@@ -447,7 +437,7 @@ function BookingDetailDialogBody({
                   id="bdm-reassign"
                   value={reassignTo}
                   onChange={(e) => setReassignTo(e.target.value)}
-                  className="w-full rounded-input border border-hairline bg-white px-2 py-1 text-sm text-ink focus:border-ink focus:outline-none focus:ring-2 focus:ring-ink"
+                  className="rounded-input border-hairline text-ink focus:border-ink focus:ring-ink w-full border bg-white px-2 py-1 text-sm focus:ring-2 focus:outline-none"
                 >
                   <option value="">Pick a table…</option>
                   {moveTargets.map((t) => (
@@ -458,14 +448,14 @@ function BookingDetailDialogBody({
                 </select>
               </Field>
             )}
-            {error ? <p className="text-xs text-rose">{error}</p> : null}
+            {error ? <p className="text-rose text-xs">{error}</p> : null}
           </div>
         ) : null}
 
-        {mode === "view" && error ? <p className="text-xs text-rose">{error}</p> : null}
+        {mode === "view" && error ? <p className="text-rose text-xs">{error}</p> : null}
       </div>
 
-      <footer className="flex items-center justify-end gap-2 border-t border-hairline px-5 py-3">
+      <footer className="border-hairline flex items-center justify-end gap-2 border-t px-5 py-3">
         {mode === "edit-time" ? (
           <>
             <Button
@@ -646,8 +636,8 @@ function BookingDetailDialogBody({
 function DetailRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-ash">{label}</span>
-      <span className="text-sm text-ink">{children}</span>
+      <span className="text-ash text-[11px] font-semibold tracking-wider uppercase">{label}</span>
+      <span className="text-ink text-sm">{children}</span>
     </div>
   );
 }

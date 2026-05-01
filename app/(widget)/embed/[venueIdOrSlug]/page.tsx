@@ -3,10 +3,7 @@ import { notFound } from "next/navigation";
 import { formatVenueDateLong, todayInZone } from "@/lib/bookings/time";
 import { widgetDisabled } from "@/lib/feature-flags";
 import { captchaEnabled } from "@/lib/public/captcha";
-import {
-  loadPublicAvailability,
-  loadPublicVenueByIdOrSlug,
-} from "@/lib/public/venue";
+import { loadPublicAvailability, loadPublicVenueByIdOrSlug } from "@/lib/public/venue";
 
 import { BookingForm, SlotPicker } from "../../book/[venueIdOrSlug]/forms";
 import { EmbedAutoHeight } from "./auto-height";
@@ -25,11 +22,7 @@ type SearchParams = {
   wallStart?: string;
 };
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ venueIdOrSlug: string }>;
-}) {
+export async function generateMetadata({ params }: { params: Promise<{ venueIdOrSlug: string }> }) {
   const { venueIdOrSlug } = await params;
   const lookup = await loadPublicVenueByIdOrSlug(venueIdOrSlug);
   return { title: lookup ? `Book at ${lookup.venue.name}` : "Book" };
@@ -54,8 +47,8 @@ export default async function EmbedBookingPage({
   if (widgetDisabled()) {
     return (
       <main className="mx-auto flex w-full max-w-2xl flex-col gap-3 p-4">
-        <h1 className="text-xl font-bold tracking-tight text-ink">{venue.name}</h1>
-        <p className="rounded-card border border-hairline bg-cloud p-4 text-sm text-charcoal">
+        <h1 className="text-ink text-xl font-bold tracking-tight">{venue.name}</h1>
+        <p className="rounded-card border-hairline bg-cloud text-charcoal border p-4 text-sm">
           Online booking is temporarily unavailable. Please contact the venue directly.
         </p>
         <EmbedAutoHeight />
@@ -78,8 +71,8 @@ export default async function EmbedBookingPage({
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-5 p-4">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">{venue.name}</h1>
-        <p className="mt-0.5 text-xs text-ash">
+        <h1 className="text-ink text-2xl font-bold tracking-tight">{venue.name}</h1>
+        <p className="text-ash mt-0.5 text-xs">
           {formatVenueDateLong(dateLongUtc, { timezone: venue.timezone })}
         </p>
       </header>

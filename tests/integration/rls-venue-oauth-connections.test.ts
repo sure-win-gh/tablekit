@@ -131,9 +131,7 @@ afterAll(async () => {
 
 describe("venue_oauth_connections — cross-tenant RLS", () => {
   it("user A sees only their own org's rows", async () => {
-    const rows = await asUser(ctx.userAId, (tx) =>
-      tx.select().from(schema.venueOauthConnections),
-    );
+    const rows = await asUser(ctx.userAId, (tx) => tx.select().from(schema.venueOauthConnections));
     const orgIds = rows.map((r) => r.organisationId);
     expect(orgIds).toContain(ctx.orgAId);
     expect(orgIds).not.toContain(ctx.orgBId);

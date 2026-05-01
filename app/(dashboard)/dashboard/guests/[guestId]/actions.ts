@@ -5,10 +5,7 @@ import { z } from "zod";
 
 import { requireRole } from "@/lib/auth/require-role";
 import { createDsarRequest } from "@/lib/dsar/create";
-import {
-  setMarketingConsent,
-  type MarketingChannel,
-} from "@/lib/guests/marketing-consent";
+import { setMarketingConsent, type MarketingChannel } from "@/lib/guests/marketing-consent";
 import { updateGuestContact } from "@/lib/guests/update-contact";
 import { withUser } from "@/lib/db/client";
 import { guests } from "@/lib/db/schema";

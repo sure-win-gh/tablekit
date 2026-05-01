@@ -46,20 +46,20 @@ export default async function ReviewPage({
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 p-6">
       <header>
-        <p className="text-xs font-semibold uppercase tracking-wider text-coral">
+        <p className="text-coral text-xs font-semibold tracking-wider uppercase">
           {sp.mode === "private" ? "Private feedback" : "Leave a review"}
         </p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">{row.venueName}</h1>
-        <p className="mt-1 text-sm text-ash">
+        <h1 className="text-ink mt-2 text-3xl font-bold tracking-tight">{row.venueName}</h1>
+        <p className="text-ash mt-1 text-sm">
           {sp.mode === "private"
             ? "Thanks for taking a moment. The team will read this directly — it won't be shared."
             : "How was your visit? Takes 30 seconds — you can leave a comment too."}
         </p>
       </header>
       <ReviewForm p={sp.p} s={sp.s} mode={sp.mode === "private" ? "private" : "public"} />
-      <p className="text-xs text-ash">
-        Please don&apos;t include health information, allergies, or details about other people —
-        the team only needs to know about your visit. We process this on behalf of {row.venueName}.{" "}
+      <p className="text-ash text-xs">
+        Please don&apos;t include health information, allergies, or details about other people — the
+        team only needs to know about your visit. We process this on behalf of {row.venueName}.{" "}
         <a href="/privacy" className="underline">
           How your data is handled
         </a>

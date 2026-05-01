@@ -13,14 +13,12 @@ describe("normaliseEmail", () => {
 });
 
 describe("isPlausibleEmail", () => {
-  it.each([
-    "jane@example.com",
-    "jane.doe@example.co.uk",
-    "j+a@x.io",
-    "a@b.co",
-  ])("accepts plausible address %s", (e) => {
-    expect(isPlausibleEmail(e)).toBe(true);
-  });
+  it.each(["jane@example.com", "jane.doe@example.co.uk", "j+a@x.io", "a@b.co"])(
+    "accepts plausible address %s",
+    (e) => {
+      expect(isPlausibleEmail(e)).toBe(true);
+    },
+  );
 
   it.each([
     "",

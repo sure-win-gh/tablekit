@@ -17,8 +17,8 @@ export function LoginForm() {
 
   if (state.status === "magic_sent") {
     return (
-      <div className="rounded-card border border-hairline bg-cloud p-4 text-sm text-charcoal">
-        <p className="font-semibold text-ink">Check your inbox.</p>
+      <div className="rounded-card border-hairline bg-cloud text-charcoal border p-4 text-sm">
+        <p className="text-ink font-semibold">Check your inbox.</p>
         <p className="mt-1">
           We sent a sign-in link to <span className="font-mono">{state.email}</span>. Open it on
           this device.
@@ -32,7 +32,7 @@ export function LoginForm() {
       <div
         role="tablist"
         aria-label="Sign-in method"
-        className="flex gap-1 rounded-pill bg-cloud p-1 text-sm"
+        className="rounded-pill bg-cloud flex gap-1 p-1 text-sm"
       >
         <ModeTab active={mode === "password"} onClick={() => setMode("password")}>
           Password
@@ -44,13 +44,7 @@ export function LoginForm() {
 
       <form action={formAction} className="flex flex-col gap-4">
         <Field label="Email" htmlFor="login-email">
-          <Input
-            id="login-email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            required
-          />
+          <Input id="login-email" name="email" type="email" autoComplete="email" required />
         </Field>
         {mode === "password" ? (
           <Field label="Password" htmlFor="login-pw">
@@ -65,7 +59,7 @@ export function LoginForm() {
         ) : null}
 
         {state.status === "error" ? (
-          <p role="alert" className="text-sm text-rose">
+          <p role="alert" className="text-rose text-sm">
             {state.message}
           </p>
         ) : null}
@@ -100,8 +94,8 @@ function ModeTab({
       aria-selected={active}
       onClick={onClick}
       className={cn(
-        "flex-1 rounded-pill px-3 py-1.5 text-sm font-semibold transition",
-        active ? "bg-white text-ink shadow-panel" : "text-ash hover:text-ink",
+        "rounded-pill flex-1 px-3 py-1.5 text-sm font-semibold transition",
+        active ? "text-ink shadow-panel bg-white" : "text-ash hover:text-ink",
       )}
     >
       {children}

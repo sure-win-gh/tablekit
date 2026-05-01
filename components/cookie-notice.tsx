@@ -70,19 +70,19 @@ export function CookieNotice() {
       role="dialog"
       aria-label="Cookies and privacy"
       className={cn(
-        "fixed inset-x-3 bottom-3 z-50 mx-auto max-w-2xl rounded-card border border-hairline bg-white p-4 shadow-panel",
+        "rounded-card border-hairline shadow-panel fixed inset-x-3 bottom-3 z-50 mx-auto max-w-2xl border bg-white p-4",
         "sm:p-5",
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1.5 text-sm text-charcoal">
-          <p className="font-semibold text-ink">Cookies and your privacy</p>
+        <div className="text-charcoal flex flex-col gap-1.5 text-sm">
+          <p className="text-ink font-semibold">Cookies and your privacy</p>
           <p className="text-xs leading-relaxed">
             TableKit uses a single first-party cookie to keep operators signed in. We don&apos;t run
             third-party analytics or advertising trackers. Read the full{" "}
             <Link
               href="/privacy"
-              className="font-semibold text-ink underline underline-offset-4 hover:text-coral"
+              className="text-ink hover:text-coral font-semibold underline underline-offset-4"
             >
               privacy notice
             </Link>
@@ -93,7 +93,7 @@ export function CookieNotice() {
           type="button"
           onClick={dismiss}
           aria-label="Dismiss"
-          className="-mr-1 -mt-1 rounded-full p-1.5 text-ash transition hover:bg-cloud hover:text-ink"
+          className="text-ash hover:bg-cloud hover:text-ink -mt-1 -mr-1 rounded-full p-1.5 transition"
         >
           <X className="h-4 w-4" aria-hidden />
         </button>

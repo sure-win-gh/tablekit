@@ -74,9 +74,7 @@ export async function loadBookingsForExport(db: Db, orgId: string): Promise<Expo
     // spans every org the caller belongs to; guests RLS is org-set
     // scoped. A dual-org user without this filter would join across
     // their other org's data and attempt to decrypt the wrong DEK.
-    .where(
-      and(eq(bookings.organisationId, orgId), eq(guests.organisationId, orgId)),
-    )
+    .where(and(eq(bookings.organisationId, orgId), eq(guests.organisationId, orgId)))
     .orderBy(asc(bookings.startAt));
 
   const out: ExportedBooking[] = [];

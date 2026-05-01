@@ -2,10 +2,7 @@
 
 import { useActionState, useState } from "react";
 
-import {
-  syncNowGoogle,
-  type SyncNowGoogleState,
-} from "../settings/google-actions";
+import { syncNowGoogle, type SyncNowGoogleState } from "../settings/google-actions";
 import {
   respondToReview,
   sendRecoveryOffer,
@@ -25,12 +22,12 @@ export function SyncNowButton({ venueId }: { venueId: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md border border-hairline px-3 py-1.5 text-xs text-ink hover:border-ink disabled:opacity-50"
+        className="border-hairline text-ink hover:border-ink rounded-md border px-3 py-1.5 text-xs disabled:opacity-50"
       >
         {pending ? "Syncing…" : "Sync now"}
       </button>
       {state.status === "saved" ? (
-        <span className="text-xs text-ash" role="status">
+        <span className="text-ash text-xs" role="status">
           {state.upserted} review{state.upserted === 1 ? "" : "s"} synced ({state.fetched} seen)
         </span>
       ) : null}
@@ -65,8 +62,7 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
     initialRecovery,
   );
   const responded = review.respondedAt !== null || state.status === "saved";
-  const recoverySent =
-    review.recoveryOfferAt !== null || recoveryState.status === "saved";
+  const recoverySent = review.recoveryOfferAt !== null || recoveryState.status === "saved";
   // Internal replies email the guest; Google replies post via the
   // Business Profile API. Both flow through the same action with the
   // server picking the channel by source.
@@ -76,13 +72,13 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
   const canRecover = review.source === "internal" && review.rating <= 3;
 
   return (
-    <li className="flex flex-col gap-3 rounded-card border border-hairline bg-white p-4">
+    <li className="rounded-card border-hairline flex flex-col gap-3 border bg-white p-4">
       <header className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <p className="font-medium text-ink">
+          <p className="text-ink font-medium">
             <Stars n={review.rating} /> {review.guestFirstName}
           </p>
-          <p className="text-xs text-ash">
+          <p className="text-ash text-xs">
             {review.submittedAt.toLocaleDateString(undefined, {
               year: "numeric",
               month: "short",
@@ -94,7 +90,7 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
                 href={review.externalUrl}
                 target="_blank"
                 rel="noopener"
-                className="underline hover:text-ink"
+                className="hover:text-ink underline"
               >
                 {review.source}
               </a>
@@ -104,26 +100,24 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
           </p>
         </div>
         {responded ? (
-          <span className="rounded-full bg-cloud px-2 py-0.5 text-xs text-ash">Replied</span>
+          <span className="bg-cloud text-ash rounded-full px-2 py-0.5 text-xs">Replied</span>
         ) : null}
       </header>
 
       {review.comment ? (
-        <p className="whitespace-pre-line text-sm text-charcoal">{review.comment}</p>
+        <p className="text-charcoal text-sm whitespace-pre-line">{review.comment}</p>
       ) : (
-        <p className="text-sm italic text-ash">No comment.</p>
+        <p className="text-ash text-sm italic">No comment.</p>
       )}
 
       {review.response ? (
-        <div className="rounded-md border-l-2 border-ink bg-cloud px-3 py-2">
-          <p className="text-xs font-medium uppercase tracking-wider text-ash">Your reply</p>
-          <p className="mt-1 whitespace-pre-line text-sm text-charcoal">{review.response}</p>
+        <div className="border-ink bg-cloud rounded-md border-l-2 px-3 py-2">
+          <p className="text-ash text-xs font-medium tracking-wider uppercase">Your reply</p>
+          <p className="text-charcoal mt-1 text-sm whitespace-pre-line">{review.response}</p>
         </div>
       ) : null}
 
-      {recoverySent ? (
-        <p className="text-xs text-ash">Recovery offer sent.</p>
-      ) : null}
+      {recoverySent ? <p className="text-ash text-xs">Recovery offer sent.</p> : null}
 
       {!responded && canReply ? (
         open ? (
@@ -139,7 +133,7 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
                   ? "Your reply will post publicly under this review on Google."
                   : "Reply directly to the guest by email — they'll see this in their inbox."
               }
-              className="rounded-md border border-hairline px-3 py-2 text-sm outline-none focus:border-neutral-900"
+              className="border-hairline rounded-md border px-3 py-2 text-sm outline-none focus:border-neutral-900"
               required
             />
             {state.status === "error" ? (
@@ -151,14 +145,14 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:border-ink"
+                className="border-hairline text-ink hover:border-ink rounded-md border px-3 py-1.5 text-sm"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={pending}
-                className="rounded-md bg-ink px-3 py-1.5 text-sm font-medium text-white hover:bg-charcoal disabled:opacity-50"
+                className="bg-ink hover:bg-charcoal rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
               >
                 {pending ? "Sending…" : "Send reply"}
               </button>
@@ -169,7 +163,7 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
             <button
               type="button"
               onClick={() => setOpen(true)}
-              className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:border-ink"
+              className="border-hairline text-ink hover:border-ink rounded-md border px-3 py-1.5 text-sm"
             >
               Reply privately
             </button>
@@ -187,7 +181,7 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
               rows={3}
               maxLength={800}
               placeholder="Apologise + offer to make it right (e.g. dessert on us next time). The guest gets this directly by email."
-              className="rounded-md border border-hairline px-3 py-2 text-sm outline-none focus:border-neutral-900"
+              className="border-hairline rounded-md border px-3 py-2 text-sm outline-none focus:border-neutral-900"
               required
             />
             {recoveryState.status === "error" ? (
@@ -199,14 +193,14 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
               <button
                 type="button"
                 onClick={() => setRecoveryOpen(false)}
-                className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:border-ink"
+                className="border-hairline text-ink hover:border-ink rounded-md border px-3 py-1.5 text-sm"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={recoveryPending}
-                className="rounded-md bg-coral px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                className="bg-coral rounded-md px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
               >
                 {recoveryPending ? "Sending…" : "Send recovery offer"}
               </button>
@@ -217,7 +211,7 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
             <button
               type="button"
               onClick={() => setRecoveryOpen(true)}
-              className="rounded-md border border-coral/40 bg-coral/5 px-3 py-1.5 text-sm text-coral hover:border-coral"
+              className="border-coral/40 bg-coral/5 text-coral hover:border-coral rounded-md border px-3 py-1.5 text-sm"
             >
               Send recovery offer
             </button>

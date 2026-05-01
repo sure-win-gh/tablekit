@@ -7,14 +7,7 @@ import { cn } from "./cn";
 // by passing the matching variant. Shape is the rounded-pill, the
 // system's signature.
 
-type Tone =
-  | "neutral"
-  | "info"
-  | "warning"
-  | "success"
-  | "danger"
-  | "muted"
-  | "coral";
+type Tone = "neutral" | "info" | "warning" | "success" | "danger" | "muted" | "coral";
 
 const TONE: Record<Tone, string> = {
   neutral: "bg-cloud text-charcoal",
@@ -32,7 +25,7 @@ export function Badge({ tone = "neutral", className, ...rest }: BadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-xs font-semibold",
+        "rounded-pill inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold",
         TONE[tone],
         className,
       )}

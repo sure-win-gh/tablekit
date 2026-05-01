@@ -7,13 +7,7 @@ import "server-only";
 
 import { and, count, desc, eq, gte, inArray, max, sql } from "drizzle-orm";
 
-import {
-  dsarRequests,
-  messages,
-  organisations,
-  payments,
-  stripeEvents,
-} from "@/lib/db/schema";
+import { dsarRequests, messages, organisations, payments, stripeEvents } from "@/lib/db/schema";
 
 import { lastNDays } from "../filter";
 import type { AdminDb } from "../types";
@@ -96,7 +90,10 @@ export async function getOperationsSnapshot(db: AdminDb): Promise<OperationsSnap
         .where(gte(messages.createdAt, sevenDays.fromUtc))
         .groupBy(messages.channel, messages.status),
       getPaymentFailures7d(db),
-      db.select({ n: count() }).from(stripeEvents).where(gte(stripeEvents.receivedAt, oneDay.fromUtc)),
+      db
+        .select({ n: count() })
+        .from(stripeEvents)
+        .where(gte(stripeEvents.receivedAt, oneDay.fromUtc)),
       db
         .select({ n: count() })
         .from(stripeEvents)
@@ -117,7 +114,13 @@ export async function getOperationsSnapshot(db: AdminDb): Promise<OperationsSnap
   for (const row of msgRows) {
     const r =
       byChannel.get(row.channel) ??
-      ({ channel: row.channel, delivered: 0, failed: 0, bounced: 0, total: 0 } as MessageHealth7dRow);
+      ({
+        channel: row.channel,
+        delivered: 0,
+        failed: 0,
+        bounced: 0,
+        total: 0,
+      } as MessageHealth7dRow);
     r.total += row.n;
     if (row.status === "delivered") r.delivered += row.n;
     else if (row.status === "failed") r.failed += row.n;

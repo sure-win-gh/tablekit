@@ -134,10 +134,7 @@ async function trySendAlert(reviewId: string): Promise<void> {
       metadata: { rating: row.rating, source: row.source, venueId: row.venueId },
     });
   } catch (err) {
-    await db
-      .update(reviews)
-      .set({ escalationAlertAt: null })
-      .where(eq(reviews.id, row.id));
+    await db.update(reviews).set({ escalationAlertAt: null }).where(eq(reviews.id, row.id));
     throw err;
   }
 }
@@ -162,9 +159,7 @@ async function resolveRecipient(
     .select({ email: users.email })
     .from(memberships)
     .innerJoin(users, eq(users.id, memberships.userId))
-    .where(
-      and(eq(memberships.organisationId, organisationId), eq(memberships.role, "owner")),
-    )
+    .where(and(eq(memberships.organisationId, organisationId), eq(memberships.role, "owner")))
     .orderBy(memberships.createdAt)
     .limit(1);
   return row?.email ?? null;

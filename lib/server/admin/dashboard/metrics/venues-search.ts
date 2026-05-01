@@ -113,9 +113,10 @@ export async function searchVenues(
         AS messages_14d
     FROM organisations o
     WHERE
-      ${q.length === 0
-        ? sql`true`
-        : sql`(
+      ${
+        q.length === 0
+          ? sql`true`
+          : sql`(
             o.name ILIKE ${like}
             OR o.slug::text ILIKE ${like}
             OR EXISTS (

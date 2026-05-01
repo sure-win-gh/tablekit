@@ -66,8 +66,7 @@
    * as one cohesive elevation but anti-aliases more cleanly than a
    * single drop-shadow. */
   --shadow-panel:
-    rgba(0, 0, 0, 0.02) 0 0 0 1px, rgba(0, 0, 0, 0.04) 0 2px 6px 0,
-    rgba(0, 0, 0, 0.1) 0 4px 8px 0;
+    rgba(0, 0, 0, 0.02) 0 0 0 1px, rgba(0, 0, 0, 0.04) 0 2px 6px 0, rgba(0, 0, 0, 0.1) 0 4px 8px 0;
 
   /* Typography — Inter via next/font, exposed as --font-sans. */
   --font-sans:

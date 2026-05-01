@@ -220,10 +220,10 @@ export default async function BookingsPage({
     <section className="flex flex-col gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-ink">
+          <h2 className="text-ink text-xl font-bold tracking-tight">
             {formatVenueDateLong(startUtc, { timezone: venue.timezone })}
           </h2>
-          <p className="mt-0.5 text-xs text-ash">
+          <p className="text-ash mt-0.5 text-xs">
             {rows.length === 0
               ? filtersActive
                 ? "No bookings match these filters."
@@ -250,7 +250,7 @@ export default async function BookingsPage({
       />
 
       {rows.length === 0 ? (
-        <p className="rounded-card border border-dashed border-hairline p-8 text-center text-sm text-ash">
+        <p className="rounded-card border-hairline text-ash border border-dashed p-8 text-center text-sm">
           {filtersActive
             ? "No bookings match these filters. Try clearing the search or status chips."
             : "Nothing on the books for this day. Click “New booking” to add one."}
@@ -259,8 +259,8 @@ export default async function BookingsPage({
         <div className="flex flex-col gap-6">
           {[...byService.entries()].map(([svc, list]) => (
             <div key={svc}>
-              <h3 className="text-sm font-semibold tracking-tight text-ink">{svc}</h3>
-              <ul className="mt-2 divide-y divide-hairline rounded-card border border-hairline bg-white">
+              <h3 className="text-ink text-sm font-semibold tracking-tight">{svc}</h3>
+              <ul className="divide-hairline rounded-card border-hairline mt-2 divide-y border bg-white">
                 {list.map((b) => {
                   const assignedTables = tablesByBooking.get(b.id) ?? [];
                   // Move-target candidates: same area, capacity ≥ party,

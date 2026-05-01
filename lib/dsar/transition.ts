@@ -78,10 +78,7 @@ export async function transitionDsarRequest(
       ...(isTerminal ? { resolvedAt: sql`now()` } : {}),
     })
     .where(
-      and(
-        eq(dsarRequests.id, input.dsarId),
-        eq(dsarRequests.organisationId, input.organisationId),
-      ),
+      and(eq(dsarRequests.id, input.dsarId), eq(dsarRequests.organisationId, input.organisationId)),
     );
 
   // TS would otherwise widen the templated string; keep the union

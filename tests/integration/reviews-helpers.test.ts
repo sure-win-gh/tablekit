@@ -152,9 +152,7 @@ beforeEach(async () => {
   // Reset reviews between tests so each test has a clean slate.
   await db
     .delete(schema.reviews)
-    .where(
-      sql`${schema.reviews.bookingId} in (${ctx.bookingAId}, ${ctx.bookingBId})`,
-    );
+    .where(sql`${schema.reviews.bookingId} in (${ctx.bookingAId}, ${ctx.bookingBId})`);
 });
 
 describe("sendEscalationAlertIfNeeded", () => {

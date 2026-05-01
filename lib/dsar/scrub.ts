@@ -34,9 +34,7 @@ export type RunErasureScrubResult =
     }
   | { ok: false; reason: "not-found" | "wrong-kind" | "wrong-status" };
 
-export async function runErasureScrub(
-  input: RunErasureScrubInput,
-): Promise<RunErasureScrubResult> {
+export async function runErasureScrub(input: RunErasureScrubInput): Promise<RunErasureScrubResult> {
   const db = adminDb();
 
   // Pre-flight read so we can short-circuit + know what to audit.

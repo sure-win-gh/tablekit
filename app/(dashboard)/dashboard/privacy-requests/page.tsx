@@ -95,32 +95,31 @@ export default async function PrivacyRequestsPage() {
 
   return (
     <main className="flex flex-1 flex-col px-8 py-6">
-      <nav className="flex items-center gap-1.5 text-xs text-ash">
+      <nav className="text-ash flex items-center gap-1.5 text-xs">
         <Link href="/dashboard" className="hover:text-ink">
           Dashboard
         </Link>
-        <ChevronRight className="h-3.5 w-3.5 text-stone" aria-hidden />
+        <ChevronRight className="text-stone h-3.5 w-3.5" aria-hidden />
         <span className="text-ink">Privacy requests</span>
       </nav>
 
-      <header className="mt-3 border-b border-hairline pb-4">
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-ink">
-          <ShieldCheck className="h-6 w-6 text-coral" aria-hidden />
+      <header className="border-hairline mt-3 border-b pb-4">
+        <h1 className="text-ink flex items-center gap-2 text-2xl font-bold tracking-tight">
+          <ShieldCheck className="text-coral h-6 w-6" aria-hidden />
           Privacy requests
         </h1>
-        <p className="mt-1 text-sm text-ash">
+        <p className="text-ash mt-1 text-sm">
           Subject access, correction, and erasure requests under UK GDPR. You have one calendar
           month from the request date to respond.
         </p>
       </header>
 
       <section className="mt-6 flex flex-col gap-3">
-        <h2 className="text-sm font-semibold tracking-tight text-ink">
-          Active ({active.length})
-        </h2>
+        <h2 className="text-ink text-sm font-semibold tracking-tight">Active ({active.length})</h2>
         {active.length === 0 ? (
-          <p className="rounded-card border border-dashed border-hairline p-6 text-center text-sm text-ash">
-            No active requests. The form at <span className="font-mono text-xs">/privacy/request</span> routes new ones here.
+          <p className="rounded-card border-hairline text-ash border border-dashed p-6 text-center text-sm">
+            No active requests. The form at{" "}
+            <span className="font-mono text-xs">/privacy/request</span> routes new ones here.
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
@@ -141,7 +140,7 @@ export default async function PrivacyRequestsPage() {
 
       {resolved.length > 0 ? (
         <section className="mt-8 flex flex-col gap-3">
-          <h2 className="text-sm font-semibold tracking-tight text-ink">
+          <h2 className="text-ink text-sm font-semibold tracking-tight">
             Resolved ({resolved.length})
           </h2>
           <ul className="flex flex-col gap-2">
@@ -197,14 +196,12 @@ function RequestRow({
     <li>
       <Link
         href={`/dashboard/privacy-requests/${id}`}
-        className="group flex items-center justify-between gap-4 rounded-card border border-hairline bg-white px-4 py-3 transition hover:border-ink"
+        className="group rounded-card border-hairline hover:border-ink flex items-center justify-between gap-4 border bg-white px-4 py-3 transition"
       >
         <div className="flex flex-col gap-0.5">
-          <span className="text-sm font-semibold text-ink">{kindLabel(kind)}</span>
-          <span className="text-xs text-ash">
-            {guestFirstName
-              ? `Matched to ${guestFirstName}`
-              : "No matching guest profile yet"}
+          <span className="text-ink text-sm font-semibold">{kindLabel(kind)}</span>
+          <span className="text-ash text-xs">
+            {guestFirstName ? `Matched to ${guestFirstName}` : "No matching guest profile yet"}
             {" · "}
             requested {requestedAt.toLocaleDateString("en-GB")}
           </span>
@@ -218,7 +215,7 @@ function RequestRow({
           ) : null}
           <Badge tone={statusTone(status)}>{STATUS_LABEL[status] ?? status}</Badge>
           <ChevronRight
-            className="h-4 w-4 text-mute transition group-hover:translate-x-0.5 group-hover:text-ink"
+            className="text-mute group-hover:text-ink h-4 w-4 transition group-hover:translate-x-0.5"
             aria-hidden
           />
         </div>
