@@ -57,35 +57,39 @@ export default async function OverviewPage() {
     redirect("/dashboard/venues/new");
   }
 
-  // Per-venue headline for today (venue-local).
-  const tiles = await withUser(async (db) =>
-    Promise.all(
-      venueRows.map(async (v) => {
-        const today = todayInZone(v.timezone);
-        const bounds = {
-          ...venueLocalDayRange(today, v.timezone),
-          timezone: v.timezone,
-        };
-        const [coverRows, depositRows] = await Promise.all([
-          getCoversReport(db, v.id, bounds),
-          getDepositRevenueReport(db, v.id, bounds),
-        ]);
-        const bookings = coverRows.reduce((acc, r) => acc + r.bookings, 0);
-        const coversBooked = coverRows.reduce((acc, r) => acc + r.coversBooked, 0);
-        const coversRealised = coverRows.reduce((acc, r) => acc + r.coversRealised, 0);
-        const netMinor = depositRows.reduce((acc, r) => acc + r.netMinor, 0);
-        return {
-          venueId: v.id,
-          venueName: v.name,
-          today,
-          bookings,
-          coversBooked,
-          coversRealised,
-          netMinor,
-        };
-      }),
-    ),
-  );
+  // Per-venue headline for today (venue-local). Queries run serially
+  // inside the transaction — one pg client per tx, so Promise.all
+  // would just collide on the same connection.
+  const tiles = await withUser(async (db) => {
+    const out: Array<{
+      venueId: string;
+      venueName: string;
+      today: string;
+      bookings: number;
+      coversBooked: number;
+      coversRealised: number;
+      netMinor: number;
+    }> = [];
+    for (const v of venueRows) {
+      const today = todayInZone(v.timezone);
+      const bounds = {
+        ...venueLocalDayRange(today, v.timezone),
+        timezone: v.timezone,
+      };
+      const coverRows = await getCoversReport(db, v.id, bounds);
+      const depositRows = await getDepositRevenueReport(db, v.id, bounds);
+      out.push({
+        venueId: v.id,
+        venueName: v.name,
+        today,
+        bookings: coverRows.reduce((acc, r) => acc + r.bookings, 0),
+        coversBooked: coverRows.reduce((acc, r) => acc + r.coversBooked, 0),
+        coversRealised: coverRows.reduce((acc, r) => acc + r.coversRealised, 0),
+        netMinor: depositRows.reduce((acc, r) => acc + r.netMinor, 0),
+      });
+    }
+    return out;
+  });
 
   const totals = tiles.reduce(
     (acc, t) => ({

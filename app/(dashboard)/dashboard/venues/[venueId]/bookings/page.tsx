@@ -160,20 +160,19 @@ export default async function BookingsPage({
   }
 
   // Per-booking table assignments + the venue's full table list (for
-  // the move-table dropdown). Both are venue-scoped reads.
-  const [tableAssignments, allVenueTables] = await withUser(async (db) =>
-    Promise.all([
+  // the move-table dropdown). Both are venue-scoped reads. Serial
+  // inside the transaction — one pg client per tx.
+  const { tableAssignments, allVenueTables } = await withUser(async (db) => {
+    const tableAssignments =
       bookingIds.length === 0
-        ? Promise.resolve(
-            [] as Array<{
-              bookingId: string;
-              tableId: string;
-              label: string;
-              areaId: string;
-              areaName: string;
-            }>,
-          )
-        : db
+        ? ([] as Array<{
+            bookingId: string;
+            tableId: string;
+            label: string;
+            areaId: string;
+            areaName: string;
+          }>)
+        : await db
             .select({
               bookingId: bookingTables.bookingId,
               tableId: bookingTables.tableId,
@@ -184,21 +183,21 @@ export default async function BookingsPage({
             .from(bookingTables)
             .innerJoin(venueTables, eq(venueTables.id, bookingTables.tableId))
             .innerJoin(areas, eq(areas.id, venueTables.areaId))
-            .where(inArray(bookingTables.bookingId, bookingIds)),
-      db
-        .select({
-          id: venueTables.id,
-          label: venueTables.label,
-          areaId: venueTables.areaId,
-          areaName: areas.name,
-          maxCover: venueTables.maxCover,
-        })
-        .from(venueTables)
-        .innerJoin(areas, eq(areas.id, venueTables.areaId))
-        .where(eq(venueTables.venueId, venueId))
-        .orderBy(asc(areas.name), asc(venueTables.label)),
-    ]),
-  );
+            .where(inArray(bookingTables.bookingId, bookingIds));
+    const allVenueTables = await db
+      .select({
+        id: venueTables.id,
+        label: venueTables.label,
+        areaId: venueTables.areaId,
+        areaName: areas.name,
+        maxCover: venueTables.maxCover,
+      })
+      .from(venueTables)
+      .innerJoin(areas, eq(areas.id, venueTables.areaId))
+      .where(eq(venueTables.venueId, venueId))
+      .orderBy(asc(areas.name), asc(venueTables.label));
+    return { tableAssignments, allVenueTables };
+  });
 
   type AssignedTable = { id: string; label: string; areaName: string };
   const tablesByBooking = new Map<string, AssignedTable[]>();

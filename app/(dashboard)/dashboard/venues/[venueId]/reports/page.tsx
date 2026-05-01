@@ -64,15 +64,14 @@ export default async function ReportsPage({
   }
 
   const { bounds } = parsed;
-  const [covers, noShow, deposits, sources, topGuests] = await withUser((db) =>
-    Promise.all([
-      getCoversReport(db, venueId, bounds),
-      getNoShowReport(db, venueId, bounds),
-      getDepositRevenueReport(db, venueId, bounds),
-      getSourceMixReport(db, venueId, bounds),
-      getTopGuestsReport(db, venueId, bounds),
-    ]),
-  );
+  // Serial inside the transaction — one pg client per tx.
+  const { covers, noShow, deposits, sources, topGuests } = await withUser(async (db) => ({
+    covers: await getCoversReport(db, venueId, bounds),
+    noShow: await getNoShowReport(db, venueId, bounds),
+    deposits: await getDepositRevenueReport(db, venueId, bounds),
+    sources: await getSourceMixReport(db, venueId, bounds),
+    topGuests: await getTopGuestsReport(db, venueId, bounds),
+  }));
 
   const exportBase = `/dashboard/venues/${venueId}/reports/export`;
   const queryString = `?from=${fromDate}&to=${toDate}`;

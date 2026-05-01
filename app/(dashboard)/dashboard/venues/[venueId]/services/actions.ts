@@ -15,7 +15,10 @@ import { adminDb } from "@/lib/server/admin/db";
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
-type ActionState = { status: "idle" } | { status: "error"; message: string } | { status: "saved" };
+export type ActionState =
+  | { status: "idle" }
+  | { status: "error"; message: string }
+  | { status: "saved" };
 
 async function assertVenueInOrg(venueId: string, orgId: string): Promise<void> {
   const rows = await adminDb()
@@ -160,5 +163,3 @@ export async function deleteService(_prev: ActionState, formData: FormData): Pro
   revalidatePath(`/dashboard/venues/${venueId}/services`);
   return { status: "saved" };
 }
-
-export type { ActionState };
