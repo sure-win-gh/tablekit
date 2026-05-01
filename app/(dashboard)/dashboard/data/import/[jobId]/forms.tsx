@@ -4,6 +4,7 @@ import { useActionState } from "react";
 
 import { Button, Field, Select } from "@/components/ui";
 import { suggestMapping } from "@/lib/import/suggest-mapping";
+import type { ImportSource } from "@/lib/import/types";
 
 import { type ConfirmState, confirmMapping } from "./actions";
 
@@ -17,9 +18,17 @@ const FIELDS = [
   { key: "notes", label: "Notes", required: false },
 ] as const;
 
-export function MappingForm({ jobId, headers }: { jobId: string; headers: string[] }) {
+export function MappingForm({
+  jobId,
+  source,
+  headers,
+}: {
+  jobId: string;
+  source: ImportSource;
+  headers: string[];
+}) {
   const [state, formAction, pending] = useActionState(confirmMapping, initial);
-  const suggested = suggestMapping(headers);
+  const suggested = suggestMapping(headers, source);
 
   return (
     <form action={formAction} className="mt-4 flex flex-col gap-4">

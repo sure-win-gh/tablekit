@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { importJobs } from "@/lib/db/schema";
 import { parseCsv } from "@/lib/import/parse";
+import type { ImportSource } from "@/lib/import/types";
 import { type Ciphertext, decryptPii } from "@/lib/security/crypto";
 import { adminDb } from "@/lib/server/admin/db";
 
@@ -82,6 +83,9 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ j
         canImport ? (
           <PreviewSection
             jobId={job.id}
+            // job.source is one of the values pinned by the DB
+            // CHECK on import_jobs.source — safe to narrow here.
+            source={job.source as ImportSource}
             headers={preview.headers}
             rows={preview.rows}
             totalRowsHint={null}
@@ -114,10 +118,12 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ j
 
 function PreviewSection({
   jobId,
+  source,
   headers,
   rows,
 }: {
   jobId: string;
+  source: ImportSource;
   headers: string[];
   rows: Array<Record<string, string>>;
   totalRowsHint: number | null;
@@ -162,7 +168,7 @@ function PreviewSection({
           rows missing either go into the rejected report. Marketing consent isn&apos;t mapped here:
           imported guests must opt in afresh.
         </p>
-        <MappingForm jobId={jobId} headers={headers} />
+        <MappingForm jobId={jobId} source={source} headers={headers} />
       </section>
     </>
   );
