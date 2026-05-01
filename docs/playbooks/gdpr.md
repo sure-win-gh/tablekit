@@ -115,6 +115,7 @@ Do not delete logs or evidence during response, even if doing so seems to "clean
 - Disable RLS, even "temporarily for debugging."
 - Store guest data in cookies or client-side storage beyond a booking reference.
 - Send marketing messages without checking the relevant per-channel consent timestamp.
+- Log or send to Sentry a `RejectedRow` or any raw imported CSV row — those payloads carry plaintext PII keyed by operator-chosen headers that `beforeSend` does not scrub. Log only counts and the `import_jobs.id` for correlation.
 
 ## Reviewing changes that touch PII
 
