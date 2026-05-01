@@ -1014,6 +1014,18 @@ export const importJobs = pgTable(
     // Populated when the job reaches `completed` if any rows were
     // rejected. Null otherwise.
     rejectedRowsUrl: text("rejected_rows_url"),
+    // Operator-uploaded CSV — envelope-encrypted under the org's DEK
+    // before insert (see lib/security/crypto.ts:encryptPii). The CSV
+    // contains plaintext guest email/name/phone, so column-level
+    // encryption is required by gdpr.md §Encryption — Supabase TDE
+    // alone is the at-rest layer, not the column-level guarantee the
+    // playbook demands. Nulled by the runner once the import
+    // completes successfully so the row doesn't carry PII forever.
+    sourceCsvCipher: text("source_csv_cipher"),
+    // Pre-encrypt byte length — used by the upload action to enforce
+    // a 50MB cap (DB CHECK below) and by the dashboard for display.
+    // Set once at upload time; never updated.
+    sourceSizeBytes: integer("source_size_bytes"),
     startedAt: timestamp("started_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
