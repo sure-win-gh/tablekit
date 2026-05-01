@@ -116,7 +116,12 @@ export default async function ImportPage() {
                       className="text-ink max-w-xs truncate px-4 py-2 font-medium"
                       title={j.filename}
                     >
-                      {j.filename}
+                      <Link
+                        href={`/dashboard/data/import/${j.id}`}
+                        className="hover:text-coral underline-offset-2 hover:underline"
+                      >
+                        {j.filename}
+                      </Link>
                     </td>
                     <td className="text-ash px-4 py-2">{j.source}</td>
                     <td className="px-4 py-2">

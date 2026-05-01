@@ -99,6 +99,7 @@ export type AuditAction =
   // import-export phase
   | "data.exported"
   | "import.uploaded"
+  | "import.queued"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
