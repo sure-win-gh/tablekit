@@ -98,6 +98,7 @@ export type AuditAction =
   | "org.group_crm.disabled"
   // import-export phase
   | "data.exported"
+  | "import.uploaded"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
@@ -120,7 +121,8 @@ export type AuditTargetType =
   | "waitlist"
   | "dsar_request"
   | "review"
-  | "export";
+  | "export"
+  | "import_job";
 
 export type AuditInput = {
   organisationId: string;
