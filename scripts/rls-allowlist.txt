@@ -7,3 +7,5 @@
 #
 # Example:
 #   drizzle_migrations  # drizzle-kit metadata, no tenant data
+
+stripe_events  # system-only — RLS default-deny + zero policies = authenticated reads return nothing; webhook handler writes via adminDb(). See migration 0006.
