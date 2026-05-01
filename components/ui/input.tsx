@@ -59,11 +59,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   ref,
 ) {
   return (
-    <select
-      ref={ref}
-      className={cn(controlClasses(invalid, size ?? "md"), className)}
-      {...rest}
-    >
+    <select ref={ref} className={cn(controlClasses(invalid, size ?? "md"), className)} {...rest}>
       {children}
     </select>
   );
@@ -82,13 +78,13 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
       ref={ref}
       rows={rows}
       className={cn(
-        "w-full rounded-input border bg-white px-3 py-2 text-sm text-ink transition",
+        "rounded-input text-ink w-full border bg-white px-3 py-2 text-sm transition",
         "placeholder:text-mute",
-        "focus:outline-none focus:ring-2 focus:ring-offset-0",
+        "focus:ring-2 focus:ring-offset-0 focus:outline-none",
         invalid
           ? "border-rose focus:border-rose focus:ring-rose"
           : "border-hairline focus:border-ink focus:ring-ink",
-        "disabled:cursor-not-allowed disabled:bg-cloud disabled:text-ash",
+        "disabled:bg-cloud disabled:text-ash disabled:cursor-not-allowed",
         className,
       )}
       {...rest}

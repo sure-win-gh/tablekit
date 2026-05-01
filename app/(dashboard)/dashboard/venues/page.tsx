@@ -30,10 +30,10 @@ export default async function VenuesPage() {
 
   return (
     <main className="flex flex-1 flex-col px-8 py-6">
-      <header className="flex flex-wrap items-baseline justify-between gap-3 border-b border-hairline pb-4">
+      <header className="border-hairline flex flex-wrap items-baseline justify-between gap-3 border-b pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink">Venues</h1>
-          <p className="mt-1 text-sm text-ash">
+          <h1 className="text-ink text-2xl font-bold tracking-tight">Venues</h1>
+          <p className="text-ash mt-1 text-sm">
             {rows.length === 0
               ? "No venues yet — create one to start taking bookings."
               : `${rows.length} venue${rows.length === 1 ? "" : "s"} in this organisation.`}
@@ -48,15 +48,13 @@ export default async function VenuesPage() {
       </header>
 
       {rows.length === 0 ? (
-        <div className="mt-10 flex flex-col items-center gap-4 rounded-card border border-dashed border-hairline p-12 text-center">
-          <Store className="h-8 w-8 text-stone" aria-hidden />
+        <div className="rounded-card border-hairline mt-10 flex flex-col items-center gap-4 border border-dashed p-12 text-center">
+          <Store className="text-stone h-8 w-8" aria-hidden />
           <div className="flex flex-col gap-1.5">
-            <h2 className="text-lg font-bold tracking-tight text-ink">
-              Create your first venue
-            </h2>
-            <p className="max-w-md text-sm text-ash">
-              Pick a type and we&apos;ll seed it with sensible defaults — areas, tables and a service
-              schedule. You can change everything afterwards.
+            <h2 className="text-ink text-lg font-bold tracking-tight">Create your first venue</h2>
+            <p className="text-ash max-w-md text-sm">
+              Pick a type and we&apos;ll seed it with sensible defaults — areas, tables and a
+              service schedule. You can change everything afterwards.
             </p>
           </div>
           <Link href="/dashboard/venues/new" className="mt-2">
@@ -72,16 +70,16 @@ export default async function VenuesPage() {
             <li key={v.id}>
               <Link
                 href={`/dashboard/venues/${v.id}/floor-plan`}
-                className="group flex items-center justify-between rounded-card border border-hairline bg-white px-4 py-3 transition hover:border-ink"
+                className="group rounded-card border-hairline hover:border-ink flex items-center justify-between border bg-white px-4 py-3 transition"
               >
                 <div className="flex flex-col">
-                  <span className="text-sm font-semibold text-ink">{v.name}</span>
-                  <span className="text-xs text-ash">
+                  <span className="text-ink text-sm font-semibold">{v.name}</span>
+                  <span className="text-ash text-xs">
                     {v.venueType.replace("_", " ")} · {v.timezone}
                   </span>
                 </div>
                 <ArrowRight
-                  className="h-4 w-4 text-mute transition group-hover:translate-x-0.5 group-hover:text-ink"
+                  className="text-mute group-hover:text-ink h-4 w-4 transition group-hover:translate-x-0.5"
                   aria-hidden
                 />
               </Link>

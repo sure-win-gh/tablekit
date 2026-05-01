@@ -13,8 +13,8 @@ export function SignupForm() {
 
   if (state.status === "needs_confirm") {
     return (
-      <div className="rounded-card border border-hairline bg-cloud p-4 text-sm text-charcoal">
-        <p className="font-semibold text-ink">Check your inbox.</p>
+      <div className="rounded-card border-hairline bg-cloud text-charcoal border p-4 text-sm">
+        <p className="text-ink font-semibold">Check your inbox.</p>
         <p className="mt-1">
           We sent a confirmation link to <span className="font-mono">{state.email}</span>. Click it
           and you&apos;ll be taken to your dashboard.
@@ -37,11 +37,7 @@ export function SignupForm() {
           invalid={Boolean(fieldErrors?.["fullName"]?.[0])}
         />
       </Field>
-      <Field
-        label="Restaurant / café name"
-        htmlFor="su-org"
-        error={fieldErrors?.["orgName"]?.[0]}
-      >
+      <Field label="Restaurant / café name" htmlFor="su-org" error={fieldErrors?.["orgName"]?.[0]}>
         <Input
           id="su-org"
           name="org_name"
@@ -79,7 +75,7 @@ export function SignupForm() {
       </Field>
 
       {state.status === "error" && !fieldErrors ? (
-        <p role="alert" className="text-sm text-rose">
+        <p role="alert" className="text-rose text-sm">
           {state.message}
         </p>
       ) : null}

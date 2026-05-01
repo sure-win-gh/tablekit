@@ -220,9 +220,7 @@ export async function createBooking(
   let option: TableOption | undefined;
   if (input.preferredTableIds && input.preferredTableIds.length > 0) {
     const wanted = [...input.preferredTableIds].sort().join(",");
-    option = slot.options.find(
-      (o) => [...o.tableIds].sort().join(",") === wanted,
-    );
+    option = slot.options.find((o) => [...o.tableIds].sort().join(",") === wanted);
     // Preferred set no longer matches an offered option — concurrent
     // booker grabbed one of the tables, or the input is bogus. Treat
     // as slot-taken so the host re-picks rather than silently

@@ -33,10 +33,10 @@ export default async function AdminVenuesPage({
   return (
     <div className="flex max-w-6xl flex-col gap-6">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Venues</h1>
-        <p className="text-sm text-ash">
-          Cross-organisation list with 14-day activity score. Search by org name, slug, or
-          venue name. Click an org to drill down.
+        <h1 className="text-ink text-2xl font-bold tracking-tight">Venues</h1>
+        <p className="text-ash text-sm">
+          Cross-organisation list with 14-day activity score. Search by org name, slug, or venue
+          name. Click an org to drill down.
         </p>
       </header>
 
@@ -50,14 +50,14 @@ export default async function AdminVenuesPage({
         />
         <button
           type="submit"
-          className="inline-flex items-center rounded-pill bg-ink px-3 py-1.5 text-xs font-semibold text-white"
+          className="rounded-pill bg-ink inline-flex items-center px-3 py-1.5 text-xs font-semibold text-white"
         >
           Search
         </button>
         {q ? (
           <Link
             href="/admin/venues"
-            className="text-xs text-ash underline-offset-2 hover:underline"
+            className="text-ash text-xs underline-offset-2 hover:underline"
           >
             Clear
           </Link>
@@ -72,7 +72,7 @@ export default async function AdminVenuesPage({
           </CardTitle>
           <a
             href={`/admin/export/venues${q ? `?q=${encodeURIComponent(q)}` : ""}`}
-            className="inline-flex items-center gap-1.5 rounded-pill border border-hairline bg-white px-3 py-1 text-xs font-semibold text-ink transition hover:border-ink"
+            className="rounded-pill border-hairline text-ink hover:border-ink inline-flex items-center gap-1.5 border bg-white px-3 py-1 text-xs font-semibold transition"
           >
             <Download className="h-3.5 w-3.5" aria-hidden />
             CSV
@@ -80,11 +80,11 @@ export default async function AdminVenuesPage({
         </CardHeader>
         <CardBody>
           {rows.length === 0 ? (
-            <p className="text-xs text-ash">No matching organisations.</p>
+            <p className="text-ash text-xs">No matching organisations.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead className="text-left text-ash">
+                <thead className="text-ash text-left">
                   <tr>
                     <th className="py-1 font-medium">Organisation</th>
                     <th className="py-1 font-medium">Plan</th>
@@ -95,29 +95,23 @@ export default async function AdminVenuesPage({
                     <th className="py-1 text-right font-medium">Activity</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-hairline">
+                <tbody className="divide-hairline divide-y">
                   {rows.map((row) => (
                     <tr key={row.orgId}>
                       <td className="py-1.5">
                         <Link
                           href={`/admin/venues/${row.orgId}`}
-                          className="font-medium text-ink underline-offset-2 hover:underline"
+                          className="text-ink font-medium underline-offset-2 hover:underline"
                         >
                           {row.orgName}
                         </Link>
-                        <div className="text-[11px] text-ash">{row.slug}</div>
+                        <div className="text-ash text-[11px]">{row.slug}</div>
                       </td>
-                      <td className="py-1.5 text-ink">{row.plan}</td>
-                      <td className="py-1.5 text-right tabular-nums text-ink">
-                        {row.venueCount}
-                      </td>
-                      <td className="py-1.5 text-ash">{row.ownerEmail ?? "—"}</td>
-                      <td className="py-1.5 tabular-nums text-ash">
-                        {fmtDate(row.lastBookingAt)}
-                      </td>
-                      <td className="py-1.5 tabular-nums text-ash">
-                        {fmtDate(row.lastLoginAt)}
-                      </td>
+                      <td className="text-ink py-1.5">{row.plan}</td>
+                      <td className="text-ink py-1.5 text-right tabular-nums">{row.venueCount}</td>
+                      <td className="text-ash py-1.5">{row.ownerEmail ?? "—"}</td>
+                      <td className="text-ash py-1.5 tabular-nums">{fmtDate(row.lastBookingAt)}</td>
+                      <td className="text-ash py-1.5 tabular-nums">{fmtDate(row.lastLoginAt)}</td>
                       <td
                         className={`py-1.5 text-right tabular-nums ${
                           row.activityScore < 30 ? "text-rose" : "text-ink"

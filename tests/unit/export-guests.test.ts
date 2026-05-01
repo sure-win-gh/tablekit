@@ -4,11 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import {
-  type ExportedGuest,
-  guestsToCsv,
-  guestsToJson,
-} from "@/lib/export/guests";
+import { type ExportedGuest, guestsToCsv, guestsToJson } from "@/lib/export/guests";
 
 const BOM = "﻿";
 

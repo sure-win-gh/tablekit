@@ -71,7 +71,7 @@ function ConfirmDelete({
         type="button"
         onClick={() => setArmed(false)}
         disabled={pending}
-        className="text-xs text-ash hover:text-ink disabled:opacity-50"
+        className="text-ash hover:text-ink text-xs disabled:opacity-50"
       >
         No, cancel
       </button>
@@ -88,24 +88,24 @@ export function NewAreaForm({ venueId }: { venueId: string }) {
   return (
     <form
       action={action}
-      className="flex flex-wrap items-end gap-3 rounded-md border border-dashed border-hairline p-4"
+      className="border-hairline flex flex-wrap items-end gap-3 rounded-md border border-dashed p-4"
     >
       <input type="hidden" name="venue_id" value={venueId} />
       <label className="flex flex-1 flex-col gap-1 text-sm">
-        <span className="font-medium text-ink">New area</span>
+        <span className="text-ink font-medium">New area</span>
         <input
           name="name"
           type="text"
           required
           maxLength={60}
           placeholder="Terrace"
-          className="rounded-md border border-hairline px-3 py-2 text-sm outline-none focus:border-neutral-900"
+          className="border-hairline rounded-md border px-3 py-2 text-sm outline-none focus:border-neutral-900"
         />
       </label>
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md border border-hairline bg-white px-3 py-2 text-sm font-medium text-ink transition hover:bg-cloud disabled:opacity-50"
+        className="border-hairline text-ink hover:bg-cloud rounded-md border bg-white px-3 py-2 text-sm font-medium transition disabled:opacity-50"
       >
         {pending ? "Adding…" : "Add area"}
       </button>
@@ -127,12 +127,12 @@ export function AreaHeader({ areaId, name }: { areaId: string; name: string }) {
           defaultValue={name}
           required
           maxLength={60}
-          className="flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-lg font-medium text-ink hover:border-hairline focus:border-neutral-900 focus:bg-white focus:outline-none"
+          className="text-ink hover:border-hairline flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-lg font-medium focus:border-neutral-900 focus:bg-white focus:outline-none"
         />
         <button
           type="submit"
           disabled={updatePending}
-          className="text-xs text-ash hover:text-ink disabled:opacity-50"
+          className="text-ash hover:text-ink text-xs disabled:opacity-50"
         >
           {updatePending ? "…" : "Save"}
         </button>
@@ -158,7 +158,7 @@ export function NewTableForm({ areaId }: { areaId: string }) {
   return (
     <form
       action={action}
-      className="flex flex-wrap items-end gap-2 rounded-md border border-dashed border-hairline px-3 py-2 text-sm"
+      className="border-hairline flex flex-wrap items-end gap-2 rounded-md border border-dashed px-3 py-2 text-sm"
     >
       <input type="hidden" name="area_id" value={areaId} />
       <NumField label="label" name="label" type="text" defaultValue="" required maxLength={30} />
@@ -172,7 +172,7 @@ export function NewTableForm({ areaId }: { areaId: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md border border-hairline bg-white px-3 py-2 text-sm font-medium text-ink transition hover:bg-cloud disabled:opacity-50"
+        className="border-hairline text-ink hover:bg-cloud rounded-md border bg-white px-3 py-2 text-sm font-medium transition disabled:opacity-50"
       >
         {pending ? "Adding…" : "Add table"}
       </button>
@@ -263,7 +263,7 @@ export function TableRow({
         <button
           type="submit"
           disabled={updatePending}
-          className="text-xs text-ash hover:text-ink disabled:opacity-50"
+          className="text-ash hover:text-ink text-xs disabled:opacity-50"
         >
           {updatePending ? "…" : "Save"}
         </button>
@@ -306,7 +306,7 @@ function NumField({
   maxLength,
 }: NumFieldProps) {
   return (
-    <label className="flex flex-col gap-0.5 text-xs text-ash">
+    <label className="text-ash flex flex-col gap-0.5 text-xs">
       <span>{label}</span>
       <input
         name={name}
@@ -316,7 +316,7 @@ function NumField({
         {...(min !== undefined ? { min } : {})}
         {...(max !== undefined ? { max } : {})}
         {...(maxLength !== undefined ? { maxLength } : {})}
-        className={`rounded-md border border-hairline px-2 py-1 text-sm text-ink outline-none focus:border-neutral-900 ${type === "number" ? "w-16" : "w-24"}`}
+        className={`border-hairline text-ink rounded-md border px-2 py-1 text-sm outline-none focus:border-neutral-900 ${type === "number" ? "w-16" : "w-24"}`}
       />
     </label>
   );
@@ -324,12 +324,12 @@ function NumField({
 
 function ShapeField({ defaultValue = "rect" }: { defaultValue?: string }) {
   return (
-    <label className="flex flex-col gap-0.5 text-xs text-ash">
+    <label className="text-ash flex flex-col gap-0.5 text-xs">
       <span>shape</span>
       <select
         name="shape"
         defaultValue={defaultValue}
-        className="rounded-md border border-hairline px-2 py-1 text-sm text-ink outline-none focus:border-neutral-900"
+        className="border-hairline text-ink rounded-md border px-2 py-1 text-sm outline-none focus:border-neutral-900"
       >
         <option value="rect">rect</option>
         <option value="circle">circle</option>

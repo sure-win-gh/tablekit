@@ -52,15 +52,12 @@ export type VenueLookup = {
   canonicalSlug: string | null;
 };
 
-export async function loadPublicVenueByIdOrSlug(
-  idOrSlug: string,
-): Promise<VenueLookup | null> {
+export async function loadPublicVenueByIdOrSlug(idOrSlug: string): Promise<VenueLookup | null> {
   // Lazy-import the helper so this server-only module stays
   // dependency-free at the type layer.
   const { looksLikeUuid } = await import("@/lib/venues/slug");
   const matchedBy: "id" | "slug" = looksLikeUuid(idOrSlug) ? "id" : "slug";
-  const where =
-    matchedBy === "id" ? eq(venues.id, idOrSlug) : eq(venues.slug, idOrSlug);
+  const where = matchedBy === "id" ? eq(venues.id, idOrSlug) : eq(venues.slug, idOrSlug);
   const db = adminDb();
   const [row] = await db
     .select({

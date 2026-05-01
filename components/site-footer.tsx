@@ -20,21 +20,19 @@ const PRODUCT = [
 export function SiteFooter() {
   const year = new Date().getFullYear();
   return (
-    <footer className="border-t border-hairline bg-white">
+    <footer className="border-hairline border-t bg-white">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-10 sm:flex-row sm:justify-between">
         <div className="max-w-xs">
-          <p className="text-base font-bold tracking-tight text-ink">TableKit</p>
-          <p className="mt-1.5 text-xs text-ash">
-            UK table booking for independent hospitality.
-          </p>
+          <p className="text-ink text-base font-bold tracking-tight">TableKit</p>
+          <p className="text-ash mt-1.5 text-xs">UK table booking for independent hospitality.</p>
         </div>
         <div className="flex flex-wrap gap-10 text-xs">
           <FooterColumn label="Product" links={PRODUCT} />
           <FooterColumn label="Legal" links={LEGAL} />
         </div>
       </div>
-      <div className="border-t border-hairline">
-        <p className="mx-auto w-full max-w-5xl px-6 py-4 text-[11px] text-ash">
+      <div className="border-hairline border-t">
+        <p className="text-ash mx-auto w-full max-w-5xl px-6 py-4 text-[11px]">
           © {year} TableKit Ltd. All rights reserved.
         </p>
       </div>
@@ -51,11 +49,11 @@ function FooterColumn({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-ash">{label}</p>
+      <p className="text-ash text-[11px] font-semibold tracking-wider uppercase">{label}</p>
       <ul className="flex flex-col gap-1.5">
         {links.map((l) => (
           <li key={l.href}>
-            <Link href={l.href} className="text-charcoal transition hover:text-coral">
+            <Link href={l.href} className="text-charcoal hover:text-coral transition">
               {l.label}
             </Link>
           </li>

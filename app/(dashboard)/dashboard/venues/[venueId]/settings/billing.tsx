@@ -51,8 +51,8 @@ export function BillingSection({
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h2 className="text-lg font-medium tracking-tight text-ink">Payments</h2>
-        <p className="text-sm text-ash">
+        <h2 className="text-ink text-lg font-medium tracking-tight">Payments</h2>
+        <p className="text-ash text-sm">
           Connect a Stripe account to collect deposits and hold cards for no-show protection. We use
           Stripe Connect Standard — you&apos;re the merchant of record.
         </p>
@@ -73,7 +73,7 @@ export function BillingSection({
       {account ? (
         <StatusPanel account={account} />
       ) : (
-        <p className="text-sm text-ash">No Stripe account connected yet.</p>
+        <p className="text-ash text-sm">No Stripe account connected yet.</p>
       )}
 
       <form action={formAction}>
@@ -81,12 +81,12 @@ export function BillingSection({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-ink px-4 py-2 text-sm font-medium text-white transition hover:bg-charcoal disabled:opacity-50"
+          className="bg-ink hover:bg-charcoal rounded-md px-4 py-2 text-sm font-medium text-white transition disabled:opacity-50"
         >
           {pending ? "Preparing…" : account ? "Continue Stripe onboarding" : "Connect Stripe"}
         </button>
         {state.status === "error" ? (
-          <span className="ml-3 text-sm text-rose">{state.message}</span>
+          <span className="text-rose ml-3 text-sm">{state.message}</span>
         ) : null}
       </form>
     </div>
@@ -95,7 +95,7 @@ export function BillingSection({
 
 function StatusPanel({ account }: { account: AccountSummary }) {
   return (
-    <dl className="rounded-md border border-hairline p-4 text-sm">
+    <dl className="border-hairline rounded-md border p-4 text-sm">
       <Row label="Stripe account" value={<span className="font-mono">{account.accountId}</span>} />
       <Row label="Charges enabled" value={account.chargesEnabled ? "Yes" : "No"} />
       <Row label="Payouts enabled" value={account.payoutsEnabled ? "Yes" : "No"} />

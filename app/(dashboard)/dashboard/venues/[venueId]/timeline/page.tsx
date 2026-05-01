@@ -279,10 +279,10 @@ export default async function TimelinePage({
     <section className="flex flex-col gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-ink">
+          <h2 className="text-ink text-xl font-bold tracking-tight">
             {formatVenueDateLong(startUtc, { timezone: venue.timezone })}
           </h2>
-          <p className="mt-0.5 text-xs text-ash">
+          <p className="text-ash mt-0.5 text-xs">
             {bookingsForDay.length === 0
               ? "Nothing on the books for this day."
               : `${bookingsForDay.length} booking${bookingsForDay.length === 1 ? "" : "s"} · ${tables.length} ${tables.length === 1 ? "table" : "tables"}`}
@@ -306,7 +306,7 @@ export default async function TimelinePage({
       </header>
 
       {tables.length === 0 ? (
-        <p className="rounded-card border border-dashed border-hairline p-8 text-center text-sm text-ash">
+        <p className="rounded-card border-hairline text-ash border border-dashed p-8 text-center text-sm">
           No tables in this venue yet. Add some on the Floor plan tab.
         </p>
       ) : (
@@ -325,27 +325,27 @@ export default async function TimelinePage({
                 (per-service colour), hour ticks below. */}
             <div className="sticky top-0 z-40 bg-white">
               <div
-                className="grid border-b border-hairline bg-cloud/60"
+                className="border-hairline bg-cloud/60 grid border-b"
                 style={{ gridTemplateColumns: gridCols }}
               >
-                <div className="sticky left-0 z-10 border-r border-hairline bg-cloud/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-ash">
+                <div className="border-hairline bg-cloud/60 text-ash sticky left-0 z-10 border-r px-3 py-1 text-[11px] font-semibold tracking-wider uppercase">
                   Service
                 </div>
                 {serviceSpans.map((s) => (
                   <div
                     key={s.id}
                     style={{ gridColumn: `${s.startCol} / span ${s.span}`, gridRow: 1 }}
-                    className={`m-0.5 truncate rounded-input border px-2 py-0.5 text-[11px] font-semibold ${s.color}`}
+                    className={`rounded-input m-0.5 truncate border px-2 py-0.5 text-[11px] font-semibold ${s.color}`}
                   >
                     {s.name}
                   </div>
                 ))}
               </div>
               <div
-                className="grid border-b border-hairline bg-white"
+                className="border-hairline grid border-b bg-white"
                 style={{ gridTemplateColumns: gridCols }}
               >
-                <div className="sticky left-0 z-10 border-r border-hairline bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-ash">
+                <div className="border-hairline text-ash sticky left-0 z-10 border-r bg-white px-3 py-2 text-[11px] font-semibold tracking-wider uppercase">
                   Table
                 </div>
                 {hourTicks.map((h) => (
@@ -356,7 +356,7 @@ export default async function TimelinePage({
                     style={{
                       gridColumn: `${(h - window.startHour) * 4 + 2} / span 4`,
                     }}
-                    className="border-r border-hairline px-2 py-2 text-[11px] font-mono tabular-nums text-ash"
+                    className="border-hairline text-ash border-r px-2 py-2 font-mono text-[11px] tabular-nums"
                   >
                     {String(h).padStart(2, "0")}:00
                   </div>
@@ -370,7 +370,7 @@ export default async function TimelinePage({
               {nowMinutes !== null ? (
                 <div
                   aria-label="now"
-                  className="pointer-events-none absolute inset-y-0 z-20 w-px bg-coral"
+                  className="bg-coral pointer-events-none absolute inset-y-0 z-20 w-px"
                   style={{
                     left: `calc(120px + (100% - 120px) * ${nowMinutes / (totalSlots * 15)})`,
                   }}
@@ -405,10 +405,10 @@ export default async function TimelinePage({
                           across area boundaries. The label cell is
                           sticky-left like every other left column. */}
                       <div
-                        className="grid border-b border-hairline bg-cloud"
+                        className="border-hairline bg-cloud grid border-b"
                         style={{ gridTemplateColumns: gridCols }}
                       >
-                        <div className="sticky left-0 z-30 border-r border-hairline bg-cloud px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ash">
+                        <div className="border-hairline bg-cloud text-ash sticky left-0 z-30 border-r px-3 py-1.5 text-[11px] font-semibold tracking-wider uppercase">
                           {areaName}
                         </div>
                         {Array.from({ length: totalSlots }, (_, i) => (
@@ -417,8 +417,8 @@ export default async function TimelinePage({
                             style={{ gridColumn: i + 2, gridRow: 1 }}
                             className={
                               i % 4 === 3
-                                ? "border-r border-hairline"
-                                : "border-r border-hairline/40"
+                                ? "border-hairline border-r"
+                                : "border-hairline/40 border-r"
                             }
                           />
                         ))}
@@ -478,7 +478,6 @@ export default async function TimelinePage({
           </div>
         </TimelineScroller>
       ) : null}
-
     </section>
   );
 }
@@ -559,20 +558,19 @@ function Legend() {
     { status: "cancelled", label: "Cancelled" },
   ];
   return (
-    <div className="flex flex-wrap items-center gap-2 text-[11px] text-ash">
-      <span className="font-semibold uppercase tracking-wider">Key</span>
+    <div className="text-ash flex flex-wrap items-center gap-2 text-[11px]">
+      <span className="font-semibold tracking-wider uppercase">Key</span>
       {items.map((i) => (
         <span
           key={i.status}
-          className={`inline-flex items-center rounded-input border px-2 py-0.5 ${STATUS_FILL[i.status]}`}
+          className={`rounded-input inline-flex items-center border px-2 py-0.5 ${STATUS_FILL[i.status]}`}
         >
           {i.label}
         </span>
       ))}
       <span className="ml-2 inline-flex items-center gap-1">
-        <span className="inline-block h-3 w-px bg-coral" /> now
+        <span className="bg-coral inline-block h-3 w-px" /> now
       </span>
     </div>
   );
 }
-

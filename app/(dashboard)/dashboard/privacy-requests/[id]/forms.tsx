@@ -42,7 +42,7 @@ export function RequestActions({
 
   if (targets.length === 0) {
     return (
-      <p className="text-xs text-ash">
+      <p className="text-ash text-xs">
         This request is closed. To re-open, the requester needs to submit a fresh request.
       </p>
     );
@@ -82,11 +82,9 @@ export function RequestActions({
           </Button>
         ))}
         {state.status === "error" ? (
-          <span className="text-xs text-rose">{state.message}</span>
+          <span className="text-rose text-xs">{state.message}</span>
         ) : null}
-        {state.status === "done" ? (
-          <span className="text-xs text-emerald-700">Saved.</span>
-        ) : null}
+        {state.status === "done" ? <span className="text-xs text-emerald-700">Saved.</span> : null}
       </div>
     </form>
   );

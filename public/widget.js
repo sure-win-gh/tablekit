@@ -33,9 +33,7 @@
     return;
   }
 
-  var frameId =
-    me.getAttribute("data-frame-id") ||
-    "tk-" + Math.random().toString(36).slice(2, 10);
+  var frameId = me.getAttribute("data-frame-id") || "tk-" + Math.random().toString(36).slice(2, 10);
 
   var iframe = document.createElement("iframe");
   iframe.src =

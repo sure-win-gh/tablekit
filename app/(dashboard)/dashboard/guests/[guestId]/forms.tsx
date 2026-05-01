@@ -58,9 +58,9 @@ export function EditContactCard({
   }
 
   return (
-    <div className="rounded-card border border-hairline bg-white p-5">
+    <div className="rounded-card border-hairline border bg-white p-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-ash">Contact</h2>
+        <h2 className="text-ash text-sm font-semibold tracking-wider uppercase">Contact</h2>
         {canEdit && !erased && !editing ? (
           <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
             Edit
@@ -113,9 +113,7 @@ export function EditContactCard({
               />
             </Field>
           </div>
-          {state.status === "error" ? (
-            <p className="text-xs text-rose">{state.message}</p>
-          ) : null}
+          {state.status === "error" ? <p className="text-rose text-xs">{state.message}</p> : null}
           <div className="flex items-center justify-end gap-2">
             <Button
               type="button"
@@ -136,12 +134,12 @@ export function EditContactCard({
           <dt className="text-ash">Name</dt>
           <dd className="text-ink">{lastName ? `${firstName} ${lastName}` : firstName}</dd>
           <dt className="text-ash">Email</dt>
-          <dd className="flex items-center gap-2 text-ink">
+          <dd className="text-ink flex items-center gap-2">
             <span className="break-all">{email}</span>
             {emailInvalid ? <Badge tone="danger">Invalid</Badge> : null}
           </dd>
           <dt className="text-ash">Phone</dt>
-          <dd className="flex items-center gap-2 text-ink">
+          <dd className="text-ink flex items-center gap-2">
             <span>{phone || <span className="text-ash">—</span>}</span>
             {phoneInvalid && phone ? <Badge tone="danger">Invalid</Badge> : null}
           </dd>
@@ -167,11 +165,9 @@ export function ConsentToggles({
   smsConsentAt: string | null;
 }) {
   return (
-    <div className="rounded-card border border-hairline bg-white p-5">
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-ash">
-        Marketing consent
-      </h2>
-      <p className="mt-1 text-xs text-ash">
+    <div className="rounded-card border-hairline border bg-white p-5">
+      <h2 className="text-ash text-sm font-semibold tracking-wider uppercase">Marketing consent</h2>
+      <p className="text-ash mt-1 text-xs">
         Per-channel, timestamped. Withdrawal is at least as easy as opting in (Art 7(3)).
       </p>
       <div className="mt-3 flex flex-col gap-3">
@@ -227,12 +223,10 @@ function ChannelToggle({
       <input type="hidden" name="channel" value={channel} />
       <input type="hidden" name="consenting" value={nextValue} />
       <div className="flex flex-col">
-        <span className="text-sm font-medium text-ink">{label}</span>
-        <span className="text-xs text-ash">
-          {on ? `Opted in ${formattedAt}` : "Not opted in"}
-        </span>
+        <span className="text-ink text-sm font-medium">{label}</span>
+        <span className="text-ash text-xs">{on ? `Opted in ${formattedAt}` : "Not opted in"}</span>
         {state.status === "error" ? (
-          <span className="text-xs text-rose">{state.message}</span>
+          <span className="text-rose text-xs">{state.message}</span>
         ) : null}
       </div>
       <Button
@@ -277,7 +271,9 @@ export function EraseGuestButton({ guestId }: { guestId: string }) {
   return (
     <form action={formAction} className="flex items-center gap-2">
       <input type="hidden" name="guestId" value={guestId} />
-      <span className="text-xs text-ash">Confirm? Routes via privacy requests with 30-day SLA.</span>
+      <span className="text-ash text-xs">
+        Confirm? Routes via privacy requests with 30-day SLA.
+      </span>
       <Button
         type="button"
         variant="secondary"
@@ -290,9 +286,7 @@ export function EraseGuestButton({ guestId }: { guestId: string }) {
       <Button type="submit" variant="destructive" size="sm" disabled={pending}>
         {pending ? "Filing…" : "Confirm erase"}
       </Button>
-      {state.status === "error" ? (
-        <span className="text-xs text-rose">{state.message}</span>
-      ) : null}
+      {state.status === "error" ? <span className="text-rose text-xs">{state.message}</span> : null}
     </form>
   );
 }

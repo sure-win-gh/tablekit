@@ -31,8 +31,8 @@ export default async function AdminOrgDrillDownPage({
   return (
     <div className="flex max-w-6xl flex-col gap-6">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">{org.name}</h1>
-        <p className="text-sm text-ash">
+        <h1 className="text-ink text-2xl font-bold tracking-tight">{org.name}</h1>
+        <p className="text-ash text-sm">
           {org.slug} · plan: {org.plan} · created {fmtDate(org.createdAt)}
         </p>
       </header>
@@ -50,7 +50,7 @@ export default async function AdminOrgDrillDownPage({
           <Empty message="No venues." />
         ) : (
           <table className="w-full text-xs">
-            <thead className="text-left text-ash">
+            <thead className="text-ash text-left">
               <tr>
                 <th className="py-1 font-medium">Name</th>
                 <th className="py-1 font-medium">Type</th>
@@ -58,13 +58,13 @@ export default async function AdminOrgDrillDownPage({
                 <th className="py-1 font-medium">Created</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-hairline">
+            <tbody className="divide-hairline divide-y">
               {venues.map((v) => (
                 <tr key={v.id}>
-                  <td className="py-1.5 text-ink">{v.name}</td>
-                  <td className="py-1.5 text-ink">{v.venueType}</td>
-                  <td className="py-1.5 text-ash">{v.timezone}</td>
-                  <td className="py-1.5 tabular-nums text-ash">{fmtDate(v.createdAt)}</td>
+                  <td className="text-ink py-1.5">{v.name}</td>
+                  <td className="text-ink py-1.5">{v.venueType}</td>
+                  <td className="text-ash py-1.5">{v.timezone}</td>
+                  <td className="text-ash py-1.5 tabular-nums">{fmtDate(v.createdAt)}</td>
                 </tr>
               ))}
             </tbody>
@@ -77,19 +77,19 @@ export default async function AdminOrgDrillDownPage({
           <Empty message="No members." />
         ) : (
           <table className="w-full text-xs">
-            <thead className="text-left text-ash">
+            <thead className="text-ash text-left">
               <tr>
                 <th className="py-1 font-medium">Email</th>
                 <th className="py-1 font-medium">Role</th>
                 <th className="py-1 font-medium">Joined</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-hairline">
+            <tbody className="divide-hairline divide-y">
               {members.map((m) => (
                 <tr key={m.userId}>
-                  <td className="py-1.5 text-ink">{m.email}</td>
-                  <td className="py-1.5 text-ink">{m.role}</td>
-                  <td className="py-1.5 tabular-nums text-ash">{fmtDate(m.createdAt)}</td>
+                  <td className="text-ink py-1.5">{m.email}</td>
+                  <td className="text-ink py-1.5">{m.role}</td>
+                  <td className="text-ash py-1.5 tabular-nums">{fmtDate(m.createdAt)}</td>
                 </tr>
               ))}
             </tbody>
@@ -126,15 +126,15 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-card border border-hairline bg-white px-3 py-2">
-      <div className="text-xs text-ash">{label}</div>
-      <div className="text-2xl font-bold tabular-nums tracking-tight text-ink">{value}</div>
+    <div className="rounded-card border-hairline border bg-white px-3 py-2">
+      <div className="text-ash text-xs">{label}</div>
+      <div className="text-ink text-2xl font-bold tracking-tight tabular-nums">{value}</div>
     </div>
   );
 }
 
 function Empty({ message }: { message: string }) {
-  return <p className="text-xs text-ash">{message}</p>;
+  return <p className="text-ash text-xs">{message}</p>;
 }
 
 function Field({ k, v }: { k: string; v: string }) {

@@ -17,8 +17,8 @@ export default async function AdminOperationsPage() {
   return (
     <div className="flex max-w-6xl flex-col gap-6">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Operations</h1>
-        <p className="text-sm text-ash">
+        <h1 className="text-ink text-2xl font-bold tracking-tight">Operations</h1>
+        <p className="text-ash text-sm">
           Platform-wide health: message delivery, payment failures, Stripe webhooks, open DSARs.
         </p>
       </header>
@@ -32,7 +32,7 @@ export default async function AdminOperationsPage() {
             <Empty message="No messages in the last 7 days." />
           ) : (
             <table className="w-full text-xs">
-              <thead className="text-left text-ash">
+              <thead className="text-ash text-left">
                 <tr>
                   <th className="py-1 font-medium">Channel</th>
                   <th className="py-1 text-right font-medium">Total</th>
@@ -42,19 +42,15 @@ export default async function AdminOperationsPage() {
                   <th className="py-1 text-right font-medium">Bounce %</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-hairline">
+              <tbody className="divide-hairline divide-y">
                 {snap.messages.map((row) => (
                   <tr key={row.channel}>
-                    <td className="py-1.5 text-ink">{row.channel}</td>
-                    <td className="py-1.5 text-right tabular-nums text-ink">{row.total}</td>
-                    <td className="py-1.5 text-right tabular-nums text-ink">{row.delivered}</td>
-                    <td className="py-1.5 text-right tabular-nums text-ink">{row.bounced}</td>
-                    <td className="py-1.5 text-right tabular-nums text-ink">{row.failed}</td>
-                    <td
-                      className={`py-1.5 text-right tabular-nums ${
-                        bounceAlertClass(row)
-                      }`}
-                    >
+                    <td className="text-ink py-1.5">{row.channel}</td>
+                    <td className="text-ink py-1.5 text-right tabular-nums">{row.total}</td>
+                    <td className="text-ink py-1.5 text-right tabular-nums">{row.delivered}</td>
+                    <td className="text-ink py-1.5 text-right tabular-nums">{row.bounced}</td>
+                    <td className="text-ink py-1.5 text-right tabular-nums">{row.failed}</td>
+                    <td className={`py-1.5 text-right tabular-nums ${bounceAlertClass(row)}`}>
                       {bouncePct(row)}
                     </td>
                   </tr>
@@ -70,7 +66,7 @@ export default async function AdminOperationsPage() {
           <CardTitle>Payment failures — last 7 days</CardTitle>
           <a
             href="/admin/export/payment-failures"
-            className="inline-flex items-center gap-1.5 rounded-pill border border-hairline bg-white px-3 py-1 text-xs font-semibold text-ink transition hover:border-ink"
+            className="rounded-pill border-hairline text-ink hover:border-ink inline-flex items-center gap-1.5 border bg-white px-3 py-1 text-xs font-semibold transition"
           >
             <Download className="h-3.5 w-3.5" aria-hidden />
             CSV
@@ -81,19 +77,19 @@ export default async function AdminOperationsPage() {
             <Empty message="No failed payments in the last 7 days." />
           ) : (
             <table className="w-full text-xs">
-              <thead className="text-left text-ash">
+              <thead className="text-ash text-left">
                 <tr>
                   <th className="py-1 font-medium">Organisation</th>
                   <th className="py-1 text-right font-medium">Failures</th>
                   <th className="py-1 font-medium">Last failure</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-hairline">
+              <tbody className="divide-hairline divide-y">
                 {snap.paymentFailures7d.map((row) => (
                   <tr key={row.orgId}>
-                    <td className="py-1.5 text-ink">{row.orgName}</td>
-                    <td className="py-1.5 text-right tabular-nums text-ink">{row.count}</td>
-                    <td className="py-1.5 tabular-nums text-ash">
+                    <td className="text-ink py-1.5">{row.orgName}</td>
+                    <td className="text-ink py-1.5 text-right tabular-nums">{row.count}</td>
+                    <td className="text-ash py-1.5 tabular-nums">
                       {fmtDateTime(row.lastFailureAt)}
                     </td>
                   </tr>
@@ -152,20 +148,12 @@ function bounceAlertClass(row: MessageHealth7dRow): string {
   return rate > 0.05 ? "text-rose" : "text-ink";
 }
 
-function Stat({
-  label,
-  value,
-  alert = false,
-}: {
-  label: string;
-  value: string;
-  alert?: boolean;
-}) {
+function Stat({ label, value, alert = false }: { label: string; value: string; alert?: boolean }) {
   return (
-    <div className="rounded-card border border-hairline bg-white px-3 py-2">
-      <div className="text-xs text-ash">{label}</div>
+    <div className="rounded-card border-hairline border bg-white px-3 py-2">
+      <div className="text-ash text-xs">{label}</div>
       <div
-        className={`text-2xl font-bold tabular-nums tracking-tight ${
+        className={`text-2xl font-bold tracking-tight tabular-nums ${
           alert ? "text-rose" : "text-ink"
         }`}
       >
@@ -176,7 +164,7 @@ function Stat({
 }
 
 function Empty({ message }: { message: string }) {
-  return <p className="text-xs text-ash">{message}</p>;
+  return <p className="text-ash text-xs">{message}</p>;
 }
 
 function fmtDateTime(d: Date | null): string {

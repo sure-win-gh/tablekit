@@ -130,11 +130,7 @@ describe("validateRow — rejects", () => {
   });
 
   it("a malformed email", () => {
-    const r = validateRow(
-      { First: "Jane", Email: "not-an-email" },
-      defaultMap,
-      7,
-    );
+    const r = validateRow({ First: "Jane", Email: "not-an-email" }, defaultMap, 7);
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.rejected.errors).toContainEqual({
@@ -172,11 +168,7 @@ describe("validateRow — rejects", () => {
   });
 
   it("treats whitespace-only cells as missing", () => {
-    const r = validateRow(
-      { First: "   ", Email: "jane@example.com" },
-      defaultMap,
-      10,
-    );
+    const r = validateRow({ First: "   ", Email: "jane@example.com" }, defaultMap, 10);
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.rejected.errors).toContainEqual({

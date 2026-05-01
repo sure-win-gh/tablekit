@@ -37,8 +37,8 @@ export function NewDepositRuleForm({
     );
   }
   return (
-    <form action={action} className="flex flex-col gap-4 rounded-md border border-hairline p-4">
-      <h3 className="text-sm font-semibold tracking-tight text-ink">New deposit rule</h3>
+    <form action={action} className="border-hairline flex flex-col gap-4 rounded-md border p-4">
+      <h3 className="text-ink text-sm font-semibold tracking-tight">New deposit rule</h3>
       <input type="hidden" name="venue_id" value={venueId} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -46,7 +46,7 @@ export function NewDepositRuleForm({
           <span className="text-charcoal">Service (leave blank for all)</span>
           <select
             name="service_id"
-            className="rounded-md border border-hairline px-2 py-1 text-ink"
+            className="border-hairline text-ink rounded-md border px-2 py-1"
           >
             <option value="">All services</option>
             {services.map((s) => (
@@ -61,7 +61,7 @@ export function NewDepositRuleForm({
           <select
             name="kind"
             defaultValue="per_cover"
-            className="rounded-md border border-hairline px-2 py-1 text-ink"
+            className="border-hairline text-ink rounded-md border px-2 py-1"
           >
             <option value="per_cover">Per cover (deposit)</option>
             <option value="flat">Flat (deposit)</option>
@@ -77,7 +77,7 @@ export function NewDepositRuleForm({
             max={100000}
             defaultValue={2000}
             required
-            className="rounded-md border border-hairline px-2 py-1 text-ink"
+            className="border-hairline text-ink rounded-md border px-2 py-1"
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
@@ -88,7 +88,7 @@ export function NewDepositRuleForm({
             min={0}
             max={168}
             defaultValue={24}
-            className="rounded-md border border-hairline px-2 py-1 text-ink"
+            className="border-hairline text-ink rounded-md border px-2 py-1"
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
@@ -99,7 +99,7 @@ export function NewDepositRuleForm({
             min={1}
             max={50}
             defaultValue={1}
-            className="rounded-md border border-hairline px-2 py-1 text-ink"
+            className="border-hairline text-ink rounded-md border px-2 py-1"
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
@@ -109,7 +109,7 @@ export function NewDepositRuleForm({
             name="max_party"
             min={1}
             max={50}
-            className="rounded-md border border-hairline px-2 py-1 text-ink"
+            className="border-hairline text-ink rounded-md border px-2 py-1"
           />
         </label>
       </div>
@@ -120,7 +120,7 @@ export function NewDepositRuleForm({
           {DAYS_LONG.map((d) => (
             <label
               key={d.value}
-              className="flex items-center gap-1 rounded-md border border-hairline px-2 py-1"
+              className="border-hairline flex items-center gap-1 rounded-md border px-2 py-1"
             >
               <input type="checkbox" name="day_of_week" value={d.value} defaultChecked />
               <span>{d.label}</span>
@@ -131,12 +131,12 @@ export function NewDepositRuleForm({
 
       <div className="flex items-center justify-end gap-3">
         {state.status === "error" ? (
-          <span className="text-sm text-rose">{state.message}</span>
+          <span className="text-rose text-sm">{state.message}</span>
         ) : null}
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-ink px-4 py-2 text-sm font-medium text-white transition hover:bg-charcoal disabled:opacity-50"
+          className="bg-ink hover:bg-charcoal rounded-md px-4 py-2 text-sm font-medium text-white transition disabled:opacity-50"
         >
           {pending ? "Saving…" : "Add rule"}
         </button>
@@ -171,9 +171,9 @@ export function DepositRuleRow({
     .map((d) => DAYS_LONG.find((x) => x.value === d)?.label ?? String(d))
     .join(" ");
   return (
-    <div className="flex items-center justify-between border-b border-hairline py-3">
+    <div className="border-hairline flex items-center justify-between border-b py-3">
       <div className="flex flex-col text-sm">
-        <span className="font-medium text-ink">
+        <span className="text-ink font-medium">
           {rule.kind === "per_cover"
             ? `£${(rule.amountMinor / 100).toFixed(2)} per cover`
             : rule.kind === "card_hold"
@@ -193,7 +193,7 @@ export function DepositRuleRow({
         <button
           type="submit"
           disabled={pending}
-          className="text-sm text-rose hover:underline disabled:opacity-50"
+          className="text-rose text-sm hover:underline disabled:opacity-50"
         >
           {pending ? "Deleting…" : "Delete"}
         </button>

@@ -65,9 +65,7 @@ export function verifyReviewToken(
   pEncoded: string,
   sigHex: string,
   nowSeconds: number = Math.floor(Date.now() / 1000),
-):
-  | { ok: true; payload: ReviewTokenPayload }
-  | { ok: false; reason: ReviewTokenVerifyError } {
+): { ok: true; payload: ReviewTokenPayload } | { ok: false; reason: ReviewTokenVerifyError } {
   const expected = hashForLookup(pEncoded, "raw");
   if (!constantTimeEqual(expected, sigHex)) return { ok: false, reason: "bad-sig" };
   const payload = decodePayload(pEncoded);

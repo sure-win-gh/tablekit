@@ -23,9 +23,7 @@ export type SweepResult = {
   failed: number;
 };
 
-export async function sweepCompletedErasureScrubs(opts?: {
-  limit?: number;
-}): Promise<SweepResult> {
+export async function sweepCompletedErasureScrubs(opts?: { limit?: number }): Promise<SweepResult> {
   const limit = opts?.limit ?? 50;
   const db = adminDb();
 

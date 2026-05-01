@@ -80,14 +80,14 @@ export function SlotPicker({
       </div>
 
       {slots.length === 0 ? (
-        <p className="rounded-card border border-dashed border-hairline p-4 text-sm text-ash">
+        <p className="rounded-card border-hairline text-ash border border-dashed p-4 text-sm">
           Sorry, nothing available at that date and party size. Try another date or a smaller party.
         </p>
       ) : (
         <div className="flex flex-col gap-3">
           {[...byService.entries()].map(([svcName, list]) => (
             <div key={svcName}>
-              <h3 className="text-sm font-semibold tracking-tight text-ink">{svcName}</h3>
+              <h3 className="text-ink text-sm font-semibold tracking-tight">{svcName}</h3>
               <div className="mt-2 flex flex-wrap gap-2">
                 {list.map((s) => {
                   const isPicked =
@@ -99,7 +99,7 @@ export function SlotPicker({
                       onClick={() => navigate({ serviceId: s.serviceId, wallStart: s.wallStart })}
                       className={cn(
                         "rounded-input border px-3 py-1.5 text-sm font-semibold tabular-nums transition",
-                        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2",
+                        "focus-visible:ring-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
                         isPicked
                           ? "border-ink bg-ink text-white"
                           : "border-hairline text-ink hover:border-ink",
@@ -263,7 +263,7 @@ export function BookingForm({
 
   if (state.status === "success") {
     return (
-      <section className="flex flex-col gap-3 rounded-card border border-emerald-300 bg-emerald-50 p-6 text-emerald-900">
+      <section className="rounded-card flex flex-col gap-3 border border-emerald-300 bg-emerald-50 p-6 text-emerald-900">
         <h2 className="text-lg font-bold tracking-tight">You&apos;re booked.</h2>
         <p className="text-sm">
           Your reference is <span className="font-mono font-semibold">{state.reference}</span>.
@@ -287,11 +287,11 @@ export function BookingForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="flex flex-col gap-4 rounded-card border border-hairline bg-white p-6 shadow-panel"
+      className="rounded-card border-hairline shadow-panel flex flex-col gap-4 border bg-white p-6"
     >
       <header>
-        <h2 className="text-lg font-bold tracking-tight text-ink">Your details</h2>
-        <p className="text-sm text-ash">
+        <h2 className="text-ink text-lg font-bold tracking-tight">Your details</h2>
+        <p className="text-ash text-sm">
           {wallStart} on {date} · party of {partySize}
         </p>
       </header>
@@ -327,7 +327,7 @@ export function BookingForm({
 
       <div className="flex items-center justify-end gap-3">
         {state.status === "error" ? (
-          <span className="text-sm text-rose">{state.message}</span>
+          <span className="text-rose text-sm">{state.message}</span>
         ) : null}
         <Button type="submit" disabled={state.status === "submitting"}>
           {state.status === "submitting" ? "Booking…" : "Confirm booking"}
@@ -396,12 +396,12 @@ function DepositStep({
   const stripe = useMemo(() => getStripe(handoff.stripeAccount), [handoff.stripeAccount]);
   const isHold = handoff.kind === "setup_intent";
   return (
-    <section className="flex flex-col gap-4 rounded-card border border-hairline bg-white p-6 shadow-panel">
+    <section className="rounded-card border-hairline shadow-panel flex flex-col gap-4 border bg-white p-6">
       <header>
-        <h2 className="text-lg font-bold tracking-tight text-ink">
+        <h2 className="text-ink text-lg font-bold tracking-tight">
           {isHold ? "Card required" : "Deposit required"}
         </h2>
-        <p className="text-sm text-ash">
+        <p className="text-ash text-sm">
           {time} on {date} ·{" "}
           {isHold
             ? `we'll only charge ${formatGbp(handoff.amountMinor)} if you don't show up.`
@@ -483,7 +483,7 @@ function DepositPaymentForm({
   return (
     <form onSubmit={pay} className="flex flex-col gap-4">
       <PaymentElement options={{ layout: "tabs" }} />
-      {state.status === "error" ? <p className="text-sm text-rose">{state.message}</p> : null}
+      {state.status === "error" ? <p className="text-rose text-sm">{state.message}</p> : null}
       <Button type="submit" disabled={!stripe || state.status === "confirming"}>
         {state.status === "confirming" ? "Processing…" : isHold ? "Save card" : "Pay deposit"}
       </Button>

@@ -54,7 +54,10 @@ export async function createBookingAction(
   const rawPreferred = formData.get("preferredTableIds");
   const preferredTableIds =
     typeof rawPreferred === "string" && rawPreferred.length > 0
-      ? rawPreferred.split(",").map((s) => s.trim()).filter(Boolean)
+      ? rawPreferred
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
       : undefined;
   const raw = {
     venueId: formData.get("venueId"),
@@ -89,9 +92,7 @@ export async function createBookingAction(
     guest: parsed.data.guest,
     source: "host",
     ...(parsed.data.notes ? { notes: parsed.data.notes } : {}),
-    ...(parsed.data.preferredTableIds
-      ? { preferredTableIds: parsed.data.preferredTableIds }
-      : {}),
+    ...(parsed.data.preferredTableIds ? { preferredTableIds: parsed.data.preferredTableIds } : {}),
   });
 
   if (!r.ok) {

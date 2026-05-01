@@ -6,15 +6,7 @@ import { markRedirectedToGoogle, submitReview, type SubmitReviewState } from "./
 
 const initial: SubmitReviewState = { status: "idle" };
 
-export function ReviewForm({
-  p,
-  s,
-  mode,
-}: {
-  p: string;
-  s: string;
-  mode: "public" | "private";
-}) {
+export function ReviewForm({ p, s, mode }: { p: string; s: string; mode: "public" | "private" }) {
   const [state, formAction, pending] = useActionState(submitReview, initial);
   const [rating, setRating] = useState<number>(0);
 
@@ -29,7 +21,7 @@ export function ReviewForm({
       <input type="hidden" name="rating" value={rating} />
 
       <fieldset className="flex flex-col gap-2">
-        <legend className="text-sm font-medium text-ink">Your rating</legend>
+        <legend className="text-ink text-sm font-medium">Your rating</legend>
         <div className="flex gap-1">
           {[1, 2, 3, 4, 5].map((n) => (
             <button
@@ -41,7 +33,7 @@ export function ReviewForm({
               className={`flex h-11 w-11 items-center justify-center rounded-md border text-2xl transition ${
                 rating >= n
                   ? "border-ink bg-ink text-white"
-                  : "border-hairline bg-white text-ash hover:border-ink"
+                  : "border-hairline text-ash hover:border-ink bg-white"
               }`}
             >
               ★
@@ -51,28 +43,28 @@ export function ReviewForm({
       </fieldset>
 
       <label className="flex flex-col gap-1 text-sm">
-        <span className="font-medium text-ink">
+        <span className="text-ink font-medium">
           {mode === "private" ? "Tell us what went wrong" : "Anything else (optional)"}
         </span>
         <textarea
           name="comment"
           rows={4}
           maxLength={800}
-          className="rounded-md border border-hairline px-3 py-2 text-sm outline-none focus:border-neutral-900"
+          className="border-hairline rounded-md border px-3 py-2 text-sm outline-none focus:border-neutral-900"
         />
       </label>
 
       {mode === "public" ? (
-        <label className="flex items-start gap-2 text-sm text-ash">
+        <label className="text-ash flex items-start gap-2 text-sm">
           <input
             type="checkbox"
             name="showcase_consent"
-            className="mt-0.5 h-4 w-4 rounded border-hairline"
+            className="border-hairline mt-0.5 h-4 w-4 rounded"
           />
           <span>
-            Let the venue display your first name, rating, and comment on their public booking
-            page. The venue may turn this surface on at a later date. To withdraw later, contact
-            the venue and they&apos;ll ask TableKit to remove it. See our{" "}
+            Let the venue display your first name, rating, and comment on their public booking page.
+            The venue may turn this surface on at a later date. To withdraw later, contact the venue
+            and they&apos;ll ask TableKit to remove it. See our{" "}
             <a href="/privacy" className="underline">
               privacy notice
             </a>{" "}
@@ -91,7 +83,7 @@ export function ReviewForm({
         <button
           type="submit"
           disabled={pending || rating === 0}
-          className="rounded-md bg-ink px-4 py-2 text-sm font-medium text-white transition hover:bg-charcoal disabled:opacity-50"
+          className="bg-ink hover:bg-charcoal rounded-md px-4 py-2 text-sm font-medium text-white transition disabled:opacity-50"
         >
           {pending ? "Sending…" : "Send"}
         </button>
@@ -119,8 +111,8 @@ function ThankYou({
   return (
     <div className="flex flex-col gap-4 rounded-md border border-neutral-200 bg-white p-6">
       <div>
-        <h2 className="text-lg font-semibold text-ink">Thanks — that&apos;s in.</h2>
-        <p className="mt-1 text-sm text-ash">
+        <h2 className="text-ink text-lg font-semibold">Thanks — that&apos;s in.</h2>
+        <p className="text-ash mt-1 text-sm">
           {lowRating
             ? "We'll read every word. If you'd like a reply, the venue can email you back directly."
             : "If you've a minute more, sharing it on Google really helps a small team."}
@@ -137,8 +129,8 @@ function ThankYou({
           }}
           className={`inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition ${
             lowRating
-              ? "border border-hairline bg-white text-ink hover:border-ink"
-              : "bg-ink text-white hover:bg-charcoal"
+              ? "border-hairline text-ink hover:border-ink border bg-white"
+              : "bg-ink hover:bg-charcoal text-white"
           }`}
         >
           Share on Google

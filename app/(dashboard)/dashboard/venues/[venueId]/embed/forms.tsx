@@ -47,7 +47,7 @@ export function CopyBlock({
         <pre
           id={`copy-${ariaLabel.replace(/\s+/g, "-")}`}
           aria-label={ariaLabel}
-          className="flex-1 overflow-x-auto rounded-card border border-hairline bg-cloud px-4 py-3 text-xs text-ink"
+          className="rounded-card border-hairline bg-cloud text-ink flex-1 overflow-x-auto border px-4 py-3 text-xs"
         >
           {value}
         </pre>
@@ -55,7 +55,7 @@ export function CopyBlock({
         <code
           id={`copy-${ariaLabel.replace(/\s+/g, "-")}`}
           aria-label={ariaLabel}
-          className="flex-1 overflow-x-auto rounded-card border border-hairline bg-cloud px-4 py-3 text-xs text-ink"
+          className="rounded-card border-hairline bg-cloud text-ink flex-1 overflow-x-auto border px-4 py-3 text-xs"
         >
           {value}
         </code>

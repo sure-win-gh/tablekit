@@ -64,9 +64,7 @@ export async function loadGuestsForExport(db: Db, orgId: string): Promise<Export
   for (const row of rows) {
     const lastName = await decryptPii(orgId, row.lastNameCipher as Ciphertext);
     const email = await decryptPii(orgId, row.emailCipher as Ciphertext);
-    const phone = row.phoneCipher
-      ? await decryptPii(orgId, row.phoneCipher as Ciphertext)
-      : null;
+    const phone = row.phoneCipher ? await decryptPii(orgId, row.phoneCipher as Ciphertext) : null;
     out.push({
       guestId: row.id,
       firstName: row.firstName,

@@ -57,7 +57,7 @@ export function SlotPicker({
 
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="text-xl font-bold tracking-tight text-ink">New booking</h2>
+      <h2 className="text-ink text-xl font-bold tracking-tight">New booking</h2>
 
       <div className="flex flex-wrap items-end gap-4">
         <Field label="Date" htmlFor="nb-date">
@@ -85,7 +85,7 @@ export function SlotPicker({
       </div>
 
       {slots.length === 0 ? (
-        <p className="rounded-card border border-dashed border-hairline p-4 text-sm text-ash">
+        <p className="rounded-card border-hairline text-ash border border-dashed p-4 text-sm">
           No availability for that date and party size. Try another date, party size, or check that
           a service is scheduled for this day of the week.
         </p>
@@ -93,15 +93,13 @@ export function SlotPicker({
         <div className="flex flex-col gap-3">
           {[...byService.entries()].map(([svcName, list]) => (
             <div key={svcName}>
-              <h3 className="text-sm font-semibold tracking-tight text-ink">{svcName}</h3>
+              <h3 className="text-ink text-sm font-semibold tracking-tight">{svcName}</h3>
               <div className="mt-2 flex flex-wrap gap-2">
                 {list.map((s) => {
                   const isPicked =
                     picked?.serviceId === s.serviceId && picked?.wallStart === s.wallStart;
                   const firstOption = s.options[0];
-                  const optionLabel = firstOption
-                    ? firstOption.tableLabels.join(" + ")
-                    : "";
+                  const optionLabel = firstOption ? firstOption.tableLabels.join(" + ") : "";
                   const altCount = s.options.length - 1;
                   return (
                     <button
@@ -109,8 +107,8 @@ export function SlotPicker({
                       type="button"
                       onClick={() => navigate({ serviceId: s.serviceId, wallStart: s.wallStart })}
                       className={cn(
-                        "flex flex-col items-start gap-0.5 rounded-input border px-3 py-1.5 text-sm font-semibold tabular-nums transition",
-                        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2",
+                        "rounded-input flex flex-col items-start gap-0.5 border px-3 py-1.5 text-sm font-semibold tabular-nums transition",
+                        "focus-visible:ring-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
                         isPicked
                           ? "border-ink bg-ink text-white"
                           : "border-hairline text-ink hover:border-ink",
@@ -182,7 +180,7 @@ export function NewBookingForm({
   return (
     <form
       action={formAction}
-      className="flex flex-col gap-4 rounded-card border border-hairline bg-white p-4"
+      className="rounded-card border-hairline flex flex-col gap-4 border bg-white p-4"
     >
       <input type="hidden" name="venueId" value={venueId} />
       <input type="hidden" name="serviceId" value={serviceId} />
@@ -192,15 +190,15 @@ export function NewBookingForm({
       <input type="hidden" name="preferredTableIds" value={preferredTableIds} />
 
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold tracking-tight text-ink">
+        <h3 className="text-ink text-sm font-semibold tracking-tight">
           Guest details — {wallStart} · party of {partySize}
-          {tableSummary ? <span className="ml-1 text-ash">· {tableSummary}</span> : null}
+          {tableSummary ? <span className="text-ash ml-1">· {tableSummary}</span> : null}
         </h3>
         {options.length > 1 ? (
           <button
             type="button"
             onClick={() => setSelectedIdx((i) => (i + 1) % options.length)}
-            className="rounded-pill border border-hairline px-2.5 py-0.5 text-xs font-medium text-ink hover:border-ink"
+            className="rounded-pill border-hairline text-ink hover:border-ink border px-2.5 py-0.5 text-xs font-medium"
             aria-label="Try a different table combination"
           >
             Switch tables ({selectedIdx + 1} / {options.length})
@@ -229,7 +227,7 @@ export function NewBookingForm({
 
       <div className="flex items-center justify-end gap-3">
         {state.status === "error" ? (
-          <span className="text-sm text-rose">{state.message}</span>
+          <span className="text-rose text-sm">{state.message}</span>
         ) : null}
         <Button type="submit" disabled={pending}>
           {pending ? "Creating…" : "Create booking"}

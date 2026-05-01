@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  RESERVED_SLUGS,
-  SLUG_REGEX,
-  looksLikeUuid,
-  validateSlug,
-} from "@/lib/venues/slug";
+import { RESERVED_SLUGS, SLUG_REGEX, looksLikeUuid, validateSlug } from "@/lib/venues/slug";
 
 describe("validateSlug", () => {
   it("accepts a typical slug", () => {

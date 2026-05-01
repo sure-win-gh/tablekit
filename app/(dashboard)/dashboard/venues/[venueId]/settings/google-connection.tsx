@@ -43,8 +43,8 @@ export function GoogleConnectionSection({
   return (
     <section className="flex max-w-xl flex-col gap-3">
       <header>
-        <h2 className="text-base font-semibold text-ink">Google Business Profile</h2>
-        <p className="text-sm text-ash">
+        <h2 className="text-ink text-base font-semibold">Google Business Profile</h2>
+        <p className="text-ash text-sm">
           Connect your Google Business Profile to pull reviews into TableKit and reply from one
           place. Phase 3a — pull/reply lands when the integration is approved by Google.
         </p>
@@ -64,15 +64,13 @@ export function GoogleConnectionSection({
       ) : null}
 
       {connection ? (
-        <div className="flex flex-col gap-2 rounded-md border border-hairline bg-white p-4">
-          <p className="text-sm font-medium text-ink">Connected</p>
-          <dl className="grid grid-cols-2 gap-y-1 text-xs text-ash">
+        <div className="border-hairline flex flex-col gap-2 rounded-md border bg-white p-4">
+          <p className="text-ink text-sm font-medium">Connected</p>
+          <dl className="text-ash grid grid-cols-2 gap-y-1 text-xs">
             <dt>Scopes</dt>
             <dd className="text-charcoal">{connection.scopes || "—"}</dd>
             <dt>Token expires</dt>
-            <dd className="text-charcoal">
-              {connection.tokenExpiresAt?.toLocaleString() ?? "—"}
-            </dd>
+            <dd className="text-charcoal">{connection.tokenExpiresAt?.toLocaleString() ?? "—"}</dd>
             <dt>Last sync</dt>
             <dd className="text-charcoal">
               {connection.lastSyncedAt?.toLocaleString() ?? "Not yet — Phase 3b"}
@@ -88,7 +86,7 @@ export function GoogleConnectionSection({
             <button
               type="submit"
               disabled={pending}
-              className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:border-ink disabled:opacity-50"
+              className="border-hairline text-ink hover:border-ink rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
             >
               {pending ? "Disconnecting…" : "Disconnect"}
             </button>
@@ -97,7 +95,7 @@ export function GoogleConnectionSection({
       ) : configured ? (
         <a
           href={`/api/oauth/google/start?venueId=${venueId}`}
-          className="inline-flex w-fit items-center justify-center rounded-md bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-charcoal"
+          className="bg-ink hover:bg-charcoal inline-flex w-fit items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-white"
         >
           Connect Google Business Profile
         </a>
@@ -105,7 +103,7 @@ export function GoogleConnectionSection({
         <button
           type="button"
           disabled
-          className="inline-flex w-fit cursor-not-allowed items-center justify-center rounded-md border border-hairline bg-cloud px-4 py-2 text-sm text-ash"
+          className="border-hairline bg-cloud text-ash inline-flex w-fit cursor-not-allowed items-center justify-center rounded-md border px-4 py-2 text-sm"
         >
           Coming soon
         </button>

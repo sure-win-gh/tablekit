@@ -42,24 +42,24 @@ function ServiceFieldset({ fields }: { fields: ServiceFields }) {
   return (
     <div className="flex flex-wrap items-end gap-3 text-sm">
       <label className="flex flex-col gap-0.5">
-        <span className="text-xs text-ash">Name</span>
+        <span className="text-ash text-xs">Name</span>
         <input
           name="name"
           type="text"
           defaultValue={fields.name}
           required
           maxLength={60}
-          className="w-40 rounded-md border border-hairline px-2 py-1 text-sm outline-none focus:border-neutral-900"
+          className="border-hairline w-40 rounded-md border px-2 py-1 text-sm outline-none focus:border-neutral-900"
         />
       </label>
 
       <fieldset className="flex flex-col gap-0.5">
-        <legend className="text-xs text-ash">Days</legend>
+        <legend className="text-ash text-xs">Days</legend>
         <div className="flex gap-1">
           {DAYS.map((d) => (
             <label
               key={d.value}
-              className="flex cursor-pointer items-center gap-1 rounded-md border border-hairline px-2 py-1 text-xs has-checked:border-neutral-900 has-checked:bg-cloud"
+              className="border-hairline has-checked:bg-cloud flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-xs has-checked:border-neutral-900"
             >
               <input
                 type="checkbox"
@@ -75,29 +75,29 @@ function ServiceFieldset({ fields }: { fields: ServiceFields }) {
       </fieldset>
 
       <label className="flex flex-col gap-0.5">
-        <span className="text-xs text-ash">Start</span>
+        <span className="text-ash text-xs">Start</span>
         <input
           name="start"
           type="time"
           defaultValue={fields.start}
           required
-          className="rounded-md border border-hairline px-2 py-1 text-sm outline-none focus:border-neutral-900"
+          className="border-hairline rounded-md border px-2 py-1 text-sm outline-none focus:border-neutral-900"
         />
       </label>
 
       <label className="flex flex-col gap-0.5">
-        <span className="text-xs text-ash">End</span>
+        <span className="text-ash text-xs">End</span>
         <input
           name="end"
           type="time"
           defaultValue={fields.end}
           required
-          className="rounded-md border border-hairline px-2 py-1 text-sm outline-none focus:border-neutral-900"
+          className="border-hairline rounded-md border px-2 py-1 text-sm outline-none focus:border-neutral-900"
         />
       </label>
 
       <label className="flex flex-col gap-0.5">
-        <span className="text-xs text-ash">Turn (min)</span>
+        <span className="text-ash text-xs">Turn (min)</span>
         <input
           name="turn_minutes"
           type="number"
@@ -105,7 +105,7 @@ function ServiceFieldset({ fields }: { fields: ServiceFields }) {
           min={15}
           max={480}
           required
-          className="w-20 rounded-md border border-hairline px-2 py-1 text-sm outline-none focus:border-neutral-900"
+          className="border-hairline w-20 rounded-md border px-2 py-1 text-sm outline-none focus:border-neutral-900"
         />
       </label>
     </div>
@@ -117,10 +117,10 @@ export function NewServiceForm({ venueId }: { venueId: string }) {
   return (
     <form
       action={action}
-      className="flex flex-col gap-2 rounded-md border border-dashed border-hairline p-4"
+      className="border-hairline flex flex-col gap-2 rounded-md border border-dashed p-4"
     >
       <input type="hidden" name="venue_id" value={venueId} />
-      <p className="text-sm font-medium text-ink">Add a service</p>
+      <p className="text-ink text-sm font-medium">Add a service</p>
       <ServiceFieldset
         fields={{
           name: "",
@@ -134,7 +134,7 @@ export function NewServiceForm({ venueId }: { venueId: string }) {
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md border border-hairline bg-white px-3 py-2 text-sm font-medium text-ink transition hover:bg-cloud disabled:opacity-50"
+          className="border-hairline text-ink hover:bg-cloud rounded-md border bg-white px-3 py-2 text-sm font-medium transition disabled:opacity-50"
         >
           {pending ? "Adding…" : "Add service"}
         </button>
@@ -158,14 +158,14 @@ export function ServiceRow({
   const [deleteState, deleteAction, deletePending] = useActionState(deleteService, idle);
 
   return (
-    <div className="flex flex-col gap-2 border-t border-hairline py-3">
+    <div className="border-hairline flex flex-col gap-2 border-t py-3">
       <form action={updateAction} className="flex flex-wrap items-end gap-3">
         <input type="hidden" name="service_id" value={serviceId} />
         <ServiceFieldset fields={{ name, days, start, end, turnMinutes }} />
         <button
           type="submit"
           disabled={updatePending}
-          className="text-xs text-ash hover:text-ink disabled:opacity-50"
+          className="text-ash hover:text-ink text-xs disabled:opacity-50"
         >
           {updatePending ? "…" : "Save"}
         </button>

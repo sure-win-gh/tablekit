@@ -3,11 +3,7 @@ import { notFound } from "next/navigation";
 
 import { hasRole } from "@/lib/auth/role-level";
 import { requireRole } from "@/lib/auth/require-role";
-import {
-  formatVenueTime,
-  todayInZone,
-  venueLocalDayRange,
-} from "@/lib/bookings/time";
+import { formatVenueTime, todayInZone, venueLocalDayRange } from "@/lib/bookings/time";
 import { withUser } from "@/lib/db/client";
 import {
   areas,
@@ -20,11 +16,7 @@ import {
 } from "@/lib/db/schema";
 
 import { AutoRefresh } from "./auto-refresh";
-import {
-  FloorPlanCanvas,
-  type CanvasArea,
-  type CanvasTable,
-} from "./canvas";
+import { FloorPlanCanvas, type CanvasArea, type CanvasTable } from "./canvas";
 import type { ActiveBookingDetail } from "./side-panel";
 
 export const metadata = {
@@ -33,11 +25,7 @@ export const metadata = {
 
 const UPCOMING_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
 
-export default async function FloorPlanPage({
-  params,
-}: {
-  params: Promise<{ venueId: string }>;
-}) {
+export default async function FloorPlanPage({ params }: { params: Promise<{ venueId: string }> }) {
   const auth = await requireRole("host");
   const { venueId } = await params;
   const canEdit = hasRole(auth.role, "manager");
@@ -128,10 +116,7 @@ export default async function FloorPlanPage({
 
   const bookingsById = new Map(bookingsForDay.map((b) => [b.id, b]));
 
-  function buildDetail(
-    bookingId: string,
-    tableId: string,
-  ): ActiveBookingDetail | null {
+  function buildDetail(bookingId: string, tableId: string): ActiveBookingDetail | null {
     const b = bookingsById.get(bookingId);
     if (!b) return null;
     const allTableIds = assignmentsByBooking.get(bookingId) ?? [];
@@ -193,8 +178,8 @@ export default async function FloorPlanPage({
     <section className="flex flex-col gap-4">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-ink">Floor plan</h2>
-          <p className="mt-0.5 text-xs text-ash">
+          <h2 className="text-ink text-xl font-bold tracking-tight">Floor plan</h2>
+          <p className="text-ash mt-0.5 text-xs">
             {tableRows.length === 0
               ? "No tables yet — switch to edit mode to add areas and tables."
               : `${tableRows.length} table${tableRows.length === 1 ? "" : "s"} across ${areaRows.length} area${areaRows.length === 1 ? "" : "s"}`}

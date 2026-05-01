@@ -514,11 +514,7 @@ export const reviewSource = pgEnum("review_source", [
 // Forward-looking: TripAdvisor + Facebook (Phase 4) reuse this table
 // by adding their entries to the oauth_provider enum.
 
-export const oauthProvider = pgEnum("oauth_provider", [
-  "google",
-  "tripadvisor",
-  "facebook",
-]);
+export const oauthProvider = pgEnum("oauth_provider", ["google", "tripadvisor", "facebook"]);
 
 export const venueOauthConnections = pgTable(
   "venue_oauth_connections",

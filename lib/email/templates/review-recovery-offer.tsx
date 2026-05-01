@@ -14,8 +14,8 @@ function ReviewRecoveryOfferEmail({ ctx }: { ctx: MessageBookingContext }) {
     >
       <P>Hi {ctx.guestFirstName},</P>
       <P>
-        Thank you for being honest about your visit to {ctx.venueName}. The team wanted to
-        reach out directly:
+        Thank you for being honest about your visit to {ctx.venueName}. The team wanted to reach out
+        directly:
       </P>
       <p
         style={{

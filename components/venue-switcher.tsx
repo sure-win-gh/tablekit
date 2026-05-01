@@ -82,11 +82,11 @@ export function VenueSwitcher({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 rounded-pill border border-hairline bg-white px-2.5 py-1 text-xs font-semibold text-charcoal transition hover:border-ink hover:text-ink"
+        className="rounded-pill border-hairline text-charcoal hover:border-ink hover:text-ink inline-flex items-center gap-1 border bg-white px-2.5 py-1 text-xs font-semibold transition"
       >
         <ArrowLeftRight className="h-3.5 w-3.5" aria-hidden />
         Switch venue
-        <kbd className="ml-1 rounded border border-hairline bg-cloud px-1 text-[10px] font-mono text-ash">
+        <kbd className="border-hairline bg-cloud text-ash ml-1 rounded border px-1 font-mono text-[10px]">
           ⌘K
         </kbd>
       </button>
@@ -94,7 +94,7 @@ export function VenueSwitcher({
         <div
           role="listbox"
           aria-label="Switch venue"
-          className="absolute right-0 top-full z-40 mt-1.5 w-64 rounded-card border border-hairline bg-white p-1 shadow-panel"
+          className="rounded-card border-hairline shadow-panel absolute top-full right-0 z-40 mt-1.5 w-64 border bg-white p-1"
         >
           {venues.map((v, i) => {
             const isCurrent = v.id === currentVenueId;
@@ -111,14 +111,12 @@ export function VenueSwitcher({
                 }}
                 onMouseEnter={() => setHighlight(i)}
                 className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-input px-3 py-2 text-left text-sm transition",
+                  "rounded-input flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition",
                   isHi ? "bg-cloud text-ink" : "text-charcoal hover:bg-cloud hover:text-ink",
                 )}
               >
                 <span className={cn(isCurrent && "font-semibold")}>{v.name}</span>
-                {isCurrent ? (
-                  <Check className="h-3.5 w-3.5 text-coral" aria-hidden />
-                ) : null}
+                {isCurrent ? <Check className="text-coral h-3.5 w-3.5" aria-hidden /> : null}
               </button>
             );
           })}

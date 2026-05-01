@@ -32,7 +32,10 @@ export default async function OrganisationPage() {
       .from(organisations)
       .limit(1);
     if (!o) return { org: null, venueCount: 0 };
-    const v = await db.select({ id: venues.id }).from(venues).where(eq(venues.organisationId, o.id));
+    const v = await db
+      .select({ id: venues.id })
+      .from(venues)
+      .where(eq(venues.organisationId, o.id));
     return { org: o, venueCount: v.length };
   });
 
@@ -42,34 +45,34 @@ export default async function OrganisationPage() {
 
   return (
     <main className="flex flex-1 flex-col px-8 py-6">
-      <nav className="flex items-center gap-1.5 text-xs text-ash">
+      <nav className="text-ash flex items-center gap-1.5 text-xs">
         <Link href="/dashboard" className="hover:text-ink">
           Dashboard
         </Link>
-        <ChevronRight className="h-3.5 w-3.5 text-stone" aria-hidden />
+        <ChevronRight className="text-stone h-3.5 w-3.5" aria-hidden />
         <span className="text-ink">Organisation</span>
       </nav>
 
-      <header className="mt-3 border-b border-hairline pb-4">
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-ink">
-          <Building2 className="h-6 w-6 text-coral" aria-hidden />
+      <header className="border-hairline mt-3 border-b pb-4">
+        <h1 className="text-ink flex items-center gap-2 text-2xl font-bold tracking-tight">
+          <Building2 className="text-coral h-6 w-6" aria-hidden />
           {org.name}
         </h1>
-        <p className="mt-1 text-sm text-ash">
+        <p className="text-ash mt-1 text-sm">
           {org.plan} plan · slug <span className="font-mono">{org.slug}</span> · {venueCount}{" "}
           {venueCount === 1 ? "venue" : "venues"}
         </p>
       </header>
 
       <section className="mt-6 flex flex-col gap-2">
-        <h2 className="text-sm font-semibold tracking-tight text-ink">Group CRM</h2>
-        <p className="text-sm text-ash">
+        <h2 className="text-ink text-sm font-semibold tracking-tight">Group CRM</h2>
+        <p className="text-ash text-sm">
           When enabled, operators with access to multiple venues see a single guest list across all
           of them. Marketing consent stays per-venue — opting in at one venue doesn&apos;t opt the
           guest in at another.
         </p>
         {venueCount < 2 ? (
-          <p className="rounded-card border border-hairline bg-cloud p-3 text-xs text-ash">
+          <p className="rounded-card border-hairline bg-cloud text-ash border p-3 text-xs">
             This setting only takes effect once you have two or more venues.
           </p>
         ) : null}

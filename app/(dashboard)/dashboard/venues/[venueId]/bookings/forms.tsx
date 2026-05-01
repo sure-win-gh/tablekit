@@ -31,7 +31,10 @@ const STATUS_LABEL: Record<BookingStatus, string> = {
 // to match how operators read the row at a glance: amber for
 // "needs attention", emerald for "good news", rose for "bad news",
 // muted for "history".
-const STATUS_TONE: Record<BookingStatus, "warning" | "info" | "success" | "neutral" | "muted" | "danger"> = {
+const STATUS_TONE: Record<
+  BookingStatus,
+  "warning" | "info" | "success" | "neutral" | "muted" | "danger"
+> = {
   requested: "warning",
   confirmed: "info",
   seated: "success",
@@ -100,16 +103,16 @@ export function BookingRow({
   return (
     <li className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-4">
-        <div className="w-24 font-mono text-sm tabular-nums text-ink">
+        <div className="text-ink w-24 font-mono text-sm tabular-nums">
           {wallStart}
           <span className="text-stone"> – </span>
           {wallEnd}
         </div>
         <div className="flex flex-col">
-          <span className="text-sm font-semibold text-ink">
+          <span className="text-ink text-sm font-semibold">
             {guestFirstName} · party of {partySize}
           </span>
-          <span className="text-xs text-ash">
+          <span className="text-ash text-xs">
             {assignedTables.length === 0
               ? "No table"
               : assignedTables.map((t) => `${t.areaName} · ${t.label}`).join(", ")}
@@ -216,9 +219,7 @@ function TransitionButton({
       <Button type="submit" variant={variant} size="sm" disabled={pending}>
         {pending ? "…" : label}
       </Button>
-      {state.status === "error" ? (
-        <span className="text-xs text-rose">{state.message}</span>
-      ) : null}
+      {state.status === "error" ? <span className="text-rose text-xs">{state.message}</span> : null}
     </form>
   );
 }
@@ -312,10 +313,10 @@ export function BookingsFilters({
   const filtersActive = query.trim().length > 0 || activeStatuses.length > 0;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-card border border-hairline bg-white p-2">
-      <div className="relative flex-1 min-w-[200px]">
+    <div className="rounded-card border-hairline flex flex-wrap items-center gap-2 border bg-white p-2">
+      <div className="relative min-w-[200px] flex-1">
         <Search
-          className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ash"
+          className="text-ash pointer-events-none absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2"
           aria-hidden
         />
         <Input
@@ -341,7 +342,7 @@ export function BookingsFilters({
                 "rounded-pill border px-2.5 py-1 text-xs font-medium transition",
                 on
                   ? "border-ink bg-ink text-white"
-                  : "border-hairline bg-white text-ink hover:border-ink",
+                  : "border-hairline text-ink hover:border-ink bg-white",
               )}
             >
               {STATUS_LABEL[s]}
@@ -418,9 +419,7 @@ function RefundButton({ venueId, bookingId }: { venueId: string; bookingId: stri
       >
         Cancel
       </Button>
-      {state.status === "error" ? (
-        <span className="text-xs text-rose">{state.message}</span>
-      ) : null}
+      {state.status === "error" ? <span className="text-rose text-xs">{state.message}</span> : null}
     </form>
   );
 }
@@ -466,9 +465,7 @@ function MoveTableControl({
       <Button type="submit" variant="secondary" size="sm" disabled={pending || !toTableId}>
         {pending ? "…" : "Move"}
       </Button>
-      {state.status === "error" ? (
-        <span className="text-xs text-rose">{state.message}</span>
-      ) : null}
+      {state.status === "error" ? <span className="text-rose text-xs">{state.message}</span> : null}
     </form>
   );
 }

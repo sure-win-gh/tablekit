@@ -3,15 +3,9 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui";
 import { requirePlatformAdmin } from "@/lib/server/admin/auth";
 import { adminDb } from "@/lib/server/admin/db";
 import { platformAudit } from "@/lib/server/admin/dashboard/audit";
-import {
-  getBookingCounts,
-  getBookingsByDay,
-} from "@/lib/server/admin/dashboard/metrics/bookings";
+import { getBookingCounts, getBookingsByDay } from "@/lib/server/admin/dashboard/metrics/bookings";
 import { getMessageVolume7d } from "@/lib/server/admin/dashboard/metrics/messages";
-import {
-  getSignupCounts,
-  getSignupsByDay,
-} from "@/lib/server/admin/dashboard/metrics/signups";
+import { getSignupCounts, getSignupsByDay } from "@/lib/server/admin/dashboard/metrics/signups";
 
 export const dynamic = "force-dynamic";
 
@@ -31,8 +25,8 @@ export default async function AdminOverviewPage() {
   return (
     <div className="flex max-w-6xl flex-col gap-6">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Overview</h1>
-        <p className="text-sm text-ash">
+        <h1 className="text-ink text-2xl font-bold tracking-tight">Overview</h1>
+        <p className="text-ash text-sm">
           Cross-organisation signal. UTC day buckets. Live counts; financials land in PR3.
         </p>
       </header>
@@ -59,17 +53,17 @@ export default async function AdminOverviewPage() {
           <Empty message="No bookings in the last 7 days." />
         ) : (
           <table className="mt-4 w-full text-xs">
-            <thead className="text-left text-ash">
+            <thead className="text-ash text-left">
               <tr>
                 <th className="py-1 font-medium">Source</th>
                 <th className="py-1 text-right font-medium">Bookings (7d)</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-hairline">
+            <tbody className="divide-hairline divide-y">
               {bookings.sourceMix7d.map((row) => (
                 <tr key={row.source}>
-                  <td className="py-1.5 text-ink">{row.source}</td>
-                  <td className="py-1.5 text-right tabular-nums text-ink">{row.count}</td>
+                  <td className="text-ink py-1.5">{row.source}</td>
+                  <td className="text-ink py-1.5 text-right tabular-nums">{row.count}</td>
                 </tr>
               ))}
             </tbody>
@@ -82,19 +76,19 @@ export default async function AdminOverviewPage() {
           <Empty message="No messages dispatched in the last 7 days." />
         ) : (
           <table className="w-full text-xs">
-            <thead className="text-left text-ash">
+            <thead className="text-ash text-left">
               <tr>
                 <th className="py-1 font-medium">Channel</th>
                 <th className="py-1 font-medium">Status</th>
                 <th className="py-1 text-right font-medium">Count</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-hairline">
+            <tbody className="divide-hairline divide-y">
               {messages.map((row) => (
                 <tr key={`${row.channel}-${row.status}`}>
-                  <td className="py-1.5 text-ink">{row.channel}</td>
-                  <td className="py-1.5 text-ink">{row.status}</td>
-                  <td className="py-1.5 text-right tabular-nums text-ink">{row.count}</td>
+                  <td className="text-ink py-1.5">{row.channel}</td>
+                  <td className="text-ink py-1.5">{row.status}</td>
+                  <td className="text-ink py-1.5 text-right tabular-nums">{row.count}</td>
                 </tr>
               ))}
             </tbody>
@@ -126,9 +120,9 @@ function Stat({
   sparkline?: { day: string; n: number }[];
 }) {
   return (
-    <div className="rounded-card border border-hairline bg-white px-3 py-2">
-      <div className="text-xs text-ash">{label}</div>
-      <div className="text-2xl font-bold tabular-nums tracking-tight text-ink">{value}</div>
+    <div className="rounded-card border-hairline border bg-white px-3 py-2">
+      <div className="text-ash text-xs">{label}</div>
+      <div className="text-ink text-2xl font-bold tracking-tight tabular-nums">{value}</div>
       {sparkline && sparkline.length > 0 ? (
         <div className="mt-1">
           <Sparkline data={sparkline} />
@@ -139,5 +133,5 @@ function Stat({
 }
 
 function Empty({ message }: { message: string }) {
-  return <p className="text-xs text-ash">{message}</p>;
+  return <p className="text-ash text-xs">{message}</p>;
 }

@@ -17,8 +17,8 @@ function ReviewOperatorReplyEmail({ ctx }: { ctx: MessageBookingContext }) {
     >
       <P>Hi {ctx.guestFirstName},</P>
       <P>
-        Thanks again for your feedback after your visit to {ctx.venueName}. The team wanted to
-        reply directly:
+        Thanks again for your feedback after your visit to {ctx.venueName}. The team wanted to reply
+        directly:
       </P>
       {/* whiteSpace: pre-line preserves the operator's line breaks
           without spawning empty <P> elements that Outlook collapses. */}

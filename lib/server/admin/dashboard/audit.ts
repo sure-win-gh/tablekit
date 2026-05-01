@@ -13,11 +13,7 @@ import { platformAuditLog } from "@/lib/db/schema";
 
 import { adminDb } from "../db";
 
-export type PlatformAuditAction =
-  | "login"
-  | "viewed_org"
-  | "exported"
-  | "searched";
+export type PlatformAuditAction = "login" | "viewed_org" | "exported" | "searched";
 
 export type PlatformAuditTargetType = "organisation" | "venue" | "user";
 

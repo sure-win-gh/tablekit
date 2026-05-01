@@ -32,23 +32,15 @@ type Props = {
   onClose: () => void;
 };
 
-export function SidePanel({
-  venueId,
-  date,
-  table,
-  booking,
-  upcoming,
-  editMode,
-  onClose,
-}: Props) {
+export function SidePanel({ venueId, date, table, booking, upcoming, editMode, onClose }: Props) {
   if (!table) return null;
 
   return (
-    <aside className="absolute right-0 top-0 z-10 flex h-full w-80 flex-col border-l border-hairline bg-white shadow-panel">
-      <header className="flex items-center justify-between border-b border-hairline px-4 py-3">
+    <aside className="border-hairline shadow-panel absolute top-0 right-0 z-10 flex h-full w-80 flex-col border-l bg-white">
+      <header className="border-hairline flex items-center justify-between border-b px-4 py-3">
         <div>
-          <h3 className="text-sm font-semibold text-ink">Table {table.label}</h3>
-          <p className="text-xs text-ash">
+          <h3 className="text-ink text-sm font-semibold">Table {table.label}</h3>
+          <p className="text-ash text-xs">
             {table.minCover}–{table.maxCover} covers · {table.shape}
           </p>
         </div>
@@ -60,7 +52,7 @@ export function SidePanel({
       <div className="flex-1 overflow-y-auto px-4 py-3">
         {editMode ? (
           <div className="text-sm">
-            <p className="mb-2 text-xs uppercase tracking-wide text-ash">Edit table</p>
+            <p className="text-ash mb-2 text-xs tracking-wide uppercase">Edit table</p>
             <TableRow
               tableId={table.id}
               label={table.label}
@@ -69,7 +61,7 @@ export function SidePanel({
               shape={table.shape}
               position={table.position}
             />
-            <p className="mt-3 text-xs text-ash">
+            <p className="text-ash mt-3 text-xs">
               Drag the table on the canvas to reposition it. Save here to change label, covers, or
               shape.
             </p>
@@ -89,7 +81,7 @@ export function SidePanel({
             heading="Next on table (within 30 min)"
           />
         ) : (
-          <p className="text-sm text-ash">Empty for the rest of service.</p>
+          <p className="text-ash text-sm">Empty for the rest of service.</p>
         )}
       </div>
     </aside>
@@ -108,33 +100,33 @@ function BookingCard({
   heading: string;
 }) {
   return (
-    <div className="text-sm text-ink">
-      <p className="mb-2 text-xs uppercase tracking-wide text-ash">{heading}</p>
-      <p className="text-base font-semibold text-ink">{booking.guestFirstName}</p>
-      <p className="text-xs text-ash">
+    <div className="text-ink text-sm">
+      <p className="text-ash mb-2 text-xs tracking-wide uppercase">{heading}</p>
+      <p className="text-ink text-base font-semibold">{booking.guestFirstName}</p>
+      <p className="text-ash text-xs">
         Party of {booking.partySize} · {booking.serviceName}
       </p>
-      <p className="mt-2 text-xs text-ash">
+      <p className="text-ash mt-2 text-xs">
         {booking.startWall} – {booking.endWall}
       </p>
       <p className="mt-3">
         <span
-          className={`inline-flex items-center rounded-input border px-2 py-0.5 text-xs ${STATUS_FILL[booking.status]}`}
+          className={`rounded-input inline-flex items-center border px-2 py-0.5 text-xs ${STATUS_FILL[booking.status]}`}
         >
           {booking.status.replace("_", " ")}
         </span>
       </p>
       {booking.otherTableLabels.length > 0 ? (
-        <p className="mt-3 text-xs text-ash">
+        <p className="text-ash mt-3 text-xs">
           Combined with {booking.otherTableLabels.map((l) => `T${l}`).join(", ")}
         </p>
       ) : null}
       {booking.notes ? (
-        <p className="mt-3 whitespace-pre-wrap text-xs text-charcoal">{booking.notes}</p>
+        <p className="text-charcoal mt-3 text-xs whitespace-pre-wrap">{booking.notes}</p>
       ) : null}
       <Link
         href={`/dashboard/venues/${venueId}/bookings?date=${date}`}
-        className="mt-4 inline-block text-xs text-coral hover:underline"
+        className="text-coral mt-4 inline-block text-xs hover:underline"
       >
         Open in bookings list →
       </Link>

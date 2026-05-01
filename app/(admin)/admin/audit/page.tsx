@@ -28,20 +28,20 @@ export default async function AdminAuditPage({
   return (
     <div className="flex max-w-6xl flex-col gap-6">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Audit feed</h1>
-        <p className="text-sm text-ash">
-          Last 200 events platform-wide from public.audit_log. Filter by action prefix or
-          drill into a single organisation by id.
+        <h1 className="text-ink text-2xl font-bold tracking-tight">Audit feed</h1>
+        <p className="text-ash text-sm">
+          Last 200 events platform-wide from public.audit_log. Filter by action prefix or drill into
+          a single organisation by id.
         </p>
       </header>
 
       <form action="/admin/audit" method="get" className="flex items-end gap-2">
-        <label className="flex flex-col gap-1 text-xs text-ash">
+        <label className="text-ash flex flex-col gap-1 text-xs">
           Action
           <select
             name="prefix"
             defaultValue={prefix}
-            className="rounded-card border border-hairline bg-white px-2 py-1.5 text-xs text-ink"
+            className="rounded-card border-hairline text-ink border bg-white px-2 py-1.5 text-xs"
           >
             {AUDIT_PREFIX_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -50,18 +50,18 @@ export default async function AdminAuditPage({
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-xs text-ash">
+        <label className="text-ash flex flex-col gap-1 text-xs">
           Organisation id
           <Input type="text" name="org_id" defaultValue={org_id} placeholder="uuid" size="sm" />
         </label>
         <button
           type="submit"
-          className="inline-flex items-center rounded-pill bg-ink px-3 py-1.5 text-xs font-semibold text-white"
+          className="rounded-pill bg-ink inline-flex items-center px-3 py-1.5 text-xs font-semibold text-white"
         >
           Apply
         </button>
         {prefix || org_id ? (
-          <Link href="/admin/audit" className="text-xs text-ash underline-offset-2 hover:underline">
+          <Link href="/admin/audit" className="text-ash text-xs underline-offset-2 hover:underline">
             Clear
           </Link>
         ) : null}
@@ -72,7 +72,7 @@ export default async function AdminAuditPage({
           <CardTitle>{rows.length} events</CardTitle>
           <a
             href={`/admin/export/audit${buildExportQs({ prefix, org_id })}`}
-            className="inline-flex items-center gap-1.5 rounded-pill border border-hairline bg-white px-3 py-1 text-xs font-semibold text-ink transition hover:border-ink"
+            className="rounded-pill border-hairline text-ink hover:border-ink inline-flex items-center gap-1.5 border bg-white px-3 py-1 text-xs font-semibold transition"
           >
             <Download className="h-3.5 w-3.5" aria-hidden />
             CSV
@@ -80,11 +80,11 @@ export default async function AdminAuditPage({
         </CardHeader>
         <CardBody>
           {rows.length === 0 ? (
-            <p className="text-xs text-ash">No matching events.</p>
+            <p className="text-ash text-xs">No matching events.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead className="text-left text-ash">
+                <thead className="text-ash text-left">
                   <tr>
                     <th className="py-1 font-medium">When</th>
                     <th className="py-1 font-medium">Action</th>
@@ -93,13 +93,13 @@ export default async function AdminAuditPage({
                     <th className="py-1 font-medium">Target</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-hairline">
+                <tbody className="divide-hairline divide-y">
                   {rows.map((row) => (
                     <tr key={row.id}>
-                      <td className="py-1.5 tabular-nums text-ash">
+                      <td className="text-ash py-1.5 tabular-nums">
                         {row.createdAt.toISOString().slice(0, 19).replace("T", " ")}
                       </td>
-                      <td className="py-1.5 font-medium text-ink">{row.action}</td>
+                      <td className="text-ink py-1.5 font-medium">{row.action}</td>
                       <td className="py-1.5">
                         <Link
                           href={`/admin/venues/${row.organisationId}`}
@@ -108,8 +108,8 @@ export default async function AdminAuditPage({
                           {row.organisationName ?? row.organisationId.slice(0, 8)}
                         </Link>
                       </td>
-                      <td className="py-1.5 text-ash">{row.actorEmail ?? "—"}</td>
-                      <td className="py-1.5 text-ash">
+                      <td className="text-ash py-1.5">{row.actorEmail ?? "—"}</td>
+                      <td className="text-ash py-1.5">
                         {row.targetType ? (
                           <span>
                             {row.targetType}

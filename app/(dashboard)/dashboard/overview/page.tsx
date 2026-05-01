@@ -103,12 +103,12 @@ export default async function OverviewPage() {
 
   return (
     <main className="flex flex-1 flex-col px-8 py-6">
-      <header className="border-b border-hairline pb-4">
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-ink">
-          <LayoutDashboard className="h-6 w-6 text-coral" aria-hidden />
+      <header className="border-hairline border-b pb-4">
+        <h1 className="text-ink flex items-center gap-2 text-2xl font-bold tracking-tight">
+          <LayoutDashboard className="text-coral h-6 w-6" aria-hidden />
           {org.name}
         </h1>
-        <p className="mt-1 text-sm text-ash">
+        <p className="text-ash mt-1 text-sm">
           Today across {venueRows.length} venues. Numbers refresh on page load — operators each see
           what their RLS scope allows.
         </p>
@@ -122,7 +122,7 @@ export default async function OverviewPage() {
       </section>
 
       <section className="mt-8 flex flex-col gap-3">
-        <h2 className="text-sm font-semibold tracking-tight text-ink">By venue</h2>
+        <h2 className="text-ink text-sm font-semibold tracking-tight">By venue</h2>
         <ul className="flex flex-col gap-2">
           {tiles
             .slice()
@@ -131,17 +131,17 @@ export default async function OverviewPage() {
               <li key={t.venueId}>
                 <Link
                   href={`/dashboard/venues/${t.venueId}/bookings?date=${t.today}`}
-                  className="group flex items-center justify-between gap-4 rounded-card border border-hairline bg-white px-4 py-3 transition hover:border-ink"
+                  className="group rounded-card border-hairline hover:border-ink flex items-center justify-between gap-4 border bg-white px-4 py-3 transition"
                 >
                   <div className="flex flex-col">
-                    <span className="text-sm font-semibold text-ink">{t.venueName}</span>
-                    <span className="text-xs text-ash">
-                      {t.bookings} {t.bookings === 1 ? "booking" : "bookings"} ·{" "}
-                      {t.coversRealised}/{t.coversBooked} covers · {gbp(t.netMinor)} net
+                    <span className="text-ink text-sm font-semibold">{t.venueName}</span>
+                    <span className="text-ash text-xs">
+                      {t.bookings} {t.bookings === 1 ? "booking" : "bookings"} · {t.coversRealised}/
+                      {t.coversBooked} covers · {gbp(t.netMinor)} net
                     </span>
                   </div>
                   <ArrowRight
-                    className="h-4 w-4 text-mute transition group-hover:translate-x-0.5 group-hover:text-ink"
+                    className="text-mute group-hover:text-ink h-4 w-4 transition group-hover:translate-x-0.5"
                     aria-hidden
                   />
                 </Link>
@@ -156,8 +156,8 @@ export default async function OverviewPage() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <Card padding="sm">
-      <p className="text-xs text-ash">{label}</p>
-      <p className="text-2xl font-bold tabular-nums tracking-tight text-ink">{value}</p>
+      <p className="text-ash text-xs">{label}</p>
+      <p className="text-ink text-2xl font-bold tracking-tight tabular-nums">{value}</p>
     </Card>
   );
 }

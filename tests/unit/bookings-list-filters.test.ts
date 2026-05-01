@@ -66,10 +66,7 @@ describe("parseStatusFilter", () => {
   });
 
   it("trims whitespace and ignores unknown tokens", () => {
-    expect(parseStatusFilter(" confirmed , wibble , no_show ")).toEqual([
-      "confirmed",
-      "no_show",
-    ]);
+    expect(parseStatusFilter(" confirmed , wibble , no_show ")).toEqual(["confirmed", "no_show"]);
   });
 
   it("returns empty when no token survives validation", () => {

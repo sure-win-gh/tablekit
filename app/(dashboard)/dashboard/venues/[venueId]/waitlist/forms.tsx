@@ -12,8 +12,8 @@ export function NewWalkInForm({ venueId }: { venueId: string }) {
     status: "idle",
   });
   return (
-    <form action={action} className="flex flex-col gap-3 rounded-md border border-hairline p-4">
-      <h3 className="text-sm font-semibold tracking-tight text-ink">Add walk-in</h3>
+    <form action={action} className="border-hairline flex flex-col gap-3 rounded-md border p-4">
+      <h3 className="text-ink text-sm font-semibold tracking-tight">Add walk-in</h3>
       <input type="hidden" name="venue_id" value={venueId} />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Field label="First name" name="first_name" required />
@@ -31,12 +31,12 @@ export function NewWalkInForm({ venueId }: { venueId: string }) {
       </div>
       <div className="flex items-center justify-end gap-3">
         {state.status === "error" ? (
-          <span className="text-xs text-rose">{state.message}</span>
+          <span className="text-rose text-xs">{state.message}</span>
         ) : null}
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-ink px-3 py-1.5 text-sm font-medium text-white transition hover:bg-charcoal disabled:opacity-50"
+          className="bg-ink hover:bg-charcoal rounded-md px-3 py-1.5 text-sm font-medium text-white transition disabled:opacity-50"
         >
           {pending ? "Adding…" : "Add to waitlist"}
         </button>
@@ -72,7 +72,7 @@ function Field({
         defaultValue={defaultValue}
         min={min}
         max={max}
-        className="rounded-md border border-hairline px-2 py-1 text-sm text-ink"
+        className="border-hairline text-ink rounded-md border px-2 py-1 text-sm"
       />
     </label>
   );
@@ -99,10 +99,10 @@ export function WaitlistEntryRow({
   return (
     <li className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-col text-sm">
-        <span className="font-medium text-ink">
+        <span className="text-ink font-medium">
           {entry.guestFirstName} · party of {entry.partySize}
         </span>
-        <span className="text-xs text-ash">
+        <span className="text-ash text-xs">
           Waiting {minutesSince(entry.requestedAt)} min · est. wait {waitMinutes} min
           {entry.notes ? ` · ${entry.notes}` : ""}
         </span>
@@ -130,7 +130,7 @@ function SeatNowControl({
   });
   const [tableId, setTableId] = useState("");
   if (tables.length === 0) {
-    return <span className="text-xs text-mute">No table fits</span>;
+    return <span className="text-mute text-xs">No table fits</span>;
   }
   return (
     <form action={action} className="flex items-center gap-1.5">
@@ -140,7 +140,7 @@ function SeatNowControl({
         name="table_id"
         value={tableId}
         onChange={(e) => setTableId(e.target.value)}
-        className="rounded-md border border-hairline px-2 py-0.5 text-xs text-ink"
+        className="border-hairline text-ink rounded-md border px-2 py-0.5 text-xs"
       >
         <option value="">Pick table…</option>
         {tables.map((t) => (
@@ -156,9 +156,7 @@ function SeatNowControl({
       >
         {pending ? "Seating…" : "Seat now"}
       </button>
-      {state.status === "error" ? (
-        <span className="text-xs text-rose">{state.message}</span>
-      ) : null}
+      {state.status === "error" ? <span className="text-rose text-xs">{state.message}</span> : null}
     </form>
   );
 }
@@ -185,7 +183,7 @@ function CancelControl({
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md border border-hairline px-2 py-0.5 text-xs text-charcoal hover:border-ink disabled:opacity-50"
+        className="border-hairline text-charcoal hover:border-ink rounded-md border px-2 py-0.5 text-xs disabled:opacity-50"
       >
         {pending ? "…" : label}
       </button>

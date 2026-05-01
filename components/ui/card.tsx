@@ -30,7 +30,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(function Card(
     <div
       ref={ref}
       className={cn(
-        "rounded-card border border-hairline bg-white",
+        "rounded-card border-hairline border bg-white",
         elevated && "shadow-panel",
         PAD[padding],
         className,
@@ -46,7 +46,7 @@ export function CardHeader({ className, ...rest }: HTMLAttributes<HTMLDivElement
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center justify-between gap-2 border-b border-hairline px-4 py-3",
+        "border-hairline flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3",
         className,
       )}
       {...rest}
@@ -56,15 +56,12 @@ export function CardHeader({ className, ...rest }: HTMLAttributes<HTMLDivElement
 
 export function CardTitle({ className, ...rest }: HTMLAttributes<HTMLHeadingElement>) {
   return (
-    <h3
-      className={cn("text-sm font-semibold tracking-tight text-ink", className)}
-      {...rest}
-    />
+    <h3 className={cn("text-ink text-sm font-semibold tracking-tight", className)} {...rest} />
   );
 }
 
 export function CardDescription({ className, ...rest }: HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={cn("text-xs text-ash", className)} {...rest} />;
+  return <p className={cn("text-ash text-xs", className)} {...rest} />;
 }
 
 export function CardBody({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {

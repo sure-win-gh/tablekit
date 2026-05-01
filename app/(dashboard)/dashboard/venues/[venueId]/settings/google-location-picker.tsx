@@ -24,9 +24,9 @@ export function GoogleLocationPicker({
   const [state, formAction, pending] = useActionState(pickGoogleLocation, initial);
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-hairline bg-cloud p-4">
-      <p className="text-sm font-medium text-ink">Pick the location to sync</p>
-      <p className="text-xs text-ash">
+    <div className="border-hairline bg-cloud flex flex-col gap-2 rounded-md border p-4">
+      <p className="text-ink text-sm font-medium">Pick the location to sync</p>
+      <p className="text-ash text-xs">
         Reviews and replies are scoped to one Google Business Profile location per TableKit venue.
       </p>
       {loadError ? (
@@ -34,7 +34,7 @@ export function GoogleLocationPicker({
           {loadError}
         </p>
       ) : locations.length === 0 ? (
-        <p className="text-xs text-ash">
+        <p className="text-ash text-xs">
           No locations were returned by Google for this account. Make sure your account manages at
           least one published location, then refresh.
         </p>
@@ -44,7 +44,7 @@ export function GoogleLocationPicker({
           <select
             name="location_resource"
             required
-            className="rounded-md border border-hairline bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900"
+            className="border-hairline rounded-md border bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900"
             defaultValue=""
           >
             <option value="" disabled>
@@ -66,7 +66,7 @@ export function GoogleLocationPicker({
             <button
               type="submit"
               disabled={pending}
-              className="rounded-md bg-ink px-3 py-1.5 text-sm font-medium text-white hover:bg-charcoal disabled:opacity-50"
+              className="bg-ink hover:bg-charcoal rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
             >
               {pending ? "Saving…" : "Save location"}
             </button>

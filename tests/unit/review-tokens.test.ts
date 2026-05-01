@@ -17,9 +17,7 @@ const BOOKING_ID = "00000000-0000-0000-0000-000000000abc";
 
 describe("review tokens", () => {
   it("sign + verify round-trip recovers the bookingId", async () => {
-    const { signReviewToken, verifyReviewToken } = await import(
-      "@/lib/messaging/review-tokens"
-    );
+    const { signReviewToken, verifyReviewToken } = await import("@/lib/messaging/review-tokens");
     const { p, s } = signReviewToken({ bookingId: BOOKING_ID });
     const result = verifyReviewToken(p, s);
     expect(result.ok).toBe(true);
@@ -29,9 +27,7 @@ describe("review tokens", () => {
   });
 
   it("tampered signature rejected as bad-sig", async () => {
-    const { signReviewToken, verifyReviewToken } = await import(
-      "@/lib/messaging/review-tokens"
-    );
+    const { signReviewToken, verifyReviewToken } = await import("@/lib/messaging/review-tokens");
     const { p, s } = signReviewToken({ bookingId: BOOKING_ID });
     const last = s.charAt(s.length - 1);
     const tampered = s.slice(0, -1) + (last === "f" ? "0" : "f");
@@ -41,9 +37,7 @@ describe("review tokens", () => {
   });
 
   it("tampered payload rejected", async () => {
-    const { signReviewToken, verifyReviewToken } = await import(
-      "@/lib/messaging/review-tokens"
-    );
+    const { signReviewToken, verifyReviewToken } = await import("@/lib/messaging/review-tokens");
     const { p, s } = signReviewToken({ bookingId: BOOKING_ID });
     const decoded = Buffer.from(p, "base64url").toString("utf8");
     const swapped = decoded.replace(BOOKING_ID, BOOKING_ID.replace(/c$/, "d"));
@@ -53,9 +47,7 @@ describe("review tokens", () => {
   });
 
   it("rejects tokens older than 90 days as expired", async () => {
-    const { signReviewToken, verifyReviewToken } = await import(
-      "@/lib/messaging/review-tokens"
-    );
+    const { signReviewToken, verifyReviewToken } = await import("@/lib/messaging/review-tokens");
     const oldIat = Math.floor(Date.now() / 1000) - 91 * 24 * 60 * 60;
     const { p, s } = signReviewToken({ bookingId: BOOKING_ID, iat: oldIat });
     const r = verifyReviewToken(p, s);
@@ -64,9 +56,7 @@ describe("review tokens", () => {
   });
 
   it("rejects tokens with iat in the future as future", async () => {
-    const { signReviewToken, verifyReviewToken } = await import(
-      "@/lib/messaging/review-tokens"
-    );
+    const { signReviewToken, verifyReviewToken } = await import("@/lib/messaging/review-tokens");
     const futureIat = Math.floor(Date.now() / 1000) + 60 * 60;
     const { p, s } = signReviewToken({ bookingId: BOOKING_ID, iat: futureIat });
     const r = verifyReviewToken(p, s);

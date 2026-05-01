@@ -107,7 +107,7 @@ export function TimelineScroller({
   return (
     <div
       ref={ref}
-      className="overflow-x-auto rounded-card border border-hairline bg-white"
+      className="rounded-card border-hairline overflow-x-auto border bg-white"
       style={{ containerType: "inline-size" }}
     >
       {children}
@@ -178,13 +178,23 @@ type DragCtx = {
   setSource: (s: DragSource) => void;
 
   selection: Selection | null;
-  startSelection: (s: { tableId: string; tableLabel: string; areaId: string; anchorSlot: number }) => void;
+  startSelection: (s: {
+    tableId: string;
+    tableLabel: string;
+    areaId: string;
+    anchorSlot: number;
+  }) => void;
   extendSelection: (slot: number) => void;
   cancelSelection: () => void;
   commitSelection: () => void;
 
   resize: Resize | null;
-  startResize: (s: { bookingId: string; tableId: string; startSlot: number; endSlot: number }) => void;
+  startResize: (s: {
+    bookingId: string;
+    tableId: string;
+    startSlot: number;
+    endSlot: number;
+  }) => void;
   extendResize: (endSlot: number) => void;
   cancelResize: () => void;
   // Returns the final state for the action layer to act on.
@@ -644,7 +654,15 @@ export function TimelineRow({
       window.removeEventListener("mouseup", onUp);
       window.removeEventListener("keydown", onKey);
     };
-  }, [isMyDrag, selection, occupied, totalSlots, extendSelection, commitSelection, cancelSelection]);
+  }, [
+    isMyDrag,
+    selection,
+    occupied,
+    totalSlots,
+    extendSelection,
+    commitSelection,
+    cancelSelection,
+  ]);
 
   // Window-level mousemove + mouseup while a resize is active on
   // this row — extends/shortens the booking by tracking the cursor's
@@ -775,7 +793,7 @@ export function TimelineRow({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       className={cn(
-        "grid border-b border-hairline transition-colors last:border-b-0",
+        "border-hairline grid border-b transition-colors last:border-b-0",
         isOver && canDrop && "bg-coral/5",
         source && !canDrop && !sameTable && "opacity-60",
         // Crosshair on the row (not per-cell) so the cursor stays
@@ -788,14 +806,14 @@ export function TimelineRow({
         gridTemplateColumns: `120px repeat(${totalSlots}, max(50px, calc((100cqw - 120px) / 16)))`,
       }}
     >
-      <div className="sticky left-0 z-30 flex flex-col justify-center border-r border-hairline bg-white px-3 py-1.5 text-ink">
-        <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-ash">
+      <div className="border-hairline text-ink sticky left-0 z-30 flex flex-col justify-center border-r bg-white px-3 py-1.5">
+        <span className="text-ash truncate text-[10px] font-semibold tracking-wider uppercase">
           {areaName}
         </span>
-        <span className="flex items-center gap-1.5 text-sm font-semibold leading-tight">
+        <span className="flex items-center gap-1.5 text-sm leading-tight font-semibold">
           <span className="truncate">{tableLabel}</span>
-          {pending ? <span className="text-[10px] font-normal text-ash">Saving…</span> : null}
-          {error ? <span className="text-[10px] font-normal text-rose">{error}</span> : null}
+          {pending ? <span className="text-ash text-[10px] font-normal">Saving…</span> : null}
+          {error ? <span className="text-rose text-[10px] font-normal">{error}</span> : null}
         </span>
       </div>
       {Array.from({ length: totalSlots }, (_, i) => (
@@ -811,7 +829,7 @@ export function TimelineRow({
           style={{ gridColumn: i + 2, gridRow: 1 }}
           onMouseDown={(e) => onCellMouseDown(e, i)}
           className={cn(
-            i % 4 === 3 ? "border-r border-hairline" : "border-r border-hairline/40",
+            i % 4 === 3 ? "border-hairline border-r" : "border-hairline/40 border-r",
             occupied.has(i) && "cursor-default",
           )}
         />
@@ -823,7 +841,7 @@ export function TimelineRow({
             gridColumn: `${ghost.startCol} / span ${ghost.span}`,
             gridRow: 1,
           }}
-          className="pointer-events-none m-0.5 rounded-input border border-coral/60 bg-coral/10"
+          className="rounded-input border-coral/60 bg-coral/10 pointer-events-none m-0.5 border"
         />
       ) : null}
       {optimisticBookings.map((b) => {
@@ -907,10 +925,10 @@ function BookingBlock({
         gridRow: 1,
       }}
       className={cn(
-        "relative m-0.5 flex flex-col justify-center overflow-hidden rounded-input border px-2 py-1 text-left text-[11px] leading-tight transition",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-1",
+        "rounded-input relative m-0.5 flex flex-col justify-center overflow-hidden border px-2 py-1 text-left text-[11px] leading-tight transition",
+        "focus-visible:ring-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1",
         interactive
-          ? "cursor-grab active:cursor-grabbing hover:shadow-sm"
+          ? "cursor-grab hover:shadow-sm active:cursor-grabbing"
           : "cursor-pointer hover:shadow-sm",
         STATUS_FILL[block.status],
       )}
@@ -944,7 +962,7 @@ function BookingBlock({
             e.preventDefault();
             e.stopPropagation();
           }}
-          className="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize bg-transparent hover:bg-ink/10"
+          className="hover:bg-ink/10 absolute inset-y-0 right-0 w-1.5 cursor-ew-resize bg-transparent"
         />
       ) : null}
     </button>
@@ -1042,11 +1060,11 @@ export function NewBookingModal({
       aria-modal="true"
       aria-label="New booking"
       onClick={closeModal}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
+      className="bg-ink/40 fixed inset-0 z-50 flex items-center justify-center p-4"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-card border border-hairline bg-white shadow-panel"
+        className="rounded-card border-hairline shadow-panel w-full max-w-md border bg-white"
       >
         {/* Keyed by the draft so transient form state (party size,
             error message) resets cleanly when a new selection opens
@@ -1139,10 +1157,10 @@ function ModalBody({
 
   return (
     <>
-      <header className="flex items-start justify-between gap-2 border-b border-hairline px-5 py-4">
+      <header className="border-hairline flex items-start justify-between gap-2 border-b px-5 py-4">
         <div>
-          <h3 className="text-base font-bold tracking-tight text-ink">New booking</h3>
-          <p className="mt-0.5 text-xs text-ash">
+          <h3 className="text-ink text-base font-bold tracking-tight">New booking</h3>
+          <p className="text-ash mt-0.5 text-xs">
             {wallStart}–{wallEnd} · {draft.tableLabel}
             {service ? ` · ${service.name}` : ""}
           </p>
@@ -1151,7 +1169,7 @@ function ModalBody({
           type="button"
           onClick={closeModal}
           aria-label="Close"
-          className="-mr-1 -mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-ash transition hover:bg-cloud hover:text-ink"
+          className="text-ash hover:bg-cloud hover:text-ink -mt-1 -mr-1 inline-flex h-7 w-7 items-center justify-center rounded-full transition"
         >
           <X className="h-4 w-4" aria-hidden />
         </button>
@@ -1198,9 +1216,9 @@ function ModalBody({
             <Textarea id="nbm-notes" name="notes" rows={2} maxLength={500} />
           </Field>
 
-          {error ? <p className="text-xs text-rose">{error}</p> : null}
+          {error ? <p className="text-rose text-xs">{error}</p> : null}
 
-          <footer className="-mx-5 -mb-4 mt-2 flex items-center justify-end gap-2 border-t border-hairline px-5 py-3">
+          <footer className="border-hairline -mx-5 mt-2 -mb-4 flex items-center justify-end gap-2 border-t px-5 py-3">
             <Button type="button" variant="secondary" size="sm" onClick={closeModal}>
               Cancel
             </Button>
@@ -1270,7 +1288,6 @@ export function BookingDetailModal({
     />
   );
 }
-
 
 function createErrorMessage(r: { reason: string; message?: string | undefined }): string {
   switch (r.reason) {

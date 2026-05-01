@@ -4,14 +4,7 @@ import { Download } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 
-import {
-  Card,
-  CardBody,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Input,
-} from "@/components/ui";
+import { Card, CardBody, CardDescription, CardHeader, CardTitle, Input } from "@/components/ui";
 import { formatVenueDateLong } from "@/lib/bookings/time";
 import type {
   CoversRow,
@@ -42,7 +35,7 @@ export function DateRangeNav({
   };
   return (
     <div className="flex items-center gap-2 text-xs">
-      <label className="flex items-center gap-1.5 text-ash">
+      <label className="text-ash flex items-center gap-1.5">
         From
         <Input
           type="date"
@@ -52,7 +45,7 @@ export function DateRangeNav({
           className="w-auto"
         />
       </label>
-      <label className="flex items-center gap-1.5 text-ash">
+      <label className="text-ash flex items-center gap-1.5">
         To
         <Input
           type="date"
@@ -89,7 +82,7 @@ function ReportCard({
         </div>
         <a
           href={downloadHref}
-          className="inline-flex items-center gap-1.5 rounded-pill border border-hairline bg-white px-3 py-1 text-xs font-semibold text-ink transition hover:border-ink"
+          className="rounded-pill border-hairline text-ink hover:border-ink inline-flex items-center gap-1.5 border bg-white px-3 py-1 text-xs font-semibold transition"
         >
           <Download className="h-3.5 w-3.5" aria-hidden />
           CSV
@@ -101,15 +94,15 @@ function ReportCard({
 }
 
 function Empty({ message }: { message: string }) {
-  return <p className="text-xs text-ash">{message}</p>;
+  return <p className="text-ash text-xs">{message}</p>;
 }
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-card border border-hairline bg-white px-3 py-2">
-      <div className="text-xs text-ash">{label}</div>
-      <div className="text-lg font-bold tabular-nums tracking-tight text-ink">{value}</div>
-      {sub ? <div className="text-[11px] tabular-nums text-ash">{sub}</div> : null}
+    <div className="rounded-card border-hairline border bg-white px-3 py-2">
+      <div className="text-ash text-xs">{label}</div>
+      <div className="text-ink text-lg font-bold tracking-tight tabular-nums">{value}</div>
+      {sub ? <div className="text-ash text-[11px] tabular-nums">{sub}</div> : null}
     </div>
   );
 }

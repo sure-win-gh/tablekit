@@ -34,9 +34,7 @@ export type ReassignFromTimelineState =
   | { ok: true }
   | { ok: false; reason: "invalid" | "not-found" | "wrong-area" | "slot-taken" };
 
-export async function reassignFromTimeline(
-  raw: unknown,
-): Promise<ReassignFromTimelineState> {
+export async function reassignFromTimeline(raw: unknown): Promise<ReassignFromTimelineState> {
   const parsed = ReassignArgs.safeParse(raw);
   if (!parsed.success) return { ok: false, reason: "invalid" };
   if (parsed.data.fromTableId === parsed.data.toTableId) return { ok: true };
@@ -75,7 +73,10 @@ const ShiftArgs = z.object({
 
 export type ShiftFromTimelineState =
   | { ok: true }
-  | { ok: false; reason: "invalid" | "venue-not-found" | "not-found" | "slot-taken" | "terminal-status" };
+  | {
+      ok: false;
+      reason: "invalid" | "venue-not-found" | "not-found" | "slot-taken" | "terminal-status";
+    };
 
 export async function shiftFromTimeline(raw: unknown): Promise<ShiftFromTimelineState> {
   const parsed = ShiftArgs.safeParse(raw);
@@ -240,7 +241,13 @@ export type CreateFromTimelineState =
   | { ok: true; bookingId: string; landedOn: "preferred" | "elsewhere" }
   | {
       ok: false;
-      reason: "invalid-input" | "slot-taken" | "no-availability" | "venue-not-found" | "guest-invalid" | "deposit-failed";
+      reason:
+        | "invalid-input"
+        | "slot-taken"
+        | "no-availability"
+        | "venue-not-found"
+        | "guest-invalid"
+        | "deposit-failed";
       message?: string | undefined;
     };
 

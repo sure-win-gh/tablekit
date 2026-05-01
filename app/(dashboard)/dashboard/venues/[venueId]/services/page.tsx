@@ -39,7 +39,7 @@ export default async function ServicesPage({ params }: { params: Promise<{ venue
     <section className="flex flex-col gap-6">
       <div>
         {rows.length === 0 ? (
-          <p className="text-sm text-ash">
+          <p className="text-ash text-sm">
             No services yet. A service is a named window of time (like Lunch or Dinner) with a turn
             length — bookings pick a service at check-in.
           </p>

@@ -212,12 +212,12 @@ export function FloorPlanCanvas({
     return m;
   }, [optimisticTables]);
 
-  const selectedTable = selectedTableId ? tableById.get(selectedTableId) ?? null : null;
+  const selectedTable = selectedTableId ? (tableById.get(selectedTableId) ?? null) : null;
 
   return (
-    <div className="relative h-[600px] overflow-hidden rounded-card border border-hairline bg-white">
+    <div className="rounded-card border-hairline relative h-[600px] overflow-hidden border bg-white">
       {/* Toolbar */}
-      <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
+      <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
         <Button variant="secondary" size="sm" onClick={fitToViewport}>
           <Maximize2 className="h-3.5 w-3.5" aria-hidden />
           Fit
@@ -263,14 +263,14 @@ export function FloorPlanCanvas({
       </div>
 
       {editMode ? (
-        <div className="absolute left-3 bottom-3 z-10 flex max-w-[60%] flex-col gap-2">
+        <div className="absolute bottom-3 left-3 z-10 flex max-w-[60%] flex-col gap-2">
           <NewAreaForm venueId={venueId} />
           {areas.map((a) => (
             <details
               key={a.id}
-              className="rounded-md border border-hairline bg-white px-3 py-2 text-xs"
+              className="border-hairline rounded-md border bg-white px-3 py-2 text-xs"
             >
-              <summary className="cursor-pointer font-medium text-ink">
+              <summary className="text-ink cursor-pointer font-medium">
                 Add table to {a.name}
               </summary>
               <div className="mt-2">
@@ -349,8 +349,8 @@ export function FloorPlanCanvas({
         venueId={venueId}
         date={date}
         table={selectedTable}
-        booking={selectedTableId ? activeByTableId[selectedTableId] ?? null : null}
-        upcoming={selectedTableId ? upcomingByTableId[selectedTableId] ?? null : null}
+        booking={selectedTableId ? (activeByTableId[selectedTableId] ?? null) : null}
+        upcoming={selectedTableId ? (upcomingByTableId[selectedTableId] ?? null) : null}
         editMode={editMode}
         onClose={() => setSelectedTableId(null)}
       />

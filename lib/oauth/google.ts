@@ -22,9 +22,7 @@ import { constantTimeEqual, hashForLookup } from "@/lib/security/crypto";
 
 // Scopes for review read + reply on Google Business Profile.
 // Reference: developers.google.com/my-business/content/review-data
-export const GOOGLE_OAUTH_SCOPES = [
-  "https://www.googleapis.com/auth/business.manage",
-];
+export const GOOGLE_OAUTH_SCOPES = ["https://www.googleapis.com/auth/business.manage"];
 
 // State payload — bound to the operator's session at start, verified
 // at callback. Includes iat so we can reject stale states (10 min TTL).
@@ -88,9 +86,7 @@ export type OAuthStateVerifyError = "bad-format" | "bad-sig" | "expired" | "futu
 export function verifyOAuthState(
   combined: string,
   nowSeconds: number = Math.floor(Date.now() / 1000),
-):
-  | { ok: true; payload: OAuthStatePayload }
-  | { ok: false; reason: OAuthStateVerifyError } {
+): { ok: true; payload: OAuthStatePayload } | { ok: false; reason: OAuthStateVerifyError } {
   const lastDot = combined.lastIndexOf(".");
   if (lastDot <= 0) return { ok: false, reason: "bad-format" };
   const payload = combined.slice(0, lastDot);

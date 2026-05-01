@@ -126,7 +126,9 @@ afterAll(async () => {
 describe("import_jobs — RLS isolation", () => {
   it("user A reads only their own org's import jobs", async () => {
     const rows = await asUser(ctx.userAId, (tx) =>
-      tx.select({ id: schema.importJobs.id, orgId: schema.importJobs.organisationId }).from(schema.importJobs),
+      tx
+        .select({ id: schema.importJobs.id, orgId: schema.importJobs.organisationId })
+        .from(schema.importJobs),
     );
     const ids = rows.map((r) => r.id);
     expect(ids).toContain(ctx.jobAId);
@@ -135,7 +137,9 @@ describe("import_jobs — RLS isolation", () => {
 
   it("user B reads only their own org's import jobs", async () => {
     const rows = await asUser(ctx.userBId, (tx) =>
-      tx.select({ id: schema.importJobs.id, orgId: schema.importJobs.organisationId }).from(schema.importJobs),
+      tx
+        .select({ id: schema.importJobs.id, orgId: schema.importJobs.organisationId })
+        .from(schema.importJobs),
     );
     const ids = rows.map((r) => r.id);
     expect(ids).toContain(ctx.jobBId);

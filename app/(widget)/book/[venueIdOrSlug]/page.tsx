@@ -27,11 +27,7 @@ type SearchParams = {
   wallStart?: string;
 };
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ venueIdOrSlug: string }>;
-}) {
+export async function generateMetadata({ params }: { params: Promise<{ venueIdOrSlug: string }> }) {
   const { venueIdOrSlug } = await params;
   const lookup = await loadPublicVenueByIdOrSlug(venueIdOrSlug);
   return {
@@ -72,12 +68,12 @@ export default async function PublicBookingPage({
     return (
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 p-6">
         <header>
-          <p className="text-xs font-semibold uppercase tracking-wider text-coral">
+          <p className="text-coral text-xs font-semibold tracking-wider uppercase">
             Online booking
           </p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">{venue.name}</h1>
+          <h1 className="text-ink mt-2 text-3xl font-bold tracking-tight">{venue.name}</h1>
         </header>
-        <p className="rounded-card border border-hairline bg-cloud p-6 text-sm text-charcoal">
+        <p className="rounded-card border-hairline bg-cloud text-charcoal border p-6 text-sm">
           Online booking is temporarily unavailable. Please call or email the venue directly to make
           a reservation. We&apos;ll have this back up shortly.
         </p>
@@ -103,13 +99,9 @@ export default async function PublicBookingPage({
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-6">
       <header>
-        <p className="text-xs font-semibold uppercase tracking-wider text-coral">
-          Book a table
-        </p>
-        <h1 className="mt-2 text-4xl font-bold tracking-tight text-ink">
-          {venue.name}
-        </h1>
-        <p className="mt-1 text-sm text-ash">
+        <p className="text-coral text-xs font-semibold tracking-wider uppercase">Book a table</p>
+        <h1 className="text-ink mt-2 text-4xl font-bold tracking-tight">{venue.name}</h1>
+        <p className="text-ash mt-1 text-sm">
           {formatVenueDateLong(dateLongUtc, { timezone: venue.timezone })}
         </p>
       </header>
@@ -150,23 +142,23 @@ function ShowcaseSection({ reviews }: { reviews: PublicShowcaseReview[] }) {
   return (
     <section
       aria-label="Recent guest reviews"
-      className="flex flex-col gap-3 border-t border-hairline pt-6"
+      className="border-hairline flex flex-col gap-3 border-t pt-6"
     >
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-ash">
+      <h2 className="text-ash text-sm font-semibold tracking-wider uppercase">
         Recent guests said
       </h2>
       <ul className="flex flex-col gap-3">
         {reviews.map((r) => (
           <li
             key={r.id}
-            className="rounded-card border border-hairline bg-white p-4 text-sm text-charcoal"
+            className="rounded-card border-hairline text-charcoal border bg-white p-4 text-sm"
           >
             <p className="text-coral" aria-label={`${r.rating} stars`}>
               {"★".repeat(r.rating)}
               <span className="text-stone">{"★".repeat(5 - r.rating)}</span>
             </p>
             <p className="mt-2 whitespace-pre-line">{r.comment}</p>
-            <p className="mt-2 text-xs text-ash">
+            <p className="text-ash mt-2 text-xs">
               — {r.firstName},{" "}
               {r.submittedAt.toLocaleDateString(undefined, { year: "numeric", month: "short" })}
             </p>

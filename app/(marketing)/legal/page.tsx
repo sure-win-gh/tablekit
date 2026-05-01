@@ -30,8 +30,8 @@ export default function LegalIndex() {
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-8">
       <header>
-        <h1 className="text-3xl font-bold tracking-tight text-ink">Legal</h1>
-        <p className="mt-1.5 text-sm text-ash">
+        <h1 className="text-ink text-3xl font-bold tracking-tight">Legal</h1>
+        <p className="text-ash mt-1.5 text-sm">
           Operational documents — not legal advice. For data-protection requests please use the
           guest&apos;s venue rather than contacting us directly; we&apos;re a data processor on the
           venue&apos;s behalf.
@@ -42,14 +42,14 @@ export default function LegalIndex() {
           <li key={e.href}>
             <Link
               href={e.href}
-              className="group flex items-center justify-between rounded-card border border-hairline bg-white px-4 py-3 transition hover:border-ink"
+              className="group rounded-card border-hairline hover:border-ink flex items-center justify-between border bg-white px-4 py-3 transition"
             >
               <div className="flex flex-col">
-                <span className="text-sm font-semibold text-ink">{e.label}</span>
-                <span className="text-xs text-ash">{e.description}</span>
+                <span className="text-ink text-sm font-semibold">{e.label}</span>
+                <span className="text-ash text-xs">{e.description}</span>
               </div>
               <ChevronRight
-                className="h-4 w-4 text-mute transition group-hover:translate-x-0.5 group-hover:text-ink"
+                className="text-mute group-hover:text-ink h-4 w-4 transition group-hover:translate-x-0.5"
                 aria-hidden
               />
             </Link>

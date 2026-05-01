@@ -23,12 +23,10 @@ type Variant = "primary" | "secondary" | "ghost" | "destructive" | "link";
 type Size = "sm" | "md";
 
 const VARIANT: Record<Variant, string> = {
-  primary:
-    "bg-coral text-white hover:bg-coral-deep active:scale-[0.97] focus-visible:ring-ink",
+  primary: "bg-coral text-white hover:bg-coral-deep active:scale-[0.97] focus-visible:ring-ink",
   secondary:
     "bg-white text-ink border border-hairline hover:border-ink active:scale-[0.97] focus-visible:ring-ink",
-  ghost:
-    "bg-transparent text-ink hover:bg-cloud focus-visible:ring-ink",
+  ghost: "bg-transparent text-ink hover:bg-cloud focus-visible:ring-ink",
   destructive:
     "bg-white text-rose border border-hairline hover:border-rose hover:text-rose-deep focus-visible:ring-rose",
   link: "bg-transparent text-ink underline underline-offset-4 hover:text-coral focus-visible:ring-coral",
@@ -53,7 +51,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       type={type}
       className={cn(
-        "inline-flex items-center justify-center gap-1.5 rounded-pill font-medium transition",
+        "rounded-pill inline-flex items-center justify-center gap-1.5 font-medium transition",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
         "disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100",
         VARIANT[variant],
@@ -77,9 +75,9 @@ export const IconButton = forwardRef<
       ref={ref}
       type={type}
       className={cn(
-        "inline-flex items-center justify-center rounded-full bg-white text-ink",
-        "border border-hairline transition hover:border-ink active:scale-[0.97]",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2",
+        "text-ink inline-flex items-center justify-center rounded-full bg-white",
+        "border-hairline hover:border-ink border transition active:scale-[0.97]",
+        "focus-visible:ring-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
         "disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100",
         size === "sm" ? "h-7 w-7" : "h-9 w-9",
         className,

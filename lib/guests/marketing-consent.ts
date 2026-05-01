@@ -25,9 +25,7 @@ export type SetMarketingConsentInput = {
   consenting: boolean;
 };
 
-export type SetMarketingConsentResult =
-  | { ok: true }
-  | { ok: false; reason: "guest-not-found" };
+export type SetMarketingConsentResult = { ok: true } | { ok: false; reason: "guest-not-found" };
 
 export async function setMarketingConsent(
   input: SetMarketingConsentInput,

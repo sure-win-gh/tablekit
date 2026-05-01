@@ -15,12 +15,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as schema from "@/lib/db/schema";
 import { runErasureScrub } from "@/lib/dsar/scrub";
 import { sweepCompletedErasureScrubs } from "@/lib/dsar/sweep";
-import {
-  decryptPii,
-  encryptPii,
-  hashForLookup,
-  type Ciphertext,
-} from "@/lib/security/crypto";
+import { decryptPii, encryptPii, hashForLookup, type Ciphertext } from "@/lib/security/crypto";
 
 const pool = new Pool({ connectionString: process.env["DATABASE_URL"] });
 const db: NodePgDatabase<typeof schema> = drizzle(pool, { schema });
@@ -227,12 +222,8 @@ describe("runErasureScrub", () => {
     expect(guestAfter?.phoneCipher).toBeNull();
     expect(guestAfter?.erasedAt).not.toBeNull();
     // Both NOT NULL ciphers must decrypt to empty string.
-    expect(
-      await decryptPii(ctx.orgId, guestAfter!.lastNameCipher as Ciphertext),
-    ).toBe("");
-    expect(
-      await decryptPii(ctx.orgId, guestAfter!.emailCipher as Ciphertext),
-    ).toBe("");
+    expect(await decryptPii(ctx.orgId, guestAfter!.lastNameCipher as Ciphertext)).toBe("");
+    expect(await decryptPii(ctx.orgId, guestAfter!.emailCipher as Ciphertext)).toBe("");
 
     // Internal review scrubbed — both consistency-check pairs nulled
     // together so the CHECK constraints pass.

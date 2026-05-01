@@ -68,7 +68,12 @@ export function SidebarShell({
   // venue orgs auto-redirect from /dashboard, so /overview would
   // bounce back). Guests only when group CRM is on.
   const orgItems: Item[] = [
-    { href: "/dashboard/overview", label: "Overview", icon: LayoutDashboard, show: data.org.multiVenue },
+    {
+      href: "/dashboard/overview",
+      label: "Overview",
+      icon: LayoutDashboard,
+      show: data.org.multiVenue,
+    },
     { href: "/dashboard/organisation", label: "Organisation", icon: Building2 },
     { href: "/dashboard/guests", label: "Guests", icon: Users, show: data.org.groupCrmEnabled },
     { href: "/dashboard/data", label: "Data", icon: Database },
@@ -81,7 +86,11 @@ export function SidebarShell({
         { href: `/dashboard/venues/${venueId}/bookings`, label: "Bookings", icon: CalendarDays },
         { href: `/dashboard/venues/${venueId}/timeline`, label: "Timeline", icon: Clock },
         { href: `/dashboard/venues/${venueId}/waitlist`, label: "Waitlist", icon: Users },
-        { href: `/dashboard/venues/${venueId}/floor-plan`, label: "Floor plan", icon: TableProperties },
+        {
+          href: `/dashboard/venues/${venueId}/floor-plan`,
+          label: "Floor plan",
+          icon: TableProperties,
+        },
         { href: `/dashboard/venues/${venueId}/services`, label: "Services", icon: UtensilsCrossed },
         { href: `/dashboard/venues/${venueId}/deposits`, label: "Deposits", icon: CreditCard },
         { href: `/dashboard/venues/${venueId}/reports`, label: "Reports", icon: CalendarRange },
@@ -97,7 +106,7 @@ export function SidebarShell({
         type="button"
         aria-label={drawerOpen ? "Close menu" : "Open menu"}
         onClick={() => toggleFlag(DRAWER_KEY)}
-        className="fixed left-3 top-3 z-40 inline-flex h-9 w-9 items-center justify-center rounded-full border border-hairline bg-white text-ink shadow-sm md:hidden"
+        className="border-hairline text-ink fixed top-3 left-3 z-40 inline-flex h-9 w-9 items-center justify-center rounded-full border bg-white shadow-sm md:hidden"
       >
         <Menu className="h-4 w-4" aria-hidden />
       </button>
@@ -107,13 +116,13 @@ export function SidebarShell({
         <div
           aria-hidden
           onClick={() => writeFlag(DRAWER_KEY, false)}
-          className="fixed inset-0 z-30 bg-ink/30 md:hidden"
+          className="bg-ink/30 fixed inset-0 z-30 md:hidden"
         />
       ) : null}
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-30 flex flex-col border-r border-hairline bg-white transition-[width,transform] duration-200 ease-out md:sticky md:top-0 md:h-screen md:transform-none",
+          "border-hairline fixed inset-y-0 left-0 z-30 flex flex-col border-r bg-white transition-[width,transform] duration-200 ease-out md:sticky md:top-0 md:h-screen md:transform-none",
           collapsed ? "w-16" : "w-60",
           drawerOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
         )}
@@ -127,7 +136,7 @@ export function SidebarShell({
           type="button"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           onClick={() => toggleFlag(COLLAPSE_KEY)}
-          className="absolute right-0 top-1/2 z-40 hidden h-7 w-7 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full border border-hairline bg-white text-ash shadow-sm transition hover:border-ink hover:text-ink md:inline-flex"
+          className="border-hairline text-ash hover:border-ink hover:text-ink absolute top-1/2 right-0 z-40 hidden h-7 w-7 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border bg-white shadow-sm transition md:inline-flex"
         >
           {collapsed ? (
             <ChevronRight className="h-3.5 w-3.5" aria-hidden />
@@ -139,20 +148,20 @@ export function SidebarShell({
         {/* Brand header */}
         <div
           className={cn(
-            "flex items-center border-b border-hairline px-4 py-4",
+            "border-hairline flex items-center border-b px-4 py-4",
             collapsed ? "justify-center px-3" : "justify-start",
           )}
         >
           <Link href="/dashboard" className="flex items-center gap-2">
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-coral text-[13px] font-bold text-white">
+            <span className="bg-coral inline-flex h-7 w-7 items-center justify-center rounded-md text-[13px] font-bold text-white">
               T
             </span>
             {!collapsed ? (
               <div className="flex flex-col">
-                <span className="text-sm font-bold leading-none tracking-tight text-ink">
+                <span className="text-ink text-sm leading-none font-bold tracking-tight">
                   TableKit
                 </span>
-                <span className="mt-0.5 truncate text-[11px] text-ash">{data.org.name}</span>
+                <span className="text-ash mt-0.5 truncate text-[11px]">{data.org.name}</span>
               </div>
             ) : null}
           </Link>
@@ -167,20 +176,15 @@ export function SidebarShell({
             collapsed={collapsed}
           />
           {venueId ? (
-            <Section
-              label="Venue"
-              items={venueItems}
-              pathname={pathname}
-              collapsed={collapsed}
-            />
+            <Section label="Venue" items={venueItems} pathname={pathname} collapsed={collapsed} />
           ) : null}
         </nav>
 
         {/* Footer: user + sign-out */}
-        <div className="border-t border-hairline p-2">
+        <div className="border-hairline border-t p-2">
           {!collapsed ? (
-            <div className="px-2 pb-2 text-[11px] text-ash">
-              <p className="truncate font-semibold text-ink">{data.user.name}</p>
+            <div className="text-ash px-2 pb-2 text-[11px]">
+              <p className="text-ink truncate font-semibold">{data.user.name}</p>
               <p className="truncate">{data.user.email}</p>
             </div>
           ) : null}
@@ -188,7 +192,7 @@ export function SidebarShell({
             <button
               type="submit"
               className={cn(
-                "flex w-full items-center gap-2 rounded-input px-2 py-1.5 text-sm text-charcoal transition hover:bg-cloud hover:text-ink",
+                "rounded-input text-charcoal hover:bg-cloud hover:text-ink flex w-full items-center gap-2 px-2 py-1.5 text-sm transition",
                 collapsed && "justify-center",
               )}
             >
@@ -225,12 +229,17 @@ function Section({
   return (
     <div className="flex flex-col gap-0.5">
       {!collapsed ? (
-        <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-ash">
+        <p className="text-ash px-2 py-1.5 text-[10px] font-semibold tracking-wider uppercase">
           {label}
         </p>
       ) : null}
       {items.map((it) => (
-        <NavLink key={it.href} item={it} active={pathname.startsWith(it.href)} collapsed={collapsed} />
+        <NavLink
+          key={it.href}
+          item={it}
+          active={pathname.startsWith(it.href)}
+          collapsed={collapsed}
+        />
       ))}
     </div>
   );
@@ -244,8 +253,8 @@ function NavLink({ item, active, collapsed }: { item: Item; active: boolean; col
       title={collapsed ? item.label : undefined}
       onClick={() => writeFlag(DRAWER_KEY, false)}
       className={cn(
-        "flex items-center gap-2.5 rounded-input px-2 py-1.5 text-sm transition",
-        active ? "bg-cloud font-semibold text-ink" : "text-charcoal hover:bg-cloud hover:text-ink",
+        "rounded-input flex items-center gap-2.5 px-2 py-1.5 text-sm transition",
+        active ? "bg-cloud text-ink font-semibold" : "text-charcoal hover:bg-cloud hover:text-ink",
         collapsed && "justify-center",
       )}
     >
@@ -258,7 +267,7 @@ function NavLink({ item, active, collapsed }: { item: Item; active: boolean; col
 function matchVenueId(pathname: string): string | null {
   // /dashboard/venues/<uuid>/...  — capture the uuid segment.
   const m = pathname.match(/^\/dashboard\/venues\/([0-9a-f-]{36})/i);
-  return m ? m[1] ?? null : null;
+  return m ? (m[1] ?? null) : null;
 }
 
 // ---------------------------------------------------------------------------

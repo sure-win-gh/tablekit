@@ -222,9 +222,7 @@ describe("memberships.venue_ids — bookings table SELECT scope", () => {
 describe("memberships.venue_ids — booking_tables + booking_events", () => {
   it("scoped host sees junction + event rows only at their venue", async () => {
     const tables = await asUser(ctx.hostScopedId, (tx) =>
-      tx
-        .select({ venueId: schema.bookingTables.venueId })
-        .from(schema.bookingTables),
+      tx.select({ venueId: schema.bookingTables.venueId }).from(schema.bookingTables),
     );
     expect(tables.every((r) => r.venueId === ctx.venueAId)).toBe(true);
 

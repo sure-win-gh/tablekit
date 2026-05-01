@@ -201,10 +201,7 @@ describe("reviews — cross-tenant RLS", () => {
 
   it("authenticated UPDATE silently affects zero rows", async () => {
     await asUser(ctx.userAId, (tx) =>
-      tx
-        .update(schema.reviews)
-        .set({ rating: 1 })
-        .where(eq(schema.reviews.id, ctx.reviewAId)),
+      tx.update(schema.reviews).set({ rating: 1 }).where(eq(schema.reviews.id, ctx.reviewAId)),
     );
     const [row] = await db
       .select({ rating: schema.reviews.rating })

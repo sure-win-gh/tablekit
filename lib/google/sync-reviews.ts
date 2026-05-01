@@ -16,11 +16,7 @@ import { sendEscalationAlertIfNeeded } from "@/lib/reviews/escalation";
 import { adminDb } from "@/lib/server/admin/db";
 import { encryptPii } from "@/lib/security/crypto";
 
-import {
-  listReviews,
-  starRatingToInt,
-  type GoogleReview,
-} from "./business-profile";
+import { listReviews, starRatingToInt, type GoogleReview } from "./business-profile";
 import { getActiveGoogleConnection, markVenueSynced } from "./connection";
 
 export type SyncOutcome = {
@@ -62,12 +58,7 @@ export async function syncGoogleReviewsForVenue(venueId: string): Promise<SyncOu
       };
     }
     fetched += result.reviews.length;
-    upserted += await upsertReviews(
-      conn.organisationId,
-      conn.venueId,
-      result.reviews,
-      placeId,
-    );
+    upserted += await upsertReviews(conn.organisationId, conn.venueId, result.reviews, placeId);
     if (!result.nextPageToken) break;
     pageToken = result.nextPageToken;
   }
@@ -152,9 +143,7 @@ async function upsertReviews(
   const externalUrl = buildExternalUrl(placeId);
   const upsertedIds: string[] = [];
   for (const r of fetchedReviews) {
-    const commentCipher = r.comment
-      ? await encryptPii(organisationId, r.comment)
-      : null;
+    const commentCipher = r.comment ? await encryptPii(organisationId, r.comment) : null;
     // submittedAt is set on insert from createTime and never moved on
     // conflict — keeping the desc-order stable when a guest edits an
     // old review. updated_at on the row is the source of truth for
