@@ -180,6 +180,10 @@ export const venues = pgTable(
       .notNull()
       .references(() => organisations.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    // Optional human-readable URL slug. Platform-wide unique among
+    // non-null values (partial index below). Format enforced by a
+    // CHECK constraint as well as Zod at the form layer.
+    slug: citext("slug"),
     venueType: venueType("venue_type").notNull(),
     timezone: text("timezone").notNull().default("Europe/London"),
     locale: text("locale").notNull().default("en-GB"),
@@ -188,7 +192,12 @@ export const venues = pgTable(
       .default(sql`'{}'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("venues_org_idx").on(t.organisationId)],
+  (t) => [
+    index("venues_org_idx").on(t.organisationId),
+    uniqueIndex("venues_slug_unique")
+      .on(t.slug)
+      .where(sql`${t.slug} is not null`),
+  ],
 );
 
 export const areas = pgTable(

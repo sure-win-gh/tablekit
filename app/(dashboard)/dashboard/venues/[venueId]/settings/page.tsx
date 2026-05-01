@@ -34,6 +34,7 @@ export default async function VenueSettingsPage({
       .select({
         id: venues.id,
         name: venues.name,
+        slug: venues.slug,
         venueType: venues.venueType,
         timezone: venues.timezone,
         locale: venues.locale,
@@ -45,6 +46,9 @@ export default async function VenueSettingsPage({
     return rows[0];
   });
   if (!venue) notFound();
+
+  const publicBaseUrl =
+    process.env["NEXT_PUBLIC_APP_URL"] ?? "https://book.tablekit.uk";
 
   const settings = (venue.settings ?? {}) as Record<string, unknown>;
   const delayHours: 24 | 48 | 72 =
@@ -158,6 +162,8 @@ export default async function VenueSettingsPage({
         <VenueSettingsForm
           venueId={venue.id}
           name={venue.name}
+          slug={venue.slug ?? ""}
+          publicBaseUrl={publicBaseUrl}
           timezone={venue.timezone}
           locale={venue.locale}
           reviewRequestEnabled={reviewSettings.enabled}

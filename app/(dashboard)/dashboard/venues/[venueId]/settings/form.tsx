@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import { updateVenue, type UpdateVenueState } from "./actions";
 
@@ -12,6 +12,8 @@ const LOCALE_OPTIONS = ["en-GB", "en-IE", "en-US"] as const;
 type Props = {
   venueId: string;
   name: string;
+  slug: string;
+  publicBaseUrl: string;
   timezone: string;
   locale: string;
   reviewRequestEnabled: boolean;
@@ -26,6 +28,8 @@ type Props = {
 export function VenueSettingsForm({
   venueId,
   name,
+  slug,
+  publicBaseUrl,
   timezone,
   locale,
   reviewRequestEnabled,
@@ -38,6 +42,7 @@ export function VenueSettingsForm({
 }: Props) {
   const [state, formAction, pending] = useActionState(updateVenue, initial);
   const fieldErrors = state.status === "error" ? state.fieldErrors : undefined;
+  const [draftSlug, setDraftSlug] = useState(slug);
 
   return (
     <form action={formAction} className="flex max-w-xl flex-col gap-5">
@@ -49,6 +54,38 @@ export function VenueSettingsForm({
         defaultValue={name}
         error={fieldErrors?.["name"]?.[0]}
       />
+
+      <fieldset className="flex flex-col gap-2 border-t border-hairline pt-4">
+        <legend className="text-sm font-semibold text-ink">Booking URL slug</legend>
+        <p className="text-xs text-ash">
+          Lowercase letters, digits and single hyphens. 3–60 characters. Leave
+          blank to use the UUID URL. Once set, old QR codes pointing at the UUID
+          still work and redirect to the slug URL.
+        </p>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium text-ink">Slug</span>
+          <input
+            name="slug"
+            type="text"
+            value={draftSlug}
+            onChange={(e) => setDraftSlug(e.target.value)}
+            maxLength={60}
+            placeholder="jane-cafe"
+            aria-invalid={Boolean(fieldErrors?.["slug"]?.[0])}
+            className="rounded-md border border-hairline px-3 py-2 text-sm outline-none focus:border-neutral-900"
+          />
+          {fieldErrors?.["slug"]?.[0] ? (
+            <span role="alert" className="text-xs text-red-600">
+              {fieldErrors["slug"][0]}
+            </span>
+          ) : null}
+        </label>
+        <p className="text-xs text-ash">
+          {draftSlug.trim().length > 0
+            ? `Public URL: ${publicBaseUrl}/book/${draftSlug.trim().toLowerCase()}`
+            : `Public URL: ${publicBaseUrl}/book/${venueId} (UUID — set a slug to shorten)`}
+        </p>
+      </fieldset>
 
       <div className="grid grid-cols-2 gap-4">
         <Select

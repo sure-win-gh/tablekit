@@ -3,9 +3,12 @@ import { notFound } from "next/navigation";
 import { formatVenueDateLong, todayInZone } from "@/lib/bookings/time";
 import { widgetDisabled } from "@/lib/feature-flags";
 import { captchaEnabled } from "@/lib/public/captcha";
-import { loadPublicAvailability, loadPublicVenue } from "@/lib/public/venue";
+import {
+  loadPublicAvailability,
+  loadPublicVenueByIdOrSlug,
+} from "@/lib/public/venue";
 
-import { BookingForm, SlotPicker } from "../../book/[venueId]/forms";
+import { BookingForm, SlotPicker } from "../../book/[venueIdOrSlug]/forms";
 import { EmbedAutoHeight } from "./auto-height";
 
 // Iframe target for the embeddable widget. Mirrors /book/<venueId>
@@ -22,23 +25,31 @@ type SearchParams = {
   wallStart?: string;
 };
 
-export async function generateMetadata({ params }: { params: Promise<{ venueId: string }> }) {
-  const { venueId } = await params;
-  const venue = await loadPublicVenue(venueId);
-  return { title: venue ? `Book at ${venue.name}` : "Book" };
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ venueIdOrSlug: string }>;
+}) {
+  const { venueIdOrSlug } = await params;
+  const lookup = await loadPublicVenueByIdOrSlug(venueIdOrSlug);
+  return { title: lookup ? `Book at ${lookup.venue.name}` : "Book" };
 }
 
 export default async function EmbedBookingPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ venueId: string }>;
+  params: Promise<{ venueIdOrSlug: string }>;
   searchParams: Promise<SearchParams>;
 }) {
-  const { venueId } = await params;
+  const { venueIdOrSlug } = await params;
   const sp = await searchParams;
-  const venue = await loadPublicVenue(venueId);
-  if (!venue) notFound();
+  const lookup = await loadPublicVenueByIdOrSlug(venueIdOrSlug);
+  if (!lookup) notFound();
+  const { venue } = lookup;
+  // The embed deliberately does NOT redirect UUID → slug — the iframe
+  // URL is set once by the loader script and a redirect would flash
+  // the iframe.
 
   if (widgetDisabled()) {
     return (
@@ -74,7 +85,7 @@ export default async function EmbedBookingPage({
       </header>
 
       <SlotPicker
-        venueId={venueId}
+        venueId={venue.id}
         date={date}
         partySize={partySize}
         slots={availability.slots.map((s) => ({
@@ -89,7 +100,7 @@ export default async function EmbedBookingPage({
 
       {pickedSlot ? (
         <BookingForm
-          venueId={venueId}
+          venueId={venue.id}
           serviceId={pickedSlot.serviceId}
           date={date}
           wallStart={pickedSlot.wallStart}

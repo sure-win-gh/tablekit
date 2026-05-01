@@ -42,6 +42,45 @@ export async function loadPublicVenue(venueId: string): Promise<PublicVenue | nu
   return row ?? null;
 }
 
+// Public-route resolver — accepts either a UUID or a slug and returns
+// the venue plus enough context for the page to decide whether to
+// redirect (UUID → canonical slug URL) or render in-place. Returns
+// null when neither matches.
+export type VenueLookup = {
+  venue: PublicVenue;
+  matchedBy: "id" | "slug";
+  canonicalSlug: string | null;
+};
+
+export async function loadPublicVenueByIdOrSlug(
+  idOrSlug: string,
+): Promise<VenueLookup | null> {
+  // Lazy-import the helper so this server-only module stays
+  // dependency-free at the type layer.
+  const { looksLikeUuid } = await import("@/lib/venues/slug");
+  const matchedBy: "id" | "slug" = looksLikeUuid(idOrSlug) ? "id" : "slug";
+  const where =
+    matchedBy === "id" ? eq(venues.id, idOrSlug) : eq(venues.slug, idOrSlug);
+  const db = adminDb();
+  const [row] = await db
+    .select({
+      id: venues.id,
+      name: venues.name,
+      timezone: venues.timezone,
+      locale: venues.locale,
+      slug: venues.slug,
+    })
+    .from(venues)
+    .where(where)
+    .limit(1);
+  if (!row) return null;
+  return {
+    venue: { id: row.id, name: row.name, timezone: row.timezone, locale: row.locale },
+    matchedBy,
+    canonicalSlug: row.slug ?? null,
+  };
+}
+
 export type PublicAvailabilityInput = {
   venueId: string;
   date: string; // YYYY-MM-DD, venue-local

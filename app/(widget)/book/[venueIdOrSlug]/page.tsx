@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 
 import { formatVenueDateLong, todayInZone } from "@/lib/bookings/time";
 import { widgetDisabled } from "@/lib/feature-flags";
@@ -6,7 +6,7 @@ import { captchaEnabled } from "@/lib/public/captcha";
 import {
   loadPublicAvailability,
   loadPublicShowcase,
-  loadPublicVenue,
+  loadPublicVenueByIdOrSlug,
   type PublicShowcaseReview,
 } from "@/lib/public/venue";
 
@@ -27,23 +27,43 @@ type SearchParams = {
   wallStart?: string;
 };
 
-export async function generateMetadata({ params }: { params: Promise<{ venueId: string }> }) {
-  const { venueId } = await params;
-  const venue = await loadPublicVenue(venueId);
-  return { title: venue ? `Book at ${venue.name} · TableKit` : "Book · TableKit" };
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ venueIdOrSlug: string }>;
+}) {
+  const { venueIdOrSlug } = await params;
+  const lookup = await loadPublicVenueByIdOrSlug(venueIdOrSlug);
+  return {
+    title: lookup ? `Book at ${lookup.venue.name} · TableKit` : "Book · TableKit",
+  };
 }
 
 export default async function PublicBookingPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ venueId: string }>;
+  params: Promise<{ venueIdOrSlug: string }>;
   searchParams: Promise<SearchParams>;
 }) {
-  const { venueId } = await params;
+  const { venueIdOrSlug } = await params;
   const sp = await searchParams;
-  const venue = await loadPublicVenue(venueId);
-  if (!venue) notFound();
+  const lookup = await loadPublicVenueByIdOrSlug(venueIdOrSlug);
+  if (!lookup) notFound();
+  const { venue, matchedBy, canonicalSlug } = lookup;
+
+  // 308 redirect UUID → slug URL when a slug exists. Preserves search
+  // params so a deep-link with ?date=… survives. The iframe embed
+  // route deliberately does NOT redirect (would flash the iframe).
+  if (matchedBy === "id" && canonicalSlug) {
+    const qs = new URLSearchParams();
+    if (sp.date) qs.set("date", sp.date);
+    if (sp.party) qs.set("party", sp.party);
+    if (sp.serviceId) qs.set("serviceId", sp.serviceId);
+    if (sp.wallStart) qs.set("wallStart", sp.wallStart);
+    const tail = qs.toString() ? `?${qs.toString()}` : "";
+    permanentRedirect(`/book/${canonicalSlug}${tail}`);
+  }
 
   // Kill switch — operator-facing emergency halt. Renders a venue-
   // specific maintenance message so a guest mid-booking knows it's
@@ -70,7 +90,7 @@ export default async function PublicBookingPage({
 
   const [availability, showcase] = await Promise.all([
     loadPublicAvailability(venue, { date, partySize }),
-    loadPublicShowcase(venueId),
+    loadPublicShowcase(venue.id),
   ]);
 
   const pickedSlot =
@@ -95,7 +115,7 @@ export default async function PublicBookingPage({
       </header>
 
       <SlotPicker
-        venueId={venueId}
+        venueId={venue.id}
         date={date}
         partySize={partySize}
         slots={availability.slots.map((s) => ({
@@ -110,7 +130,7 @@ export default async function PublicBookingPage({
 
       {pickedSlot ? (
         <BookingForm
-          venueId={venueId}
+          venueId={venue.id}
           serviceId={pickedSlot.serviceId}
           date={date}
           wallStart={pickedSlot.wallStart}

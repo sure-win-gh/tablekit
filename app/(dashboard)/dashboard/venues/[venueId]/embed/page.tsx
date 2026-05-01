@@ -21,7 +21,7 @@ export default async function EmbedSnippetPage({
 
   const venue = await withUser(async (db) => {
     const [row] = await db
-      .select({ id: venues.id, name: venues.name })
+      .select({ id: venues.id, name: venues.name, slug: venues.slug })
       .from(venues)
       .where(eq(venues.id, venueId))
       .limit(1);
@@ -31,11 +31,15 @@ export default async function EmbedSnippetPage({
 
   const appUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "https://book.tablekit.uk";
   const loaderUrl = `${appUrl}/widget.js`;
-  const hostedUrl = `${appUrl}/book/${venue.id}`;
+  // Prefer the slug everywhere user-visible — short, memorable, the
+  // form the public 308 redirect normalises to. UUID stays as the
+  // fallback when the operator hasn't picked one yet.
+  const publicId = venue.slug ?? venue.id;
+  const hostedUrl = `${appUrl}/book/${publicId}`;
 
   const snippet = `<script
   src="${loaderUrl}"
-  data-venue-id="${venue.id}"
+  data-venue-id="${publicId}"
   async
 ></script>`;
 
@@ -63,6 +67,20 @@ export default async function EmbedSnippetPage({
           flow inside an iframe on your own site; the hosted link is a standalone
           page you can drop into Instagram, QR codes, or Google Business Profile.
         </p>
+        {!venue.slug ? (
+          <p className="mt-3 max-w-2xl rounded-card border border-hairline bg-cloud px-3 py-2 text-xs text-charcoal">
+            Tip: this venue is using its UUID in the URL. Pick a short slug in{" "}
+            <Link
+              href={`/dashboard/venues/${venueId}/settings`}
+              className="font-medium text-coral hover:underline"
+            >
+              venue settings
+            </Link>{" "}
+            to get a friendlier link like{" "}
+            <code className="rounded bg-white px-1 py-0.5">{appUrl}/book/jane-cafe</code>.
+            Old QR codes pointing at the UUID keep working.
+          </p>
+        ) : null}
       </header>
 
       <section className="mt-6 flex flex-col gap-3">

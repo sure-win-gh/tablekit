@@ -28,6 +28,7 @@ export type AuditAction =
   | "venue.created"
   | "venue.updated"
   | "venue.deleted"
+  | "venue.slug_updated"
   // guests-minimal phase
   | "guest.created"
   | "guest.reused"

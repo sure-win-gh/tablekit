@@ -10,10 +10,15 @@ import { startOnboarding } from "@/lib/stripe/connect";
 import { venues } from "@/lib/db/schema";
 import { adminDb } from "@/lib/server/admin/db";
 import { audit } from "@/lib/server/admin/audit";
+import { validateSlug } from "@/lib/venues/slug";
 
 const Schema = z.object({
   venueId: z.uuid(),
   name: z.string().min(1, "Required").max(120),
+  // Empty string = clear the slug back to UUID-only routing. Format
+  // + reserved-name validation runs after the basic Zod parse so we
+  // can return a precise message (validateSlug owns those rules).
+  slug: z.string().trim().max(60).optional(),
   timezone: z.string().min(1).max(60),
   locale: z.string().min(1).max(20),
   // Reviews — Phase 1. All optional so legacy form posts still parse.
@@ -62,6 +67,7 @@ export async function updateVenue(
   const parsed = Schema.safeParse({
     venueId: formData.get("venue_id"),
     name: formData.get("name"),
+    slug: formData.get("slug"),
     timezone: formData.get("timezone"),
     locale: formData.get("locale"),
     // Checkboxes only POST when checked, so absence == disabled.
@@ -97,6 +103,25 @@ export async function updateVenue(
   const trimmedPlaceId = parsed.data.googlePlaceId?.trim() ?? "";
   const trimmedEscalationEmail = parsed.data.escalationEmail?.trim() ?? "";
 
+  // Slug: empty string clears it; otherwise validate format + reserved
+  // names. Uniqueness is enforced by the DB partial unique index and
+  // surfaced below via the 23505 catch.
+  const rawSlug = (parsed.data.slug ?? "").trim();
+  let nextSlug: string | null | undefined;
+  if (rawSlug === "") {
+    nextSlug = null;
+  } else {
+    const slugCheck = validateSlug(rawSlug);
+    if (!slugCheck.ok) {
+      return {
+        status: "error",
+        message: slugCheck.message,
+        fieldErrors: { slug: [slugCheck.message] },
+      };
+    }
+    nextSlug = slugCheck.slug;
+  }
+
   // Read existing settings so we merge instead of clobbering keys we
   // don't manage here (other phases may add their own JSONB entries).
   // The `and(org_id = orgId)` in the WHERE is what stops a managed
@@ -104,13 +129,14 @@ export async function updateVenue(
   // adminDb() bypasses RLS, so this check carries the weight.
   const db = adminDb();
   const [existing] = await db
-    .select({ settings: venues.settings })
+    .select({ settings: venues.settings, slug: venues.slug })
     .from(venues)
     .where(and(eq(venues.id, venueId), eq(venues.organisationId, orgId)))
     .limit(1);
   if (!existing) {
     return { status: "error", message: "Venue not found or not in your organisation." };
   }
+  const slugChanged = nextSlug !== existing.slug;
   const mergedSettings = {
     ...((existing.settings as Record<string, unknown>) ?? {}),
     reviewRequestEnabled: reviewRequestEnabled ?? true,
@@ -122,11 +148,30 @@ export async function updateVenue(
     escalationEmail: trimmedEscalationEmail.length > 0 ? trimmedEscalationEmail : null,
   };
 
-  const [updated] = await db
-    .update(venues)
-    .set({ name, timezone, locale, settings: mergedSettings })
-    .where(and(eq(venues.id, venueId), eq(venues.organisationId, orgId)))
-    .returning({ id: venues.id });
+  let updated: { id: string } | undefined;
+  try {
+    const rows = await db
+      .update(venues)
+      .set({
+        name,
+        timezone,
+        locale,
+        settings: mergedSettings,
+        ...(slugChanged ? { slug: nextSlug } : {}),
+      })
+      .where(and(eq(venues.id, venueId), eq(venues.organisationId, orgId)))
+      .returning({ id: venues.id });
+    updated = rows[0];
+  } catch (err: unknown) {
+    if (isUniqueViolation(err)) {
+      return {
+        status: "error",
+        message: "That slug is already taken.",
+        fieldErrors: { slug: ["That slug is already taken."] },
+      };
+    }
+    throw err;
+  }
 
   if (!updated) {
     return {
@@ -151,8 +196,30 @@ export async function updateVenue(
     },
   });
 
+  if (slugChanged) {
+    await audit.log({
+      organisationId: orgId,
+      actorUserId: userId,
+      action: "venue.slug_updated",
+      targetType: "venue",
+      targetId: updated.id,
+      metadata: { slugSet: nextSlug !== null },
+    });
+  }
+
   revalidatePath(`/dashboard/venues/${updated.id}`, "layout");
   return { status: "saved" };
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  if (err === null || typeof err !== "object") return false;
+  const direct = (err as { code?: unknown }).code;
+  if (direct === "23505") return true;
+  const cause = (err as { cause?: unknown }).cause;
+  if (cause && typeof cause === "object" && (cause as { code?: unknown }).code === "23505") {
+    return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
