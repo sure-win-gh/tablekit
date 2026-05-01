@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui";
 import { requireRole } from "@/lib/auth/require-role";
+import { sweepCompletedErasureScrubs } from "@/lib/dsar/sweep";
 import { withUser } from "@/lib/db/client";
 import { dsarRequests, guests } from "@/lib/db/schema";
 
@@ -52,6 +53,18 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default async function PrivacyRequestsPage() {
   await requireRole("manager");
+
+  // Best-effort scrub of any erase DSAR an operator marked completed.
+  // Cron at /api/cron/dsar-scrub is the unconditional backstop;
+  // running here means visiting the inbox finishes the work in
+  // near-real-time without waiting for the next 03:30 UTC tick.
+  try {
+    await sweepCompletedErasureScrubs({ limit: 25 });
+  } catch (err) {
+    console.error("[dashboard/privacy-requests] inline scrub sweep failed:", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   const rows = await withUser(async (db) =>
     db

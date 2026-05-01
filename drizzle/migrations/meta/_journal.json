@@ -162,6 +162,13 @@
       "when": 1777626412844,
       "tag": "0022_groovy_excalibur",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1777636694699,
+      "tag": "0023_late_stingray",
+      "breakpoints": true
     }
   ]
 }

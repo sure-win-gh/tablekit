@@ -91,6 +91,8 @@ export type AuditAction =
   | "dsar.in_progress"
   | "dsar.completed"
   | "dsar.rejected"
+  | "dsar.scrubbed"
+  | "guest.erased"
   // multi-venue phase
   | "org.group_crm.enabled"
   | "org.group_crm.disabled"

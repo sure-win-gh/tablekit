@@ -1,0 +1,2 @@
+ALTER TABLE "dsar_requests" ADD COLUMN "scrubbed_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "dsar_requests_scrub_queue_idx" ON "dsar_requests" USING btree ("resolved_at") WHERE "dsar_requests"."kind" = 'erase' AND "dsar_requests"."status" = 'completed' AND "dsar_requests"."scrubbed_at" is null;

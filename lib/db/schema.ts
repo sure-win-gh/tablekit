@@ -929,6 +929,11 @@ export const dsarRequests = pgTable(
     dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
     requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    // Set by the scrub job (lib/dsar/scrub.ts) once the row's PII has
+    // actually been nulled. Distinct from `resolved_at` (operator's
+    // click) so the sweeper can find work via
+    // `kind='erase' AND status='completed' AND scrubbed_at IS NULL`.
+    scrubbedAt: timestamp("scrubbed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -938,5 +943,10 @@ export const dsarRequests = pgTable(
     index("dsar_requests_active_idx")
       .on(t.organisationId, t.dueAt)
       .where(sql`${t.status} in ('pending','in_progress')`),
+    // Scrub queue — completed erase requests still awaiting the
+    // background scrub. Tiny working set; partial index keeps it cheap.
+    index("dsar_requests_scrub_queue_idx")
+      .on(t.resolvedAt)
+      .where(sql`${t.kind} = 'erase' AND ${t.status} = 'completed' AND ${t.scrubbedAt} is null`),
   ],
 );
