@@ -62,7 +62,8 @@ Outbound hyperlinks to third-party sites (e.g. the Google review form linked fro
 | Session logs          | 30 days                        | Auto-expiry |
 | Import job records (`import_jobs`: filename, column_map, counters) | 12 months from `completed_at` / `failed_at` | No PII fields by design — purged by cron |
 | Imported guest provenance (`guests.imported_from`, `imported_at`) | Lifetime of the guest row | Nulled on guest erasure (see §DSAR step 4) |
-| Inline source CSV (`import_jobs.source_csv_cipher`) | Envelope-encrypted at column level. Nulled on `completed_at`; nulled by cron 7 days after `failed_at` regardless of retry status; nulled on parent row delete | Yes — nulled on guest erasure for any linked job (writer must record the linkage) |
+| Inline source CSV (`import_jobs.source_csv_cipher`) | Envelope-encrypted at column level. Nulled on `completed_at`; nulled by cron 7 days after `failed_at` regardless of retry status; nulled by cron 7 days after `created_at` for jobs still in `preview_ready` (abandoned uploads); nulled on parent row delete | Yes — nulled on guest erasure for any linked job (writer must record the linkage) |
+| Imported job filename (`import_jobs.filename`) | Plaintext, capped 200 chars, path-stripped at the upload boundary. Best-effort non-PII but operators may name files `guests-jane@example.com.csv`. Nulled on guest erasure for any linked job and on parent row delete. Never forwarded to audit log payloads or Sentry | Yes — nulled on guest erasure (treat as PII to be safe) |
 | Rejected-rows artefacts (signed download from `import_jobs.rejected_rows_url`) | Object lives in private Supabase Storage bucket; signed URL ≤ 24h; object purged on parent `import_jobs` row delete | Yes — deletion of the parent row purges the object |
 
 ## DSAR workflow (Data Subject Access / Erasure Requests)
@@ -121,6 +122,7 @@ Do not delete logs or evidence during response, even if doing so seems to "clean
 - Send marketing messages without checking the relevant per-channel consent timestamp.
 - Log or send to Sentry a `RejectedRow` or any raw imported CSV row — those payloads carry plaintext PII keyed by operator-chosen headers that `beforeSend` does not scrub. Log only counts and the `import_jobs.id` for correlation.
 - Persist a raw uploaded CSV in a non-encrypted column. The bytes contain plaintext guest email/name/phone — encrypt at column level via `lib/security/crypto.ts:encryptPii` (the `import_jobs.source_csv_cipher` pattern), or place the blob in a private Supabase Storage bucket with the same retention as `rejected_rows_url`. Supabase TDE alone is the at-rest layer, not a column-level guarantee.
+- Log or persist a raw uploaded CSV filename in audit log payloads or Sentry events — operator-chosen filenames may embed guest PII (e.g. `guests-jane@example.com.csv`). Use the `import_jobs.id` as the durable handle and keep `metadata.filename` out of `audit.log()` calls.
 
 ## Reviewing changes that touch PII
 
