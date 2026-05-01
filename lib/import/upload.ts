@@ -15,6 +15,8 @@ import { importJobs } from "@/lib/db/schema";
 import { type Plaintext, encryptPii } from "@/lib/security/crypto";
 import { adminDb } from "@/lib/server/admin/db";
 
+import { parseCsv } from "./parse";
+import { detectSource } from "./sources";
 import type { ImportSource } from "./types";
 
 // 50MB cap matches the DB CHECK on import_jobs.source_size_bytes.
@@ -51,6 +53,18 @@ export async function createImportJob(input: CreateImportJobInput): Promise<Crea
   const sizeBytes = Buffer.byteLength(input.csvText, "utf8");
   if (sizeBytes > MAX_SIZE_BYTES) return { ok: false, reason: "too-large" };
 
+  // Auto-detect from the file's headers. If the operator picked
+  // "generic-csv" but the file matches a known adapter, prefer the
+  // adapter — it'll give the wizard better preset suggestions.
+  // Operators can still override every individual mapping in the
+  // wizard. If the operator picked a specific source and detection
+  // disagrees, keep the operator's choice (they might know the
+  // schema is custom).
+  const headers = parseCsv(input.csvText).headers;
+  const detected = detectSource(headers);
+  const finalSource: ImportSource =
+    input.source === "generic-csv" && detected ? detected : input.source;
+
   const cipher = await encryptPii(input.organisationId, input.csvText as Plaintext);
 
   const db = adminDb();
@@ -61,7 +75,7 @@ export async function createImportJob(input: CreateImportJobInput): Promise<Crea
     .values({
       organisationId: input.organisationId,
       actorUserId: input.actorUserId,
-      source: input.source,
+      source: finalSource,
       status: "preview_ready",
       filename: sanitiseFilename(input.filename),
       sourceCsvCipher: cipher,

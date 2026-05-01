@@ -8,14 +8,14 @@ import { type ActionState, uploadImport } from "./actions";
 
 const initial: ActionState = { status: "idle" };
 
-// PR4a only ships the generic-CSV path. The format-adapter PR (PR5)
-// will populate the auto-detect logic + add the OpenTable / ResDiary
-// / SevenRooms presets to the dropdown.
+// Auto-detect runs on upload — pick "Auto-detect" unless your CSV
+// is a custom export. The selected source steers the mapping
+// wizard's per-field preset suggestions.
 const SOURCES = [
-  { value: "generic-csv", label: "Generic CSV" },
-  { value: "opentable", label: "OpenTable export (preset coming in PR5)" },
-  { value: "resdiary", label: "ResDiary export (preset coming in PR5)" },
-  { value: "sevenrooms", label: "SevenRooms export (preset coming in PR5)" },
+  { value: "generic-csv", label: "Auto-detect (recommended)" },
+  { value: "opentable", label: "OpenTable export" },
+  { value: "resdiary", label: "ResDiary export" },
+  { value: "sevenrooms", label: "SevenRooms export" },
 ] as const;
 
 export function ImportUploadForm() {
