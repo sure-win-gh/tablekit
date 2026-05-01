@@ -71,6 +71,51 @@ export function TimelineDateNav({ venueId, date }: { venueId: string; date: stri
 }
 
 // ===========================================================================
+// Horizontal scroller.
+//
+// Sizes the timeline so 4 hours fit in the visible area (16 × 15-min
+// slots). Slot width = (container.inline - 120px label) / 16, via
+// `cqw` so it adapts to any dashboard width without JS measurement.
+// `max(50px, ...)` keeps slots readable on narrow screens at the cost
+// of overflowing the 4-hour budget.
+//
+// On mount (and when the target changes) jumps scrollLeft so the
+// current time sits ~30 min from the left edge — i.e. the first
+// visible hour is "now − 30 min", the last is "now + 3h 30 min".
+// ===========================================================================
+
+export function TimelineScroller({
+  scrollToMinutes,
+  children,
+}: {
+  scrollToMinutes: number | null;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || scrollToMinutes == null) return;
+    // Read the actual rendered slot width from the DOM rather than
+    // recomputing the cqw expression — keeps the scroll math in sync
+    // if a future refactor changes the column template.
+    const slotWidth = (el.clientWidth - 120) / 16;
+    if (slotWidth <= 0) return;
+    el.scrollLeft = Math.max(0, (scrollToMinutes / 15) * slotWidth);
+  }, [scrollToMinutes]);
+
+  return (
+    <div
+      ref={ref}
+      className="overflow-x-auto rounded-card border border-hairline bg-white"
+      style={{ containerType: "inline-size" }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ===========================================================================
 // Timeline interaction state.
 //
 // Two interactions share one context:
@@ -98,7 +143,10 @@ export type NewBookingDraft = {
   areaId: string;
   // 0-indexed slot in the timeline window.
   startSlot: number;
-  endSlot: number; // exclusive
+  // Exclusive end slot. `null` = the operator clicked a single cell
+  // (no drag) — the modal resolves the default duration from the
+  // active service's turn time. Drag selections set this explicitly.
+  endSlot: number | null;
 };
 
 // Selection uses anchor + current rather than start/end so the user
@@ -186,15 +234,15 @@ export function TimelineDragProvider({ children }: { children: ReactNode }) {
       if (!prev) return null;
       const lo = Math.min(prev.anchorSlot, prev.currentSlot);
       const hi = Math.max(prev.anchorSlot, prev.currentSlot);
-      // Single-slot click → snap to 30 min default; otherwise honour
-      // the dragged span.
-      const span = hi === lo ? 2 : hi - lo + 1;
+      // Single-slot click → defer span to the modal so it can use the
+      // active service's turn time. Drag honours the dragged range.
+      const isClick = lo === hi;
       setModalDraft({
         tableId: prev.tableId,
         tableLabel: prev.tableLabel,
         areaId: prev.areaId,
         startSlot: lo,
-        endSlot: lo + span,
+        endSlot: isClick ? null : hi + 1,
       });
       return null;
     });
@@ -320,6 +368,7 @@ export function TimelineRow({
   tableId,
   tableLabel,
   areaId,
+  areaName,
   totalSlots,
   windowStartHour,
   bookings,
@@ -329,6 +378,7 @@ export function TimelineRow({
   tableId: string;
   tableLabel: string;
   areaId: string;
+  areaName: string;
   totalSlots: number;
   windowStartHour: number;
   bookings: TimelineBookingBlock[];
@@ -735,13 +785,18 @@ export function TimelineRow({
         userSelectClass,
       )}
       style={{
-        gridTemplateColumns: `120px repeat(${totalSlots}, minmax(0,1fr))`,
+        gridTemplateColumns: `120px repeat(${totalSlots}, max(50px, calc((100cqw - 120px) / 16)))`,
       }}
     >
-      <div className="flex items-center gap-1.5 border-r border-hairline px-3 py-2 text-sm font-semibold text-ink">
-        {tableLabel}
-        {pending ? <span className="text-[10px] text-ash">Saving…</span> : null}
-        {error ? <span className="text-[10px] text-rose">{error}</span> : null}
+      <div className="sticky left-0 z-30 flex flex-col justify-center border-r border-hairline bg-white px-3 py-1.5 text-ink">
+        <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-ash">
+          {areaName}
+        </span>
+        <span className="flex items-center gap-1.5 text-sm font-semibold leading-tight">
+          <span className="truncate">{tableLabel}</span>
+          {pending ? <span className="text-[10px] font-normal text-ash">Saving…</span> : null}
+          {error ? <span className="text-[10px] font-normal text-rose">{error}</span> : null}
+        </span>
       </div>
       {Array.from({ length: totalSlots }, (_, i) => (
         <div
@@ -1031,10 +1086,15 @@ function ModalBody({
   const [partySize, setPartySize] = useState(2);
 
   const startMin = windowStartHour * 60 + draft.startSlot * 15;
-  const endMin = windowStartHour * 60 + draft.endSlot * 15;
+  const service = pickService(services, startMin);
+  // Click without a drag → use the active service's turn time so the
+  // host doesn't have to pick a duration. Falls back to 30 min only
+  // when no service is open (the modal warns about that case below).
+  const fallbackSpan = service ? Math.max(1, Math.round(service.turnMinutes / 15)) : 2;
+  const endSlot = draft.endSlot ?? draft.startSlot + fallbackSpan;
+  const endMin = windowStartHour * 60 + endSlot * 15;
   const wallStart = formatHHMM(startMin);
   const wallEnd = formatHHMM(endMin);
-  const service = pickService(services, startMin);
 
   function onSubmit(e: ReactFormEvent<HTMLFormElement>) {
     e.preventDefault();

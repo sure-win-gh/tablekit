@@ -32,6 +32,7 @@ import {
   TimelineDateNav,
   TimelineDragProvider,
   TimelineRow,
+  TimelineScroller,
   type TimelineBookingBlock,
   type TimelineService,
 } from "./forms";
@@ -74,7 +75,8 @@ export default async function TimelinePage({
   });
   if (!venue) notFound();
 
-  const date = dateParam ?? todayInZone(venue.timezone);
+  const today = todayInZone(venue.timezone);
+  const date = dateParam ?? today;
   const { startUtc, endUtc } = venueLocalDayRange(date, venue.timezone);
 
   const {
@@ -224,6 +226,38 @@ export default async function TimelinePage({
   const hourTicks: number[] = [];
   for (let h = window.startHour; h < window.endHour; h++) hourTicks.push(h);
 
+  // Service-name banners for the top header row. Same column-math as
+  // bookings: clamp to window, slot-aligned. +2 on startCol to skip
+  // the table-label column. Services that fall entirely outside the
+  // window drop out.
+  const serviceSpans = svcRows
+    .map((s) => {
+      const sched = s.schedule as { start?: string; end?: string } | null;
+      if (!sched?.start || !sched?.end) return null;
+      const sm = parseHHMM(sched.start);
+      const em = parseHHMM(sched.end);
+      const winStart = window.startHour * 60;
+      const winEnd = window.endHour * 60;
+      const cs = Math.max(sm, winStart);
+      const ce = Math.min(em, winEnd);
+      if (ce <= cs) return null;
+      const startSlot = Math.floor((cs - winStart) / 15);
+      const span = Math.ceil((ce - cs) / 15);
+      return {
+        id: s.id,
+        name: s.name,
+        startCol: startSlot + 2,
+        span,
+        color: serviceColor(s.id),
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  // Single source of truth for the column template — every grid row
+  // (service banner, hour ticks, area divider, table rows) shares it
+  // so columns line up.
+  const gridCols = `120px repeat(${totalSlots}, max(50px, calc((100cqw - 120px) / 16)))`;
+
   // "Now" indicator — minutes from window-start in venue zone.
   const nowMinutes = (() => {
     const now = new Date();
@@ -233,6 +267,13 @@ export default async function TimelinePage({
     if (offsetMin < 0 || offsetMin > totalSlots * 15) return null;
     return offsetMin;
   })();
+
+  // Where to land scrollLeft on first paint: 30 min before now, so
+  // the visible 4-hour window runs from now − 30 min to now + 3h 30 min.
+  // Only auto-scrolls when viewing today; on other days the scroller
+  // sits at the start of the day window.
+  const initialScrollMinutes =
+    date === today && nowMinutes !== null ? Math.max(0, nowMinutes - 30) : null;
 
   return (
     <section className="flex flex-col gap-4">
@@ -273,29 +314,54 @@ export default async function TimelinePage({
       )}
 
       {tables.length > 0 ? (
-        <div className="overflow-x-auto rounded-card border border-hairline bg-white">
-          <div className="relative min-w-[900px]">
-            {/* Time header */}
-            <div
-              className="sticky top-0 z-10 grid border-b border-hairline bg-white"
-              style={{ gridTemplateColumns: `120px repeat(${totalSlots}, minmax(0,1fr))` }}
-            >
-              <div className="border-r border-hairline px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-ash">
-                Table
-              </div>
-              {hourTicks.map((h) => (
-                <div
-                  key={h}
-                  // Each hour spans 4 slots. Position the label at the start of
-                  // its slot range; offset by 1 to skip the table-label column.
-                  style={{
-                    gridColumn: `${(h - window.startHour) * 4 + 2} / span 4`,
-                  }}
-                  className="border-r border-hairline px-2 py-2 text-[11px] font-mono tabular-nums text-ash"
-                >
-                  {String(h).padStart(2, "0")}:00
+        <TimelineScroller scrollToMinutes={initialScrollMinutes}>
+          {/* w-max so the inner wrapper stretches to the grid's intrinsic
+              width. Without it, block-level default = scroll-container
+              width, the now-line's `100%` resolves to visible width
+              rather than full grid width, and the line lands at the
+              wrong time. */}
+          <div className="relative w-max min-w-full">
+            {/* Two-row sticky header: service-name banners on top
+                (per-service colour), hour ticks below. */}
+            <div className="sticky top-0 z-40 bg-white">
+              <div
+                className="grid border-b border-hairline bg-cloud/60"
+                style={{ gridTemplateColumns: gridCols }}
+              >
+                <div className="sticky left-0 z-10 border-r border-hairline bg-cloud/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-ash">
+                  Service
                 </div>
-              ))}
+                {serviceSpans.map((s) => (
+                  <div
+                    key={s.id}
+                    style={{ gridColumn: `${s.startCol} / span ${s.span}`, gridRow: 1 }}
+                    className={`m-0.5 truncate rounded-input border px-2 py-0.5 text-[11px] font-semibold ${s.color}`}
+                  >
+                    {s.name}
+                  </div>
+                ))}
+              </div>
+              <div
+                className="grid border-b border-hairline bg-white"
+                style={{ gridTemplateColumns: gridCols }}
+              >
+                <div className="sticky left-0 z-10 border-r border-hairline bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-ash">
+                  Table
+                </div>
+                {hourTicks.map((h) => (
+                  <div
+                    key={h}
+                    // Each hour spans 4 slots. Position the label at the start of
+                    // its slot range; offset by 1 to skip the table-label column.
+                    style={{
+                      gridColumn: `${(h - window.startHour) * 4 + 2} / span 4`,
+                    }}
+                    className="border-r border-hairline px-2 py-2 text-[11px] font-mono tabular-nums text-ash"
+                  >
+                    {String(h).padStart(2, "0")}:00
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Area + table rows */}
@@ -334,8 +400,28 @@ export default async function TimelinePage({
                   const areaName = areaTables[0]?.areaName ?? "";
                   return (
                     <div key={areaId}>
-                      <div className="border-b border-hairline bg-cloud px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ash">
-                        {areaName}
+                      {/* Area divider laid out as a grid row so the
+                          per-15-min vertical lines stay continuous
+                          across area boundaries. The label cell is
+                          sticky-left like every other left column. */}
+                      <div
+                        className="grid border-b border-hairline bg-cloud"
+                        style={{ gridTemplateColumns: gridCols }}
+                      >
+                        <div className="sticky left-0 z-30 border-r border-hairline bg-cloud px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ash">
+                          {areaName}
+                        </div>
+                        {Array.from({ length: totalSlots }, (_, i) => (
+                          <div
+                            key={i}
+                            style={{ gridColumn: i + 2, gridRow: 1 }}
+                            className={
+                              i % 4 === 3
+                                ? "border-r border-hairline"
+                                : "border-r border-hairline/40"
+                            }
+                          />
+                        ))}
                       </div>
                       {areaTables.map((t) => {
                         const tableBookings = bookingsByTable.get(t.id) ?? [];
@@ -377,6 +463,7 @@ export default async function TimelinePage({
                             tableId={t.id}
                             tableLabel={t.label}
                             areaId={t.areaId}
+                            areaName={t.areaName}
                             totalSlots={totalSlots}
                             windowStartHour={window.startHour}
                             bookings={blocks}
@@ -389,7 +476,7 @@ export default async function TimelinePage({
               </TimelineDragProvider>
             </div>
           </div>
-        </div>
+        </TimelineScroller>
       ) : null}
 
     </section>
@@ -398,6 +485,29 @@ export default async function TimelinePage({
 
 // Top-of-file helpers — kept module-local so they don't pollute the
 // shared lib/bookings/time module with timeline-specific logic.
+
+function parseHHMM(s: string): number {
+  const [hh = "0", mm = "0"] = s.split(":");
+  return Number(hh) * 60 + Number(mm);
+}
+
+// Stable per-service colour so each service reads as a distinct band
+// in the header. Hash the id to an index; the palette is small enough
+// that collisions are visible only with many overlapping services.
+const SERVICE_PALETTE = [
+  "bg-violet-100 border-violet-300 text-violet-900",
+  "bg-cyan-100 border-cyan-300 text-cyan-900",
+  "bg-fuchsia-100 border-fuchsia-300 text-fuchsia-900",
+  "bg-orange-100 border-orange-300 text-orange-900",
+  "bg-teal-100 border-teal-300 text-teal-900",
+  "bg-pink-100 border-pink-300 text-pink-900",
+];
+
+function serviceColor(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return SERVICE_PALETTE[h % SERVICE_PALETTE.length]!;
+}
 
 function deriveWindow(svcRows: Array<{ schedule: unknown }>): {
   startHour: number;
