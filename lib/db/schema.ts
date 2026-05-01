@@ -336,6 +336,12 @@ export const guests = pgTable(
     marketingConsentEmailAt: timestamp("marketing_consent_email_at", { withTimezone: true }),
     marketingConsentSmsAt: timestamp("marketing_consent_sms_at", { withTimezone: true }),
     erasedAt: timestamp("erased_at", { withTimezone: true }),
+    // Provenance for imported guests. Populated by the import job;
+    // null for guests created via the booking flow or the dashboard.
+    // Source values match `import_jobs.source` (opentable | resdiary |
+    // sevenrooms | generic-csv).
+    importedFrom: text("imported_from"),
+    importedAt: timestamp("imported_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -948,5 +954,84 @@ export const dsarRequests = pgTable(
     index("dsar_requests_scrub_queue_idx")
       .on(t.resolvedAt)
       .where(sql`${t.kind} = 'erase' AND ${t.status} = 'completed' AND ${t.scrubbedAt} is null`),
+  ],
+);
+
+// =============================================================================
+// Import jobs
+// =============================================================================
+//
+// One row per CSV upload, regardless of source format. The lifecycle is
+// linear:
+//
+//   queued        — file uploaded, parsing not yet started
+//   parsing       — header detection + row validation in progress
+//   preview_ready — operator can see 10-row preview + confirm mapping
+//   importing     — background runner is writing guest rows
+//   completed     — done (row_count_imported / _rejected populated)
+//   failed        — fatal error; `error` column carries a short reason
+//
+// Source values mirror those written into `guests.imported_from` so a
+// future query can answer "which OpenTable migration did this guest
+// come from?" by joining on import_job_id (added in a later migration
+// once the runner needs it).
+//
+// Writes flow through adminDb() — no INSERT/UPDATE/DELETE policy for
+// the authenticated role. Members read their own org's jobs.
+
+export const importJobs = pgTable(
+  "import_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    // Operator who kicked the job off. Set null on user delete so the
+    // historical record survives leavers (matches dsar_requests pattern).
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    // 'opentable' | 'resdiary' | 'sevenrooms' | 'generic-csv'.
+    source: text("source").notNull(),
+    // 'queued' | 'parsing' | 'preview_ready' | 'importing' | 'completed' | 'failed'.
+    status: text("status").notNull().default("queued"),
+    // Original upload filename — display only. Not a stable identifier.
+    filename: text("filename").notNull(),
+    // Total parsed rows (excluding header). Null until the parse phase
+    // completes. Operator-visible counter for the progress UI.
+    rowCountTotal: integer("row_count_total"),
+    // Rows successfully written to `guests`. Bumped transactionally as
+    // the runner advances so a crash mid-import leaves an honest count.
+    rowCountImported: integer("row_count_imported").notNull().default(0),
+    // Rows skipped — failed validation, missing required fields, or
+    // dedupe-collided with an existing in-org guest. The rejected CSV
+    // download is built from this set.
+    rowCountRejected: integer("row_count_rejected").notNull().default(0),
+    // Operator-confirmed mapping from CSV header → guest field. Shape
+    // is `{ first_name: "First Name", email: "Email Address", ... }`.
+    // Empty until the preview step records the operator's choice.
+    columnMap: jsonb("column_map")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    // Short failure reason for operator display. Never plaintext PII —
+    // sanitised at the boundary before persisting.
+    error: text("error"),
+    // Signed, single-use download URL for the rejected-rows report.
+    // Populated when the job reaches `completed` if any rows were
+    // rejected. Null otherwise.
+    rejectedRowsUrl: text("rejected_rows_url"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Operator dashboard list — newest first per org.
+    index("import_jobs_org_created_idx").on(t.organisationId, t.createdAt.desc()),
+    // Cron picker only — find the next batch of work platform-wide
+    // without scanning the table. Deliberately org-agnostic; the
+    // dashboard's per-org "active jobs" view should hit
+    // `import_jobs_org_created_idx` and filter on status in the query.
+    index("import_jobs_active_idx")
+      .on(t.createdAt)
+      .where(sql`${t.status} in ('queued','parsing','importing')`),
   ],
 );
