@@ -62,6 +62,7 @@ Outbound hyperlinks to third-party sites (e.g. the Google review form linked fro
 | Session logs          | 30 days                        | Auto-expiry |
 | Import job records (`import_jobs`: filename, column_map, counters) | 12 months from `completed_at` / `failed_at` | No PII fields by design — purged by cron |
 | Imported guest provenance (`guests.imported_from`, `imported_at`) | Lifetime of the guest row | Nulled on guest erasure (see §DSAR step 4) |
+| Inline source CSV (`import_jobs.source_csv_cipher`) | Envelope-encrypted at column level. Nulled on `completed_at`; nulled by cron 7 days after `failed_at` regardless of retry status; nulled on parent row delete | Yes — nulled on guest erasure for any linked job (writer must record the linkage) |
 | Rejected-rows artefacts (signed download from `import_jobs.rejected_rows_url`) | Object lives in private Supabase Storage bucket; signed URL ≤ 24h; object purged on parent `import_jobs` row delete | Yes — deletion of the parent row purges the object |
 
 ## DSAR workflow (Data Subject Access / Erasure Requests)
@@ -119,6 +120,7 @@ Do not delete logs or evidence during response, even if doing so seems to "clean
 - Store guest data in cookies or client-side storage beyond a booking reference.
 - Send marketing messages without checking the relevant per-channel consent timestamp.
 - Log or send to Sentry a `RejectedRow` or any raw imported CSV row — those payloads carry plaintext PII keyed by operator-chosen headers that `beforeSend` does not scrub. Log only counts and the `import_jobs.id` for correlation.
+- Persist a raw uploaded CSV in a non-encrypted column. The bytes contain plaintext guest email/name/phone — encrypt at column level via `lib/security/crypto.ts:encryptPii` (the `import_jobs.source_csv_cipher` pattern), or place the blob in a private Supabase Storage bucket with the same retention as `rejected_rows_url`. Supabase TDE alone is the at-rest layer, not a column-level guarantee.
 
 ## Reviewing changes that touch PII
 

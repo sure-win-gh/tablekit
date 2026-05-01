@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/dsar-scrub",
       "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/import-tick",
+      "schedule": "45 3 * * *"
     }
   ]
 }

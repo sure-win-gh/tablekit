@@ -16,6 +16,7 @@
 
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   char,
   customType,
@@ -342,6 +343,16 @@ export const guests = pgTable(
     // sevenrooms | generic-csv).
     importedFrom: text("imported_from"),
     importedAt: timestamp("imported_at", { withTimezone: true }),
+    // FK linkage to the parent import job — populated by the runner
+    // when a guest is created via bulk import. Required by gdpr.md
+    // §DSAR step 4 so the erasure scrub can find any source CSV
+    // still holding the guest's plaintext (failed-job retry window).
+    // ON DELETE SET NULL keeps the guest row when the parent job is
+    // purged at retention end. Forward reference — `importJobs` is
+    // defined later in the file; Drizzle's thunk handles it.
+    importJobId: uuid("import_job_id").references((): AnyPgColumn => importJobs.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1014,6 +1025,18 @@ export const importJobs = pgTable(
     // Populated when the job reaches `completed` if any rows were
     // rejected. Null otherwise.
     rejectedRowsUrl: text("rejected_rows_url"),
+    // Operator-uploaded CSV — envelope-encrypted under the org's DEK
+    // before insert (see lib/security/crypto.ts:encryptPii). The CSV
+    // contains plaintext guest email/name/phone, so column-level
+    // encryption is required by gdpr.md §Encryption — Supabase TDE
+    // alone is the at-rest layer, not the column-level guarantee the
+    // playbook demands. Nulled by the runner once the import
+    // completes successfully so the row doesn't carry PII forever.
+    sourceCsvCipher: text("source_csv_cipher"),
+    // Pre-encrypt byte length — used by the upload action to enforce
+    // a 50MB cap (DB CHECK below) and by the dashboard for display.
+    // Set once at upload time; never updated.
+    sourceSizeBytes: integer("source_size_bytes"),
     startedAt: timestamp("started_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
