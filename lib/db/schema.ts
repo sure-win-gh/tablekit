@@ -16,6 +16,7 @@
 
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   char,
   customType,
@@ -342,6 +343,16 @@ export const guests = pgTable(
     // sevenrooms | generic-csv).
     importedFrom: text("imported_from"),
     importedAt: timestamp("imported_at", { withTimezone: true }),
+    // FK linkage to the parent import job — populated by the runner
+    // when a guest is created via bulk import. Required by gdpr.md
+    // §DSAR step 4 so the erasure scrub can find any source CSV
+    // still holding the guest's plaintext (failed-job retry window).
+    // ON DELETE SET NULL keeps the guest row when the parent job is
+    // purged at retention end. Forward reference — `importJobs` is
+    // defined later in the file; Drizzle's thunk handles it.
+    importJobId: uuid("import_job_id").references((): AnyPgColumn => importJobs.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
