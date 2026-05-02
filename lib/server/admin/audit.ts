@@ -100,6 +100,9 @@ export type AuditAction =
   | "data.exported"
   | "import.uploaded"
   | "import.queued"
+  // ai-enquiry phase
+  | "enquiry.received"
+  | "enquiry.rejected"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
@@ -123,7 +126,8 @@ export type AuditTargetType =
   | "dsar_request"
   | "review"
   | "export"
-  | "import_job";
+  | "import_job"
+  | "enquiry";
 
 export type AuditInput = {
   organisationId: string;

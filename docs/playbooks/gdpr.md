@@ -105,6 +105,7 @@ Posture:
 - **Lawful basis:** Article 9(2)(e) — data manifestly made public by the data subject in their direct enquiry to the venue. Where the disclosure is less clearly "made public" (e.g. a private DM forwarded by the operator), Article 6(1)(b) (necessary for the contract) covers ordinary use; if a guest objects, the operator must purge under §DSAR.
 - **Encryption:** all special-category-bearing fields (`enquiries.body_cipher`, `enquiries.parsed_cipher`, `enquiries.draft_reply_cipher`) are envelope-encrypted at column level. Plaintext never lands in audit logs, Sentry, or any non-cipher column.
 - **Surface minimisation:** the parser's `specialRequests` array is bounded to 5 items × 280 chars per item, ≤800 chars total. The cap is enforced by the Zod schema in `lib/enquiries/types.ts` — the LLM cannot emit more.
+- **HTML inbound is dropped, not stored.** Raw HTML email bodies carry tracking-pixel URLs and third-party image / CSS references that we don't want to land in our database even encrypted at rest (they become live again on decrypt). The inbound webhook route (`app/api/webhooks/resend-inbound`) drops HTML-only inbound with `ignored: 'no-text'`. If operators report missed enquiries, a future PR can add a tested HTML-strip step that converts HTML to plaintext before encryption.
 - **Sub-processor egress:** enquiry bodies (which may contain Article 9 data) leave our system once, to AWS Bedrock in `eu-west-1` for parsing by Claude Haiku 4.5. In-Region inference keeps the request within Ireland — no cross-region routing, no transfer outside the EU. The Bedrock model invocation is the only outbound use of enquiry plaintext; all storage is column-encrypted under the org's DEK. AWS does not use Bedrock inputs or outputs for model training (Bedrock standard terms).
 - **Retention:** 90 days from `received_at`, then row hard-deleted by cron. See the retention table for the row-level rule; no separate Article 9 retention applies.
 - **DSAR:** on guest erasure, the cipher columns are nulled (`suggested_slots` is non-PII metadata and may be retained).
@@ -115,6 +116,7 @@ Posture:
 - **PII scrubbing:** `beforeSend` hook strips `email`, `phone`, `last_name`, `dob`, `notes` keys from event payloads. Tested in `tests/security/sentry-scrub.test.ts`.
 - App logs: no PII. Use `booking.id`, `guest.id`, never plaintext identifiers.
 - Access logs exclude query strings and request bodies by default.
+- **Webhook routes that handle untrusted bodies must catch-and-rethrow as bland errors** — never let an upstream parser/verifier exception propagate to Sentry with the request body in `cause` or `message`. Pattern: `} catch { throw new Error("verify-failed"); }` (no error chaining). The `app/api/webhooks/resend-inbound` route is the load-bearing example.
 
 ## Breach response
 

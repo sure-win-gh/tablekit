@@ -1134,3 +1134,28 @@ export const enquiries = pgTable(
     index("enquiries_org_email_hash_idx").on(t.organisationId, t.fromEmailHash),
   ],
 );
+
+// =============================================================================
+// Inbound webhook event log (idempotency)
+// =============================================================================
+//
+// Generic dedup surface for any inbound webhook that emits a unique
+// event id. PR2 of the AI enquiry feature uses it to short-circuit
+// Resend's at-least-once delivery (`svix-id` is unique per event;
+// retries reuse it). Future inbound integrations (calendar, payment
+// disputes) reuse the same table.
+//
+// This is platform infrastructure — no organisation_id, no PII.
+// RLS denies all access for `authenticated` and `anon`; the cron /
+// webhook routes use `adminDb`. Matches the platform_audit_log
+// pattern from migration 0020.
+
+export const inboundWebhookEvents = pgTable("inbound_webhook_events", {
+  // The provider's unique event id (e.g. Svix's `svix-id`). Primary
+  // key — INSERT ON CONFLICT DO NOTHING is the dedup primitive.
+  eventId: text("event_id").primaryKey(),
+  // Provider name for triage / cleanup partitioning. Free-text;
+  // current value is just 'resend-inbound'.
+  provider: text("provider").notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+});
