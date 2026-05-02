@@ -47,7 +47,7 @@ export function generateDraft(input: {
 
   // booking_request branch
   const partyLine = formatPartyLine(parsed.partySize);
-  const dateLine = formatDateLine(parsed.requestedDate, parsed.requestedTimeWindow, venue.locale);
+  const dateLine = formatDateLine(parsed.requestedDate, parsed.requestedTimeWindow);
 
   const slotsBlock =
     slots.length > 0
@@ -86,13 +86,13 @@ function salutation(firstName: string | null): string {
 
 function formatPartyLine(partySize: number | null): string | null {
   if (partySize === null) return null;
-  if (partySize === 1) return "a table for 1";
-  if (partySize === 2) return "a table for 2";
   return `a table for ${partySize}`;
 }
 
-// "on 15 June" + " in the evening" — both halves optional.
-function formatDateLine(date: string | null, window: TimeWindow | null, _locale: string): string {
+// "on 15 June" + " in the evening" — both halves optional. Locale is
+// fixed at en-GB for v1 (per spec); the parameter is dropped for now
+// and re-added when we open more locales.
+function formatDateLine(date: string | null, window: TimeWindow | null): string {
   const parts: string[] = [];
   if (date) parts.push(`on ${formatIsoDate(date)}`);
   if (window) parts.push(formatTimeWindow(window));

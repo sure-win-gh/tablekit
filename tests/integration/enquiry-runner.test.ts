@@ -221,6 +221,11 @@ describe("processEnquiry — failure paths", () => {
     const enquiryId = await seedEnquiry("anything");
     const first = await processEnquiry(enquiryId);
     expect(first.status).toBe("skipped");
+    if (first.status === "skipped") {
+      // Distinguishes "we'll retry" from "all done" so PR4's UI
+      // can show the right state.
+      expect(first.reason).toBe("retry-pending");
+    }
 
     const [row] = await db
       .select({

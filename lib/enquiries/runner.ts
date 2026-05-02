@@ -52,7 +52,10 @@ export type ProcessResult =
   | { status: "draft_ready"; enquiryId: string }
   | { status: "discarded"; enquiryId: string }
   | { status: "failed"; enquiryId: string; error: string }
-  | { status: "skipped"; reason: "not-found" | "locked" | "terminal" };
+  | {
+      status: "skipped";
+      reason: "not-found" | "locked" | "terminal" | "retry-pending";
+    };
 
 export async function processEnquiry(enquiryId: string): Promise<ProcessResult> {
   const db = adminDb();
@@ -153,6 +156,13 @@ export async function processEnquiry(enquiryId: string): Promise<ProcessResult> 
   } catch (err) {
     // Catch-all — anything below the try shouldn't normally throw,
     // but if it does we sanitise + fail rather than 500 the cron.
+    //
+    // Sanitiser contract (per gdpr.md §Logs and error tracking):
+    // errors that reach this catch MUST carry sanitisable text in
+    // `.message`. Do NOT attach raw request/response payloads to
+    // `.cause` — `sanitiseEnquiryError` only inspects `.message`.
+    // If a future SDK adds payload chaining, extend the sanitiser
+    // before relying on it here.
     return await markFailed(db, job, sanitiseEnquiryError(err));
   }
 }
@@ -220,11 +230,13 @@ async function markParseOutcome(
   if (result.reason === "transient" && job.parseAttempts < MAX_PARSE_ATTEMPTS) {
     // Reset to 'received' so the cron picks it up again. The
     // parse_attempts counter has already been bumped by the claim.
+    // Caller sees `retry-pending` (not `terminal`) so PR4's UI can
+    // distinguish "we'll try again shortly" from "we're done".
     await db
       .update(enquiries)
       .set({ status: "received", error: sanitised })
       .where(eq(enquiries.id, job.id));
-    return { status: "skipped", reason: "terminal" };
+    return { status: "skipped", reason: "retry-pending" };
   }
   return await markFailed(db, job, sanitised);
 }
