@@ -2,9 +2,10 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { ChevronRight, Database, Download, Lock } from "lucide-react";
 import Link from "next/link";
 
+import { hasPlan, toPlan } from "@/lib/auth/plan-level";
 import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
-import { bookings, guests } from "@/lib/db/schema";
+import { bookings, guests, organisations } from "@/lib/db/schema";
 
 export const metadata = { title: "Data · TableKit" };
 
@@ -20,7 +21,7 @@ export default async function DataPage() {
   // Filter explicitly by orgId — RLS scopes to every org the caller
   // is a member of, so a dual-org user would otherwise see combined
   // counts. Same defence-in-depth as the export readers.
-  const counts = await withUser(async (db) => {
+  const { counts, isPlus } = await withUser(async (db) => {
     const [g] = await db
       .select({ n: sql<number>`count(*)::int` })
       .from(guests)
@@ -29,8 +30,19 @@ export default async function DataPage() {
       .select({ n: sql<number>`count(*)::int` })
       .from(bookings)
       .where(eq(bookings.organisationId, orgId));
-    return { guests: g?.n ?? 0, bookings: b?.n ?? 0 };
+    const [o] = await db
+      .select({ plan: organisations.plan })
+      .from(organisations)
+      .where(eq(organisations.id, orgId))
+      .limit(1);
+    return {
+      counts: { guests: g?.n ?? 0, bookings: b?.n ?? 0 },
+      isPlus: o ? hasPlan(toPlan(o.plan), "plus") : false,
+    };
   });
+  // Both exports decrypt PII (guests: full record; bookings: joined
+  // guest_email per row) so both are CRM-tier features.
+  const canExportData = canExport && isPlus;
 
   return (
     <main className="flex flex-1 flex-col px-8 py-6">
@@ -60,22 +72,31 @@ export default async function DataPage() {
           Exporting requires manager or owner role. Ask the account owner to run an export.
         </p>
       ) : (
-        <section className="mt-6 grid gap-4 md:grid-cols-2">
-          <ExportCard
-            title="Guests"
-            entity="guests"
-            count={counts.guests}
-            description="One row per guest, excluding erased records. Includes decrypted email, phone, and last name."
-            disabled={!canExport}
-          />
-          <ExportCard
-            title="Bookings"
-            entity="bookings"
-            count={counts.bookings}
-            description="One row per booking with venue, service, area, guest first name and email, party size, status, and source."
-            disabled={!canExport}
-          />
-        </section>
+        <>
+          {!isPlus ? (
+            <p className="rounded-card border-hairline bg-cloud text-ash mt-6 flex items-center gap-2 border p-4 text-sm">
+              <Lock className="h-4 w-4" aria-hidden />
+              Bulk PII export is a Plus-tier feature. Per-guest rectification and erasure remain
+              available on every plan from the guest&apos;s profile.
+            </p>
+          ) : null}
+          <section className="mt-6 grid gap-4 md:grid-cols-2">
+            <ExportCard
+              title="Guests"
+              entity="guests"
+              count={counts.guests}
+              description="One row per guest, excluding erased records. Includes decrypted email, phone, and last name."
+              disabled={!canExportData}
+            />
+            <ExportCard
+              title="Bookings"
+              entity="bookings"
+              count={counts.bookings}
+              description="One row per booking with venue, service, area, guest first name and email, party size, status, and source."
+              disabled={!canExportData}
+            />
+          </section>
+        </>
       )}
 
       <section className="mt-10 flex flex-col gap-2">

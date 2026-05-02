@@ -17,6 +17,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 
+import { InsufficientPlanError, requirePlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
 import { bookingsToCsv, bookingsToJson, loadBookingsForExport } from "@/lib/export/bookings";
@@ -45,6 +46,27 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ enti
 
   const today = new Date().toISOString().slice(0, 10);
   const filename = `tablekit-${entity}-${today}.${format}`;
+
+  // Both bulk exports decrypt PII (guests: full record; bookings:
+  // joined guest_email per row), so both are CRM-tier features. We
+  // audit-log the rejection symmetric with the Resend webhook
+  // precedent — useful signal that a Free/Core member is probing the
+  // URL directly. (See app/api/webhooks/resend-inbound/route.ts.)
+  try {
+    await requirePlan(orgId, "plus");
+  } catch (err) {
+    if (err instanceof InsufficientPlanError) {
+      await audit.log({
+        organisationId: orgId,
+        actorUserId: userId,
+        action: "data.export.plan_rejected",
+        targetType: "export",
+        metadata: { entity, format, required: "plus" },
+      });
+      return NextResponse.json({ error: "plan-required", required: "plus" }, { status: 402 });
+    }
+    throw err;
+  }
 
   let body: string;
   let rowCount: number;

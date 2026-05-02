@@ -9,6 +9,7 @@ import {
   Clock,
   CreditCard,
   Database,
+  Hourglass,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -40,7 +41,16 @@ const DRAWER_KEY = "tablekit:sidebar-drawer";
 
 export type SidebarData = {
   user: { name: string; email: string };
-  org: { name: string; groupCrmEnabled: boolean; multiVenue: boolean };
+  org: {
+    name: string;
+    // True iff org is on Plus tier — gates both the per-venue Guests
+    // link inside venueItems and the cross-venue Guests link in
+    // orgItems. Computed in sidebar.tsx so the client component
+    // doesn't need to know the plan ladder.
+    crmEnabled: boolean;
+    groupCrmEnabled: boolean;
+    multiVenue: boolean;
+  };
   venues: Array<{ id: string; name: string }>;
 };
 
@@ -66,7 +76,8 @@ export function SidebarShell({
 
   // Org-section items. Overview only when there's >1 venue (single-
   // venue orgs auto-redirect from /dashboard, so /overview would
-  // bounce back). Guests only when group CRM is on.
+  // bounce back). Cross-venue Guests is Plus + group-CRM-on +
+  // multi-venue (single-venue orgs use the per-venue link below).
   const orgItems: Item[] = [
     {
       href: "/dashboard/overview",
@@ -75,17 +86,30 @@ export function SidebarShell({
       show: data.org.multiVenue,
     },
     { href: "/dashboard/organisation", label: "Organisation", icon: Building2 },
-    { href: "/dashboard/guests", label: "Guests", icon: Users, show: data.org.groupCrmEnabled },
+    {
+      href: "/dashboard/guests",
+      label: "Guests",
+      icon: Users,
+      show: data.org.crmEnabled && data.org.groupCrmEnabled && data.org.multiVenue,
+    },
     { href: "/dashboard/data", label: "Data", icon: Database },
     { href: "/dashboard/privacy-requests", label: "Privacy requests", icon: ShieldCheck },
   ];
 
   // Venue-section items, only rendered while inside a venue route.
+  // Per-venue Guests appears for Plus orgs regardless of venue count
+  // (single-venue Plus orgs land here for their CRM).
   const venueItems: Item[] = venueId
     ? [
         { href: `/dashboard/venues/${venueId}/bookings`, label: "Bookings", icon: CalendarDays },
         { href: `/dashboard/venues/${venueId}/timeline`, label: "Timeline", icon: Clock },
-        { href: `/dashboard/venues/${venueId}/waitlist`, label: "Waitlist", icon: Users },
+        { href: `/dashboard/venues/${venueId}/waitlist`, label: "Waitlist", icon: Hourglass },
+        {
+          href: `/dashboard/venues/${venueId}/guests`,
+          label: "Guests",
+          icon: Users,
+          show: data.org.crmEnabled,
+        },
         {
           href: `/dashboard/venues/${venueId}/floor-plan`,
           label: "Floor plan",
@@ -176,7 +200,12 @@ export function SidebarShell({
             collapsed={collapsed}
           />
           {venueId ? (
-            <Section label="Venue" items={venueItems} pathname={pathname} collapsed={collapsed} />
+            <Section
+              label="Venue"
+              items={venueItems.filter((i) => i.show !== false)}
+              pathname={pathname}
+              collapsed={collapsed}
+            />
           ) : null}
         </nav>
 

@@ -98,6 +98,7 @@ export type AuditAction =
   | "org.group_crm.disabled"
   // import-export phase
   | "data.exported"
+  | "data.export.plan_rejected"
   | "import.uploaded"
   | "import.queued"
   // ai-enquiry phase

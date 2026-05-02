@@ -12,6 +12,13 @@ import { guests } from "@/lib/db/schema";
 import { decryptPii, type Ciphertext } from "@/lib/security/crypto";
 import { and, eq } from "drizzle-orm";
 
+// These actions are intentionally plan-agnostic. They are the
+// operator-side route to fulfilling controller obligations under
+// GDPR Art 16 (rectification), Art 17 (erasure), and Art 7(3)
+// (consent withdrawal "as easy as giving"). Plan-gating them would
+// breach the DPA we hold with venues. The CRM **browsing** surfaces
+// (list pages, bulk export) are Plus-only — that's the gate.
+
 export type ContactActionState =
   | { status: "idle" }
   | { status: "error"; message: string }
