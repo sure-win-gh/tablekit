@@ -3,8 +3,8 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { hasRole } from "@/lib/auth/role-level";
 import { requireRole } from "@/lib/auth/require-role";
+import { hasRole } from "@/lib/auth/role-level";
 import { withUser } from "@/lib/db/client";
 import { bookings, guests, services, venues } from "@/lib/db/schema";
 import { decryptPii, type Ciphertext } from "@/lib/security/crypto";
@@ -22,6 +22,13 @@ export default async function GuestProfilePage({
   params: Promise<{ guestId: string }>;
 }) {
   const auth = await requireRole("host");
+  // Intentionally NOT plan-gated. The CRM browsing surfaces (the list
+  // pages and bulk export) are Plus-only, but per-guest detail is the
+  // route operators use to fulfil controller obligations under
+  // GDPR Art 16 (rectification), Art 17 (erasure), and Art 7(3)
+  // (consent withdrawal). Those rights are plan-independent. The
+  // page is unreachable from the sidebar on Free/Core (no list link),
+  // but a known guest id (e.g. from a privacy-request) still resolves.
   const canEdit = hasRole(auth.role, "manager");
   const { guestId } = await params;
 

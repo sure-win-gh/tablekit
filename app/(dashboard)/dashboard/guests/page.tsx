@@ -1,24 +1,28 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Building2, ChevronRight, Users } from "lucide-react";
 import Link from "next/link";
 
 import { Card } from "@/components/ui";
+import { requirePlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
-import { bookings, guests, organisations } from "@/lib/db/schema";
+import { organisations } from "@/lib/db/schema";
+import { loadOrgGuests } from "@/lib/guests/list";
 
 export const metadata = { title: "Guests · TableKit" };
 export const dynamic = "force-dynamic";
 
-// Cross-venue guest list — Plus-tier feature. Gated by
-// organisations.group_crm_enabled. We don't decrypt PII for the
-// list view: first_name is plaintext (per schema), and the
-// aggregates (visits, venues, last visit) are non-PII. Decryption
-// happens only on the per-guest detail screen (deferred — single
-// guest page is its own phase).
+// Cross-venue guest list — Plus-tier feature, gated additionally by
+// organisations.group_crm_enabled (org-wide opt-in to cross-venue
+// staff visibility). Single-venue Plus orgs use the per-venue CRM at
+// /dashboard/venues/[venueId]/guests instead — this page hides for
+// them. We don't decrypt PII for the list view: first_name is
+// plaintext (per schema), the aggregates (visits, venues, last visit)
+// are non-PII. Decryption happens only on the per-guest detail screen.
 
 export default async function GuestsPage() {
-  await requireRole("host");
+  const { orgId } = await requireRole("host");
+  await requirePlan(orgId, "plus");
 
   const { org, rows } = await withUser(async (db) => {
     const [o] = await db
@@ -27,49 +31,11 @@ export default async function GuestsPage() {
         groupCrmEnabled: organisations.groupCrmEnabled,
       })
       .from(organisations)
+      .where(eq(organisations.id, orgId))
       .limit(1);
     if (!o) return { org: null, rows: [] };
-
-    if (!o.groupCrmEnabled) return { org: o, rows: [] };
-
-    const guestRows = await db
-      .select({
-        id: guests.id,
-        firstName: guests.firstName,
-        createdAt: guests.createdAt,
-        // Visit count (realised only, matching the top-guests report).
-        visits:
-          sql<number>`coalesce(count(${bookings.id}) filter (where ${bookings.status} in ('confirmed','seated','finished')), 0)::int`.as(
-            "visits",
-          ),
-        // Distinct venues visited (any status).
-        venuesVisited: sql<number>`coalesce(count(distinct ${bookings.venueId}), 0)::int`.as(
-          "venuesVisited",
-        ),
-        // node-postgres returns max(timestamptz) as a string for raw
-        // sql expressions (drizzle's auto-parser only fires on
-        // declared timestamp columns). Cast at the application
-        // boundary below.
-        lastVisit: sql<
-          string | null
-        >`max(${bookings.startAt}) filter (where ${bookings.status} in ('confirmed','seated','finished'))`.as(
-          "lastVisit",
-        ),
-      })
-      .from(guests)
-      .leftJoin(bookings, eq(bookings.guestId, guests.id))
-      .where(eq(guests.organisationId, o.id))
-      .groupBy(guests.id, guests.firstName, guests.createdAt)
-      .orderBy(desc(sql`max(${bookings.startAt})`), desc(guests.createdAt))
-      .limit(200);
-
-    return {
-      org: o,
-      rows: guestRows.map((g) => ({
-        ...g,
-        lastVisit: g.lastVisit ? new Date(g.lastVisit) : null,
-      })),
-    };
+    const guestRows = o.groupCrmEnabled ? await loadOrgGuests(db, { orgId: o.id }) : [];
+    return { org: o, rows: guestRows };
   });
 
   if (!org) {
@@ -102,7 +68,8 @@ export default async function GuestsPage() {
           <h2 className="text-ink text-lg font-bold tracking-tight">Group CRM is off</h2>
           <p className="text-ash max-w-md text-sm">
             Cross-venue guest visibility is disabled for this organisation. Owners can switch it on
-            from the organisation page — it&apos;s a Plus-tier feature.
+            from the organisation page. Each venue&apos;s own guests are always available from that
+            venue&apos;s sidebar.
           </p>
           <Link
             href="/dashboard/organisation"

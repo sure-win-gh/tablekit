@@ -1,6 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 
 import { getActiveOrg } from "@/lib/auth/active-org";
+import { hasPlan, toPlan } from "@/lib/auth/plan-level";
 import { withUser } from "@/lib/db/client";
 import { organisations, users, venues } from "@/lib/db/schema";
 import { supabaseServer } from "@/lib/db/supabase-server";
@@ -36,6 +37,7 @@ export async function Sidebar() {
       .select({
         id: organisations.id,
         name: organisations.name,
+        plan: organisations.plan,
         groupCrmEnabled: organisations.groupCrmEnabled,
       })
       .from(organisations)
@@ -57,6 +59,9 @@ export async function Sidebar() {
     },
     org: {
       name: data.org.name,
+      // CRM (per-venue + cross-venue) is Plus-only. The shell uses
+      // this single boolean rather than re-deriving from plan strings.
+      crmEnabled: hasPlan(toPlan(data.org.plan), "plus"),
       groupCrmEnabled: data.org.groupCrmEnabled,
       multiVenue: data.venues.length >= 2,
     },

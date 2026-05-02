@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { Building2, ChevronRight } from "lucide-react";
 import Link from "next/link";
 
+import { hasPlan, toPlan } from "@/lib/auth/plan-level";
 import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
 import { organisations, venues } from "@/lib/db/schema";
@@ -43,6 +44,8 @@ export default async function OrganisationPage() {
     throw new Error("OrganisationPage: no org under active session");
   }
 
+  const isPlus = hasPlan(toPlan(org.plan), "plus");
+
   return (
     <main className="flex flex-1 flex-col px-8 py-6">
       <nav className="text-ash flex items-center gap-1.5 text-xs">
@@ -68,17 +71,25 @@ export default async function OrganisationPage() {
         <h2 className="text-ink text-sm font-semibold tracking-tight">Group CRM</h2>
         <p className="text-ash text-sm">
           When enabled, operators with access to multiple venues see a single guest list across all
-          of them. Marketing consent stays per-venue — opting in at one venue doesn&apos;t opt the
-          guest in at another.
+          of them at <span className="font-mono">/dashboard/guests</span>. Marketing consent stays
+          per-venue — opting in at one venue doesn&apos;t opt the guest in at another. Each
+          venue&apos;s own guest list is always available from that venue&apos;s sidebar regardless
+          of this setting.
         </p>
-        {venueCount < 2 ? (
+        {!isPlus ? (
           <p className="rounded-card border-hairline bg-cloud text-ash border p-3 text-xs">
-            This setting only takes effect once you have two or more venues.
+            Group CRM is a Plus-tier feature. The CRM (per-venue and cross-venue) requires the Plus
+            plan; upgrade from the Billing page to enable it.
+          </p>
+        ) : venueCount < 2 ? (
+          <p className="rounded-card border-hairline bg-cloud text-ash border p-3 text-xs">
+            With one venue this aggregate view is the same as the per-venue CRM, so there&apos;s
+            nothing to enable yet. Add another venue and the toggle becomes meaningful.
           </p>
         ) : null}
         <GroupCrmToggle
           initialEnabled={org.groupCrmEnabled}
-          disabled={!isOwner}
+          disabled={!isOwner || !isPlus || venueCount < 2}
           ownerOnlyHint={!isOwner}
         />
       </section>
