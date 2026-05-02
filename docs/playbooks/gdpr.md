@@ -26,6 +26,9 @@ We are a **data processor**. The venue (organisation) is the **data controller**
 | Sentry        | Error tracking         | EU          | Yes |
 | Cloudflare    | DNS, WAF, edge cache   | Global (no PII routed) | Yes |
 | Google (Business Profile API) | Pulling reviews, posting operator replies, and reading the operator's GBP account + location list for the picker UI | Global (review data is already public; OAuth tokens stored encrypted in TableKit) | Yes — Google's standard data-processing terms apply |
+| AWS (Bedrock, Anthropic Claude Haiku 4.5) | AI enquiry parser — extracts party size / date / time / special requests from inbound enquiry emails (Plus tier) | EU (Ireland — `eu-west-1`, In-Region inference; request never leaves the EU). Anthropic provides the model weights to AWS; under Bedrock In-Region no enquiry data is transmitted to Anthropic — AWS is the sole processor. AWS does not use Bedrock inputs/outputs for model training (Bedrock standard terms). | Yes — AWS standard DPA + EU SCCs apply to the underlying processing |
+
+The 30-day customer-notice clock for adding AWS as a sub-processor starts at **first production traffic** (the cron lighting up in PR3b), not PR1's infrastructure merge — no egress = no clock. Document the trigger date in the PR that flips production traffic on.
 
 Any new sub-processor requires: DPA signed, EU data residency confirmed, entry added to this table and to `/legal/sub-processors`, and 30-day notice to existing customers.
 
@@ -64,6 +67,7 @@ Outbound hyperlinks to third-party sites (e.g. the Google review form linked fro
 | Imported guest provenance (`guests.imported_from`, `imported_at`) | Lifetime of the guest row | Nulled on guest erasure (see §DSAR step 4) |
 | Inline source CSV (`import_jobs.source_csv_cipher`) | Envelope-encrypted at column level. Nulled on `completed_at`; nulled by cron 7 days after `failed_at` regardless of retry status; nulled by cron 7 days after `created_at` for jobs still in `preview_ready` (abandoned uploads); nulled on parent row delete | Yes — nulled on guest erasure for any linked job (writer must record the linkage) |
 | Imported job filename (`import_jobs.filename`) | Plaintext, capped 200 chars, path-stripped at the upload boundary. Best-effort non-PII but operators may name files `guests-jane@example.com.csv`. Nulled on guest erasure for any linked job and on parent row delete. Never forwarded to audit log payloads or Sentry | Yes — nulled on guest erasure (treat as PII to be safe) |
+| AI enquiries (`enquiries`: raw body, parsed output, draft reply) | All PII columns envelope-encrypted (`from_email_cipher`, `subject_cipher`, `body_cipher`, `parsed_cipher`, `draft_reply_cipher`). 90 days from `received_at`, then row hard-deleted by cron | Yes — nulled on guest erasure for any matched guest (cipher columns scrubbed; `suggested_slots` retained as it's non-PII metadata) |
 | Rejected-rows artefacts (signed download from `import_jobs.rejected_rows_url`) | Object lives in private Supabase Storage bucket; signed URL ≤ 24h; object purged on parent `import_jobs` row delete | Yes — deletion of the parent row purges the object |
 
 ## DSAR workflow (Data Subject Access / Erasure Requests)
@@ -92,12 +96,27 @@ We also expose a guest-facing page at `/privacy/request?v=<venue-slug>` that pos
 - **In transit:** TLS 1.3 everywhere. HSTS preload on dashboard and widget origins.
 - **Backups:** encrypted, region-locked. 30-day point-in-time recovery via Supabase.
 
+## Special-category data (Article 9)
+
+Most data we process is contact + booking metadata (Article 6 contract). The AI enquiry handler (`docs/specs/ai-enquiry.md`) is the one path that may incidentally capture **special-category data** under Article 9 — dietary requirements (health), accessibility needs (disability), occasion notes that disclose health or family status. Enquiry emails are operator-curated context; guests volunteer this information knowing the venue will read it.
+
+Posture:
+
+- **Lawful basis:** Article 9(2)(e) — data manifestly made public by the data subject in their direct enquiry to the venue. Where the disclosure is less clearly "made public" (e.g. a private DM forwarded by the operator), Article 6(1)(b) (necessary for the contract) covers ordinary use; if a guest objects, the operator must purge under §DSAR.
+- **Encryption:** all special-category-bearing fields (`enquiries.body_cipher`, `enquiries.parsed_cipher`, `enquiries.draft_reply_cipher`) are envelope-encrypted at column level. Plaintext never lands in audit logs, Sentry, or any non-cipher column.
+- **Surface minimisation:** the parser's `specialRequests` array is bounded to 5 items × 280 chars per item, ≤800 chars total. The cap is enforced by the Zod schema in `lib/enquiries/types.ts` — the LLM cannot emit more.
+- **HTML inbound is dropped, not stored.** Raw HTML email bodies carry tracking-pixel URLs and third-party image / CSS references that we don't want to land in our database even encrypted at rest (they become live again on decrypt). The inbound webhook route (`app/api/webhooks/resend-inbound`) drops HTML-only inbound with `ignored: 'no-text'`. If operators report missed enquiries, a future PR can add a tested HTML-strip step that converts HTML to plaintext before encryption.
+- **Sub-processor egress:** enquiry bodies (which may contain Article 9 data) leave our system once, to AWS Bedrock in `eu-west-1` for parsing by Claude Haiku 4.5. In-Region inference keeps the request within Ireland — no cross-region routing, no transfer outside the EU. The Bedrock model invocation is the only outbound use of enquiry plaintext; all storage is column-encrypted under the org's DEK. AWS does not use Bedrock inputs or outputs for model training (Bedrock standard terms).
+- **Retention:** 90 days from `received_at`, then row hard-deleted by cron. See the retention table for the row-level rule; no separate Article 9 retention applies.
+- **DSAR:** on guest erasure, the cipher columns are nulled (`suggested_slots` is non-PII metadata and may be retained).
+
 ## Logs and error tracking
 
 - Sentry EU region only.
 - **PII scrubbing:** `beforeSend` hook strips `email`, `phone`, `last_name`, `dob`, `notes` keys from event payloads. Tested in `tests/security/sentry-scrub.test.ts`.
 - App logs: no PII. Use `booking.id`, `guest.id`, never plaintext identifiers.
 - Access logs exclude query strings and request bodies by default.
+- **Webhook routes that handle untrusted bodies must catch-and-rethrow as bland errors** — never let an upstream parser/verifier exception propagate to Sentry with the request body in `cause` or `message`. Pattern: `} catch { throw new Error("verify-failed"); }` (no error chaining). The `app/api/webhooks/resend-inbound` route is the load-bearing example.
 
 ## Breach response
 
@@ -135,3 +154,4 @@ Before merging any PR that adds or modifies a column, table, or query involving 
 5. Update this playbook if a new data category is introduced.
 6. For features that capture free-text from guests (review comments, DSAR messages, booking notes): add a privacy notice on the input surface, cap input length at the smallest defensible value, and ensure the erasure job covers the encrypted column.
 7. For features that publish guest data on a public surface (showcase widget, hosted booking page, etc.): consent must be unticked-by-default, per-channel, timestamped, and accompanied by a withdrawal mechanism that is at least as easy as the giving (Art 7(3)). The product must surface the withdrawal control before launch — a "contact the venue" promise is only adequate when paired with a documented operator-side runbook that can action the takedown promptly. The consent surface itself must link to the privacy notice covering the publication.
+8. **Bumping an LLM model ID counts as a sub-processor-equivalent change.** A different model (different version, different vendor, different region) has different processing characteristics — re-run `/audit gdpr` and update the relevant sub-processor table row + retention rules before merging. Treat it the same way you'd treat adding a new vendor.

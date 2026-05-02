@@ -1054,3 +1054,108 @@ export const importJobs = pgTable(
       .where(sql`${t.status} in ('queued','parsing','importing')`),
   ],
 );
+
+// =============================================================================
+// AI enquiries (Plus tier)
+// =============================================================================
+//
+// One row per inbound email at `<venue-slug>@enquiries.tablekit.uk`.
+// Lifecycle: received → parsing → draft_ready → replied | failed
+// (`discarded` is the operator's "this isn't an enquiry" escape hatch).
+//
+// All guest-facing fields are envelope-encrypted under the org's
+// DEK — the email body is fully untrusted input + carries the
+// guest's name/email/phone/preferences in free-form text. The
+// parser's structured JSON output is also encrypted because it
+// can include the extracted guest name. `suggested_slots` is the
+// only plaintext jsonb — slot times + service ids only, no PII.
+//
+// Writes flow through adminDb (cron + webhook). RLS restricts
+// SELECT to org members. Trigger denormalises organisation_id
+// from the parent venue (template: enforce_areas_org_id, mig 0001).
+
+export const enquiries = pgTable(
+  "enquiries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    // HMAC-SHA256 of the lowercased+trimmed sender email — same
+    // scheme as guests.email_hash. Lets us join enquiries to a
+    // matching guest record without decrypting either ciphertext.
+    fromEmailHash: text("from_email_hash").notNull(),
+    fromEmailCipher: text("from_email_cipher").notNull(),
+    subjectCipher: text("subject_cipher").notNull(),
+    bodyCipher: text("body_cipher").notNull(),
+    // JSON-stringified ParsedEnquiry then envelope-encrypted —
+    // includes the extracted guest name + preferences which are
+    // PII. Null until the runner parses successfully.
+    parsedCipher: text("parsed_cipher"),
+    // Top-3 slot times the runner suggested. Plaintext jsonb —
+    // shape is `[{ serviceId, serviceName, startAt, endAt, wallStart }]`.
+    // No PII; safe to query for analytics later.
+    suggestedSlots: jsonb("suggested_slots"),
+    // Operator-editable draft reply text, envelope-encrypted (it
+    // greets the guest by name extracted by the parser). Null until
+    // the runner generates the draft. The reply text is template-
+    // based, NOT free-text from the LLM — see lib/enquiries/draft.ts.
+    draftReplyCipher: text("draft_reply_cipher"),
+    // 'received' | 'parsing' | 'draft_ready' | 'replied' | 'failed' | 'discarded'.
+    // CHECK constrained at the DB level (migration).
+    status: text("status").notNull().default("received"),
+    // Bumped each time the runner attempts a parse. Caps at 3 to
+    // avoid spending money on a permanently-broken email.
+    parseAttempts: integer("parse_attempts").notNull().default(0),
+    // Sanitised error string from the most recent failed parse.
+    // Never plaintext PII — passes through a scrubber on persist
+    // (template: lib/import/runner/sanitise-error.ts).
+    error: text("error"),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+    repliedAt: timestamp("replied_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Operator inbox — newest first per org.
+    index("enquiries_org_received_idx").on(t.organisationId, t.receivedAt.desc()),
+    // Runner picker — tiny working set of unparsed enquiries.
+    // Org-agnostic by design; the cron sweeps the platform.
+    index("enquiries_received_picker_idx")
+      .on(t.receivedAt)
+      .where(sql`${t.status} = 'received'`),
+    // Guest-match join. PR2's webhook (and PR3's runner) want to
+    // resolve "do we already know this email under this org?" by
+    // joining to `guests.email_hash` — covering both columns avoids
+    // a sequential scan once the table grows.
+    index("enquiries_org_email_hash_idx").on(t.organisationId, t.fromEmailHash),
+  ],
+);
+
+// =============================================================================
+// Inbound webhook event log (idempotency)
+// =============================================================================
+//
+// Generic dedup surface for any inbound webhook that emits a unique
+// event id. PR2 of the AI enquiry feature uses it to short-circuit
+// Resend's at-least-once delivery (`svix-id` is unique per event;
+// retries reuse it). Future inbound integrations (calendar, payment
+// disputes) reuse the same table.
+//
+// This is platform infrastructure — no organisation_id, no PII.
+// RLS denies all access for `authenticated` and `anon`; the cron /
+// webhook routes use `adminDb`. Matches the platform_audit_log
+// pattern from migration 0020.
+
+export const inboundWebhookEvents = pgTable("inbound_webhook_events", {
+  // The provider's unique event id (e.g. Svix's `svix-id`). Primary
+  // key — INSERT ON CONFLICT DO NOTHING is the dedup primitive.
+  eventId: text("event_id").primaryKey(),
+  // Provider name for triage / cleanup partitioning. Free-text;
+  // current value is just 'resend-inbound'.
+  provider: text("provider").notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+});

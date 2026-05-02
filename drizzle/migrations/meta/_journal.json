@@ -190,6 +190,20 @@
       "when": 1777649730426,
       "tag": "0026_needy_karnak",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1777708463840,
+      "tag": "0027_kind_morlun",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1777716872522,
+      "tag": "0028_dashing_whizzer",
+      "breakpoints": true
     }
   ]
 }
