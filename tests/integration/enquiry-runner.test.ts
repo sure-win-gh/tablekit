@@ -60,14 +60,12 @@ beforeAll(async () => {
 
   ctx = { orgId: org.id, venueId: venue.id };
 
-  // Pre-warm the org's DEK before any parallel `Promise.all` of
-  // encryptPii calls. There's a known race in `lib/security/
-  // crypto.ts:getDek` — concurrent first-time encrypts each
-  // generate their own DEK + race to UPDATE wrapped_dek, so
-  // `Promise.all([encryptPii(...), encryptPii(...)])` on a fresh
-  // org can produce ciphers that decrypt with different keys. A
-  // single sequential call provisions the DEK once, then later
-  // parallel calls all hit the cache.
+  // Pre-warm the org's DEK so subsequent `Promise.all` encrypts hit
+  // the cache directly. The race that originally motivated this is
+  // now fixed in `lib/security/crypto.ts:getDek` (per-org in-flight
+  // Promise + conditional UPDATE), but pre-warming is still a small
+  // perf win and keeps the test's failure modes orthogonal to DEK
+  // provisioning.
   await encryptPii(ctx.orgId, "" as Plaintext);
 });
 

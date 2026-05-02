@@ -30,7 +30,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { organisations } from "@/lib/db/schema";
 import { adminDb } from "@/lib/server/admin/db";
@@ -76,10 +76,14 @@ function masterKey(): Buffer {
 
 // Exported only for tests — allows flipping the master between two
 // known keys to prove cross-key isolation without re-importing the
-// module. NOT called anywhere in production.
+// module. Also clears the per-org DEK cache and the in-flight
+// provisioning map so a fresh master key is never overlaid on top of
+// a DEK derived from the previous one. NOT called anywhere in
+// production.
 export function _resetMasterKeyForTests(): void {
   _masterKey = null;
   _dekCache.clear();
+  _dekProvisioning.clear();
 }
 
 // -----------------------------------------------------------------------------
@@ -111,13 +115,42 @@ function unwrapDek(wrapped: Buffer): Buffer {
 // -----------------------------------------------------------------------------
 // Per-org DEK cache + lazy provisioning
 // -----------------------------------------------------------------------------
+//
+// Concurrency model. Two layers of dedup:
+//
+//   1. In-process: `_dekProvisioning` holds an in-flight Promise per
+//      orgId. Concurrent callers (e.g. `Promise.all([encryptPii,
+//      encryptPii])` on a fresh org) all await the same Promise, so
+//      only one DB round-trip and one DEK generation actually run.
+//
+//   2. Cross-process: the provisioning UPDATE is conditional on
+//      `wrapped_dek IS NULL` and uses `RETURNING`. If we lose the
+//      race against another Node instance (Vercel serverless can spin
+//      up several at once on a brand-new org), the UPDATE returns
+//      no rows; we re-SELECT to load whatever DEK was actually
+//      persisted by the winner. Without this, two processes would
+//      each generate their own DEK and the last UPDATE would clobber
+//      the first — any ciphertexts encrypted with the loser's DEK
+//      would then be undecryptable forever.
 
 const _dekCache = new Map<string, Buffer>();
+const _dekProvisioning = new Map<string, Promise<Buffer>>();
 
 async function getDek(orgId: string): Promise<Buffer> {
   const cached = _dekCache.get(orgId);
   if (cached) return cached;
 
+  const inflight = _dekProvisioning.get(orgId);
+  if (inflight) return inflight;
+
+  const promise = loadOrProvisionDek(orgId).finally(() => {
+    _dekProvisioning.delete(orgId);
+  });
+  _dekProvisioning.set(orgId, promise);
+  return promise;
+}
+
+async function loadOrProvisionDek(orgId: string): Promise<Buffer> {
   const db = adminDb();
   const [row] = await db
     .select({ wrappedDek: organisations.wrappedDek, dekVersion: organisations.dekVersion })
@@ -130,23 +163,45 @@ async function getDek(orgId: string): Promise<Buffer> {
   }
 
   if (row.wrappedDek) {
-    if (row.dekVersion !== CURRENT_VERSION) {
-      throw new Error(
-        `lib/security/crypto.ts: organisation ${orgId} DEK version ${row.dekVersion} not supported (expected ${CURRENT_VERSION}).`,
-      );
-    }
-    const dek = unwrapDek(row.wrappedDek);
-    _dekCache.set(orgId, dek);
-    return dek;
+    return adoptExistingDek(orgId, row.wrappedDek, row.dekVersion);
   }
 
-  // Lazy provisioning: no DEK yet. Generate, wrap, persist, cache.
-  const dek = randomBytes(DEK_BYTES);
-  const wrapped = wrapDek(dek);
-  await db
+  // Lazy provisioning. Conditional UPDATE so we don't clobber a DEK
+  // a sibling process wrote between our SELECT and UPDATE.
+  const candidate = randomBytes(DEK_BYTES);
+  const wrapped = wrapDek(candidate);
+  const updated = await db
     .update(organisations)
     .set({ wrappedDek: wrapped, dekVersion: CURRENT_VERSION })
-    .where(eq(organisations.id, orgId));
+    .where(and(eq(organisations.id, orgId), isNull(organisations.wrappedDek)))
+    .returning({ id: organisations.id });
+
+  if (updated.length > 0) {
+    _dekCache.set(orgId, candidate);
+    return candidate;
+  }
+
+  // Lost the race: re-SELECT and adopt the winner's DEK.
+  const [winner] = await db
+    .select({ wrappedDek: organisations.wrappedDek, dekVersion: organisations.dekVersion })
+    .from(organisations)
+    .where(eq(organisations.id, orgId))
+    .limit(1);
+  if (!winner?.wrappedDek) {
+    throw new Error(
+      `lib/security/crypto.ts: organisation ${orgId} DEK provisioning lost race but no DEK present on re-read.`,
+    );
+  }
+  return adoptExistingDek(orgId, winner.wrappedDek, winner.dekVersion);
+}
+
+function adoptExistingDek(orgId: string, wrapped: Buffer, version: number): Buffer {
+  if (version !== CURRENT_VERSION) {
+    throw new Error(
+      `lib/security/crypto.ts: organisation ${orgId} DEK version ${version} not supported (expected ${CURRENT_VERSION}).`,
+    );
+  }
+  const dek = unwrapDek(wrapped);
   _dekCache.set(orgId, dek);
   return dek;
 }

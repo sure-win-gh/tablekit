@@ -117,4 +117,52 @@ describe("crypto — envelope encryption", () => {
       /not in the expected/,
     );
   });
+
+  // Regression: concurrent first-time encrypts on a fresh org used to
+  // race in `getDek` — each caller would see cache miss + null
+  // wrapped_dek, generate its own DEK, and race to UPDATE. Last write
+  // won on disk; cache could end up holding any of them. Ciphertexts
+  // encrypted with a loser's DEK then failed to decrypt with
+  // "Unsupported state or unable to authenticate data".
+  //
+  // The fix: per-org in-flight Promise (in-process dedup) + conditional
+  // UPDATE WHERE wrapped_dek IS NULL with RETURNING (cross-process
+  // safety — re-SELECT and adopt the winner's DEK on lost race).
+  //
+  // Note: this single-process Vitest run only exercises the in-process
+  // dedup path. The cross-process branch (UPDATE returns 0 rows →
+  // re-SELECT) is asserted by code review of the SQL shape; reproducing
+  // it in tests would require spawning a second Node process.
+  it("does not race when concurrent first-time encrypts hit a fresh org", async () => {
+    // Brand-new org — no DEK provisioned yet.
+    const [fresh] = await db
+      .insert(schema.organisations)
+      .values({ name: `Crypto C ${run}`, slug: `crypto-c-${run}` })
+      .returning({ id: schema.organisations.id });
+    if (!fresh) throw new Error("org insert returned no row");
+    const freshId = fresh.id;
+
+    try {
+      // Fire several encrypts in parallel, before any cache or row
+      // population. Pre-fix: at least one ciphertext would fail to
+      // decrypt because it was encrypted with a DEK that got
+      // overwritten in the DB.
+      const plaintexts = ["one", "two", "three", "four", "five"];
+      const ciphers = await Promise.all(plaintexts.map((p) => encryptPii(freshId, p)));
+
+      // All decrypt back to the original plaintext.
+      const decrypted = await Promise.all(ciphers.map((c) => decryptPii(freshId, c)));
+      expect(decrypted).toEqual(plaintexts);
+
+      // And the wrapped DEK on disk is the canonical one — only one
+      // got written.
+      const [row] = await db
+        .select({ wrappedDek: schema.organisations.wrappedDek })
+        .from(schema.organisations)
+        .where(eq(schema.organisations.id, freshId));
+      expect(row?.wrappedDek?.length).toBe(60);
+    } finally {
+      await db.delete(schema.organisations).where(eq(schema.organisations.id, freshId));
+    }
+  });
 });
