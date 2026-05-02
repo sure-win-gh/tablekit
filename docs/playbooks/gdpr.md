@@ -28,7 +28,7 @@ We are a **data processor**. The venue (organisation) is the **data controller**
 | Google (Business Profile API) | Pulling reviews, posting operator replies, and reading the operator's GBP account + location list for the picker UI | Global (review data is already public; OAuth tokens stored encrypted in TableKit) | Yes — Google's standard data-processing terms apply |
 | AWS (Bedrock, Anthropic Claude Haiku 4.5) | AI enquiry parser — extracts party size / date / time / special requests from inbound enquiry emails (Plus tier) | EU (Ireland — `eu-west-1`, In-Region inference; request never leaves the EU). Anthropic provides the model weights to AWS; under Bedrock In-Region no enquiry data is transmitted to Anthropic — AWS is the sole processor. AWS does not use Bedrock inputs/outputs for model training (Bedrock standard terms). | Yes — AWS standard DPA + EU SCCs apply to the underlying processing |
 
-The 30-day customer-notice clock for adding AWS as a sub-processor starts at **first production traffic** (the cron lighting up in PR3b), not PR1's infrastructure merge — no egress = no clock. Document the trigger date in the PR that flips production traffic on.
+**First production Bedrock egress: 2026-05-02** (PR3 of the AI enquiry handler — the runner + cron + inline kick from the inbound webhook). The 30-day customer-notice clock for adding AWS as a sub-processor started on this date and ends **2026-06-01**. Existing customers must be notified by that date.
 
 Any new sub-processor requires: DPA signed, EU data residency confirmed, entry added to this table and to `/legal/sub-processors`, and 30-day notice to existing customers.
 
@@ -117,6 +117,7 @@ Posture:
 - App logs: no PII. Use `booking.id`, `guest.id`, never plaintext identifiers.
 - Access logs exclude query strings and request bodies by default.
 - **Webhook routes that handle untrusted bodies must catch-and-rethrow as bland errors** — never let an upstream parser/verifier exception propagate to Sentry with the request body in `cause` or `message`. Pattern: `} catch { throw new Error("verify-failed"); }` (no error chaining). The `app/api/webhooks/resend-inbound` route is the load-bearing example.
+- **Sanitiser-bound error columns** (`enquiries.error`, `import_jobs.error`) — errors that flow into these columns via `sanitiseEnquiryError` / `sanitiseImportError` MUST carry sanitisable text in `.message`. Do NOT attach raw request/response payloads to `.cause` — the sanitisers only inspect `.message`, so any PII in `.cause` would silently survive to the at-rest plaintext column. If a future SDK starts payload-chaining errors (some AWS SDKs do), extend the sanitiser before relying on it.
 
 ## Breach response
 

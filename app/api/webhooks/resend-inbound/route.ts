@@ -32,6 +32,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { InsufficientPlanError, OrgNotFoundError, requirePlan } from "@/lib/auth/require-plan";
 import { enquiries, inboundWebhookEvents } from "@/lib/db/schema";
+import { processEnquiry } from "@/lib/enquiries/runner";
 import {
   ResendInboundSecretMissingError,
   ResendInboundSignatureError,
@@ -236,6 +237,21 @@ export async function POST(req: NextRequest) {
     targetId: row.id,
     metadata: { venueId: lookup.venue.id, bodySize: bucketBodySize(bodyText.length) },
   });
+
+  // Inline kick — drives the runner the moment the row lands so
+  // operators see drafts within seconds rather than waiting for
+  // the nightly cron. Wrapped in try/catch so a runner exception
+  // (function timeout, Bedrock outage) doesn't propagate to a
+  // 500 response: the row is already persisted, the cron is the
+  // backstop, and we don't want to make Resend retry. Bland
+  // error swallowing is deliberate — sanitiser is on the
+  // runner's side; here we just don't echo anything to the
+  // upstream provider.
+  try {
+    await processEnquiry(row.id);
+  } catch {
+    // Swallowed deliberately — see comment above.
+  }
 
   return NextResponse.json({ ok: true, enquiryId: row.id });
 }
