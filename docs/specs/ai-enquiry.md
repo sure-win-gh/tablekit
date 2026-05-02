@@ -13,7 +13,7 @@ Calls the Anthropic API, costs money per enquiry, and handles edge cases that re
 
 ## User stories
 
-- As an operator I forward (or auto-forward via a venue inbox rule) guest enquiry emails to `enquiries+<venue-slug>@tablekit.uk`.
+- As an operator I forward (or auto-forward via a venue inbox rule) guest enquiry emails to `<venue-slug>@enquiries.tablekit.uk`.
 - The AI parses the enquiry (party size, date, approximate time, special requests).
 - It checks availability using our existing engine.
 - It drafts a reply offering 1–3 slots, or explaining the constraint.
@@ -22,8 +22,8 @@ Calls the Anthropic API, costs money per enquiry, and handles edge cases that re
 
 ## Architecture
 
-- Inbound emails via Resend's inbound address or a dedicated Postmark inbound stream (TBD — whichever EU-residency option is cleaner).
-- Parser: Claude Haiku 4.5 via API. Structured tool output (JSON schema) to avoid prompt injection from email body.
+- Inbound emails via Resend inbound (catch-all on `enquiries.tablekit.uk`; recipient local-part = venue slug). Resend stays EU-resident; matches the existing transactional email vendor.
+- Parser: Claude Haiku 4.5 served via **AWS Bedrock in `eu-west-1` (Ireland)** with In-Region inference, so guest PII never leaves the EU. Picked over the direct Anthropic API because every other PII-touching sub-processor in [gdpr.md](../playbooks/gdpr.md) is EU-resident; routing AI enquiry bodies to a US-served endpoint would have broken that posture and exposed us to Schrems-style transfer-regulation risk. Wrapped by `lib/llm/bedrock.ts` using `@anthropic-ai/bedrock-sdk` — same `messages.parse()` + `zodOutputFormat()` surface as the direct SDK. Structured outputs via Zod (model emits JSON conforming to the schema, never free text — prompt-injection defence).
 - Availability: call existing internal availability API.
 - Draft saved to `enquiries(id, venue_id, received_at, raw, parsed, suggested_slots, status, reply_sent_at)`.
 - Reply sent via Resend using the venue's verified sending identity (not ours — prevents "via tablekit.uk" in clients).
