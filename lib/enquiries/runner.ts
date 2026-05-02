@@ -42,6 +42,7 @@ import { adminDb } from "@/lib/server/admin/db";
 
 import { generateDraft } from "./draft";
 import { parseEnquiry } from "./parse";
+import { checkEnquiryRateLimit } from "./rate-limit";
 import { sanitiseEnquiryError } from "./sanitise-error";
 import type { ParsedEnquiry, SuggestedSlot } from "./types";
 
@@ -54,11 +55,46 @@ export type ProcessResult =
   | { status: "failed"; enquiryId: string; error: string }
   | {
       status: "skipped";
-      reason: "not-found" | "locked" | "terminal" | "retry-pending";
+      reason:
+        | "not-found"
+        | "locked"
+        | "terminal"
+        | "retry-pending"
+        | "rate-limited-org"
+        | "rate-limited-sender";
     };
 
 export async function processEnquiry(enquiryId: string): Promise<ProcessResult> {
   const db = adminDb();
+
+  // Pre-claim rate-limit check.
+  //
+  // Done BEFORE the claim so a rate-limit reject doesn't bump
+  // parse_attempts (the cap on Bedrock-call retries) or transition
+  // the row through 'parsing'. The row stays at 'received' and the
+  // cron picks it up next tick once the window has rolled.
+  //
+  // Two reads on the row — this metadata fetch + the claim — but
+  // the metadata is cached at the row-cache layer so the actual
+  // overhead is one I/O. Worth it for the cleaner state machine.
+  const [meta] = await db
+    .select({
+      organisationId: enquiries.organisationId,
+      fromEmailHash: enquiries.fromEmailHash,
+      status: enquiries.status,
+    })
+    .from(enquiries)
+    .where(eq(enquiries.id, enquiryId));
+  if (!meta) return { status: "skipped", reason: "not-found" };
+  if (meta.status !== "received") return { status: "skipped", reason: "terminal" };
+
+  const rl = await checkEnquiryRateLimit(meta.organisationId, meta.fromEmailHash);
+  if (!rl.ok) {
+    return {
+      status: "skipped",
+      reason: rl.bucket === "org" ? "rate-limited-org" : "rate-limited-sender",
+    };
+  }
 
   // Atomic claim. UPDATE the row to 'parsing' iff it's still
   // 'received' AND no other worker holds the row lock. The

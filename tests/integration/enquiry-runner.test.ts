@@ -242,6 +242,59 @@ describe("processEnquiry — failure paths", () => {
   });
 });
 
+describe("processEnquiry — rate limiting", () => {
+  it("returns rate-limited-sender without bumping parse_attempts when the sender bucket is saturated", async () => {
+    // Saturate the sender bucket via a mocked Upstash response. The
+    // generic `lib/public/rate-limit.ts` helper is fetch-based and
+    // falls open when Upstash isn't configured, so we point env at
+    // a mock URL + intercept fetch to return "over limit".
+    const { ENQUIRY_RATE_LIMIT } = await import("@/lib/enquiries/rate-limit");
+    const originalUrl = process.env["UPSTASH_REDIS_REST_URL"];
+    const originalToken = process.env["UPSTASH_REDIS_REST_TOKEN"];
+    process.env["UPSTASH_REDIS_REST_URL"] = "https://mock-upstash.test";
+    process.env["UPSTASH_REDIS_REST_TOKEN"] = "mock-token";
+
+    let call = 0;
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn(async () => {
+      call++;
+      // First call (org bucket): under limit. Second (sender): over.
+      const count = call === 1 ? 1 : ENQUIRY_RATE_LIMIT.ENQUIRIES_PER_SENDER_PER_HOUR + 1;
+      return new Response(
+        JSON.stringify([{ result: 1 }, { result: 1 }, { result: count }, { result: 1 }]),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+
+    const enquiryId = await seedEnquiry("table for 4 next Saturday");
+    try {
+      const result = await processEnquiry(enquiryId);
+      expect(result.status).toBe("skipped");
+      if (result.status === "skipped") {
+        expect(result.reason).toBe("rate-limited-sender");
+      }
+
+      // Row stays at 'received' with parse_attempts unbumped — the
+      // pre-claim check ran before the claim could increment.
+      const [row] = await db
+        .select({
+          status: schema.enquiries.status,
+          parseAttempts: schema.enquiries.parseAttempts,
+        })
+        .from(schema.enquiries)
+        .where(eq(schema.enquiries.id, enquiryId));
+      expect(row?.status).toBe("received");
+      expect(row?.parseAttempts).toBe(0);
+    } finally {
+      global.fetch = originalFetch;
+      if (originalUrl === undefined) delete process.env["UPSTASH_REDIS_REST_URL"];
+      else process.env["UPSTASH_REDIS_REST_URL"] = originalUrl;
+      if (originalToken === undefined) delete process.env["UPSTASH_REDIS_REST_TOKEN"];
+      else process.env["UPSTASH_REDIS_REST_TOKEN"] = originalToken;
+    }
+  });
+});
+
 describe("processEnquiry — concurrency", () => {
   it("two concurrent calls on the same received enquiry do not double-process", async () => {
     mockParserOk({
