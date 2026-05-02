@@ -28,6 +28,22 @@ Calls the Anthropic API, costs money per enquiry, and handles edge cases that re
 - Draft saved to `enquiries(id, venue_id, received_at, raw, parsed, suggested_slots, status, reply_sent_at)`.
 - Reply sent via Resend using the venue's verified sending identity (not ours — prevents "via tablekit.uk" in clients).
 
+## Model choice (Haiku 4.5 vs alternatives)
+
+We pinned to Claude Haiku 4.5 on AWS Bedrock `eu-west-1`. Recording the rationale here so future-us doesn't relitigate when cost comes up again.
+
+- **Cost ceiling is loose.** Haiku 4.5 runs ~£0.001 per enquiry → ~£1/month at upper-bound Plus-tier volumes (1000 enquiries) vs £39/month revenue. Gemini Flash 2.5 (~£0.0004) saves ~50p/month per heavy user. Immaterial against the price the customer pays.
+- **Residency is the binding constraint.** Anthropic-on-Bedrock-EU keeps PII in Ireland. Vertex AI Gemini in `europe-west1` (Belgium) would also work, but adds Google Cloud as a brand-new sub-processor (separate from the existing Google Business Profile relationship — different DPA, different processing) and triggers the 30-day customer-notice cycle for a second time after we just resolved this.
+- **Vendor minimalism.** AWS is already entering the sub-processor table for this feature. Adding Google Cloud alongside compounds vendor sprawl with no offsetting benefit.
+- **Model-swap cost.** Per [gdpr.md](../playbooks/gdpr.md) §Reviewing changes that touch PII rule 8, an LLM model ID bump is a sub-processor-equivalent change — half a day of code work plus a fresh `/audit gdpr`. Doable any time; not worth it for ~50p/month.
+- **Quality is a wash.** Haiku 4.5 has a marginal edge on reasoning depth (useful for ambiguous "next Friday-ish" date phrasing); Flash 2.5 is also strong. Probably indistinguishable on this workload.
+
+**Revisit triggers** — reopen this decision if:
+
+1. Enquiry volume crosses ~100k/month and the cost line item shows up in the P&L.
+2. Anthropic raises Haiku pricing materially or retires the model.
+3. We start using the LLM for non-PII tasks (suggestion engines, reporting summaries) where the residency constraint relaxes — at that point we may want a non-Bedrock provider for the non-PII workload while keeping Haiku-on-Bedrock for enquiries.
+
 ## Prompt injection defence
 
 Email content is untrusted. Rules:
