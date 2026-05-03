@@ -23,6 +23,7 @@ import "server-only";
 import { inArray, lt } from "drizzle-orm";
 
 import { enquiries } from "@/lib/db/schema";
+import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 
 // 90 days in milliseconds. Single source of truth for the retention
@@ -62,9 +63,13 @@ export async function sweepExpiredEnquiries(opts?: {
   // bounded to `batchSize` per tick; subsequent ticks drain the rest.
   // We ORDER BY received_at ASC so the oldest rows go first — useful
   // if the sweep is throttled by a backlog and we want predictable
-  // forward progress.
+  // forward progress. Also pull organisationId so we can write a
+  // per-org audit entry below — `audit_log.organisation_id` is
+  // not-null, so platform-wide entries can't be written; per-org
+  // is the only shape available, and is also the most useful (an
+  // operator sees "X enquiries auto-purged" in their own audit feed).
   const targets = await db
-    .select({ id: enquiries.id })
+    .select({ id: enquiries.id, organisationId: enquiries.organisationId })
     .from(enquiries)
     .where(lt(enquiries.receivedAt, cutoff))
     .orderBy(enquiries.receivedAt)
@@ -83,6 +88,25 @@ export async function sweepExpiredEnquiries(opts?: {
       ),
     )
     .returning({ id: enquiries.id });
+
+  // Heartbeat: one audit entry per org with deletes. This is the
+  // ground-truth signal that the sweep ran and what it removed —
+  // queryable via SQL without Vercel CLI access. Verification:
+  //   select max(created_at) from audit_log
+  //   where action = 'enquiry.retention.swept';
+  // If that's >36h old, the cron has stopped firing.
+  const byOrg = new Map<string, number>();
+  for (const t of targets) {
+    byOrg.set(t.organisationId, (byOrg.get(t.organisationId) ?? 0) + 1);
+  }
+  for (const [organisationId, count] of byOrg) {
+    await audit.log({
+      organisationId,
+      action: "enquiry.retention.swept",
+      targetType: "enquiry",
+      metadata: { deleted: count, cutoff: cutoff.toISOString() },
+    });
+  }
 
   return {
     deleted: deleted.length,

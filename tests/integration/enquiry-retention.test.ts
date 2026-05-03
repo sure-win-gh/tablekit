@@ -10,7 +10,7 @@
 //   - batchSize honoured (multi-tick drain)
 //   - empty backlog returns {deleted: 0} without error
 
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -174,5 +174,81 @@ describe("sweepExpiredEnquiries — batching", () => {
     const r = await sweepExpiredEnquiries({ now });
     expect(r.deleted).toBe(0);
     expect(r.cutoff).toBe(new Date(now.getTime() - 90 * DAY_MS).toISOString());
+  });
+});
+
+describe("sweepExpiredEnquiries — audit heartbeat", () => {
+  it("writes one enquiry.retention.swept audit row per affected org", async () => {
+    // Take a snapshot of the audit row count before the sweep so we
+    // don't depend on prior tests' cleanup.
+    const before = await db
+      .select({ id: schema.auditLog.id })
+      .from(schema.auditLog)
+      .where(
+        and(
+          eq(schema.auditLog.organisationId, ctx.orgId),
+          eq(schema.auditLog.action, "enquiry.retention.swept"),
+        ),
+      );
+
+    const now = new Date("2026-08-05T04:15:00Z");
+    await Promise.all([
+      seed({ receivedAt: new Date(now.getTime() - 100 * DAY_MS) }),
+      seed({ receivedAt: new Date(now.getTime() - 100 * DAY_MS) }),
+      seed({ receivedAt: new Date(now.getTime() - 100 * DAY_MS) }),
+    ]);
+
+    const result = await sweepExpiredEnquiries({ now });
+    expect(result.deleted).toBe(3);
+
+    const beforeIds = new Set(before.map((r) => r.id));
+    const after = await db
+      .select({
+        id: schema.auditLog.id,
+        metadata: schema.auditLog.metadata,
+      })
+      .from(schema.auditLog)
+      .where(
+        and(
+          eq(schema.auditLog.organisationId, ctx.orgId),
+          eq(schema.auditLog.action, "enquiry.retention.swept"),
+        ),
+      );
+    // Exactly one new audit entry — all three deletes belong to the
+    // same org, so the per-org loop emits a single row with a count
+    // of 3 in metadata. Identify the new row by id-not-in-before-set
+    // so prior tests' audit rows don't confuse the assertion.
+    const newRows = after.filter((r) => !beforeIds.has(r.id));
+    expect(newRows.length).toBe(1);
+    const meta = newRows[0]!.metadata as { deleted: number; cutoff: string };
+    expect(meta.deleted).toBe(3);
+    expect(meta.cutoff).toBe(new Date(now.getTime() - 90 * DAY_MS).toISOString());
+  });
+
+  it("writes no audit row when nothing was deleted (heartbeat is delete-driven)", async () => {
+    const before = await db
+      .select({ id: schema.auditLog.id })
+      .from(schema.auditLog)
+      .where(
+        and(
+          eq(schema.auditLog.organisationId, ctx.orgId),
+          eq(schema.auditLog.action, "enquiry.retention.swept"),
+        ),
+      );
+
+    // No seeds — sweep has nothing to do.
+    const now = new Date("2025-01-02T00:00:00Z");
+    await sweepExpiredEnquiries({ now });
+
+    const after = await db
+      .select({ id: schema.auditLog.id })
+      .from(schema.auditLog)
+      .where(
+        and(
+          eq(schema.auditLog.organisationId, ctx.orgId),
+          eq(schema.auditLog.action, "enquiry.retention.swept"),
+        ),
+      );
+    expect(after.length).toBe(before.length);
   });
 });
