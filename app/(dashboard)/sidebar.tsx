@@ -62,6 +62,11 @@ export async function Sidebar() {
       // CRM (per-venue + cross-venue) is Plus-only. The shell uses
       // this single boolean rather than re-deriving from plan strings.
       crmEnabled: hasPlan(toPlan(data.org.plan), "plus"),
+      // AI enquiry inbox is Plus-only. Currently the same boolean as
+      // crmEnabled, but kept distinct so a future tier split (e.g.
+      // AI as a Premium add-on) doesn't require touching every CRM
+      // consumer.
+      aiEnquiryEnabled: hasPlan(toPlan(data.org.plan), "plus"),
       groupCrmEnabled: data.org.groupCrmEnabled,
       multiVenue: data.venues.length >= 2,
     },

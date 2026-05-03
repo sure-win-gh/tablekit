@@ -10,6 +10,7 @@ import {
   CreditCard,
   Database,
   Hourglass,
+  Inbox,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -48,6 +49,7 @@ export type SidebarData = {
     // orgItems. Computed in sidebar.tsx so the client component
     // doesn't need to know the plan ladder.
     crmEnabled: boolean;
+    aiEnquiryEnabled: boolean;
     groupCrmEnabled: boolean;
     multiVenue: boolean;
   };
@@ -116,6 +118,12 @@ export function SidebarShell({
           icon: TableProperties,
         },
         { href: `/dashboard/venues/${venueId}/services`, label: "Services", icon: UtensilsCrossed },
+        {
+          href: `/dashboard/venues/${venueId}/enquiries`,
+          label: "Enquiries",
+          icon: Inbox,
+          show: data.org.aiEnquiryEnabled,
+        },
         { href: `/dashboard/venues/${venueId}/deposits`, label: "Deposits", icon: CreditCard },
         { href: `/dashboard/venues/${venueId}/reports`, label: "Reports", icon: CalendarRange },
         { href: `/dashboard/venues/${venueId}/reviews`, label: "Reviews", icon: Star },
