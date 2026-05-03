@@ -74,19 +74,18 @@ export async function loadOrgGuests(
       id: guests.id,
       firstName: guests.firstName,
       createdAt: guests.createdAt,
-      visits:
-        sql<number>`coalesce(count(${bookings.id}) filter (where ${REALISED}), 0)::int`.as(
-          "visits",
-        ),
+      visits: sql<number>`coalesce(count(${bookings.id}) filter (where ${REALISED}), 0)::int`.as(
+        "visits",
+      ),
       venuesVisited: sql<number>`coalesce(count(distinct ${bookings.venueId}), 0)::int`.as(
         "venuesVisited",
       ),
       // node-postgres returns max(timestamptz) as a string for raw sql
       // expressions (drizzle's auto-parser only fires on declared
       // timestamp columns). Cast at the boundary below.
-      lastVisit: sql<
-        string | null
-      >`max(${bookings.startAt}) filter (where ${REALISED})`.as("lastVisit"),
+      lastVisit: sql<string | null>`max(${bookings.startAt}) filter (where ${REALISED})`.as(
+        "lastVisit",
+      ),
     })
     .from(guests)
     .leftJoin(bookings, joinCondition)

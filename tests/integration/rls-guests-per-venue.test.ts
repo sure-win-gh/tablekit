@@ -302,9 +302,7 @@ describe("loadOrgGuests — per-venue scoping", () => {
   });
 
   it("cross-venue mode (no venueId) returns the union", async () => {
-    const rows = await asUser(ctx.userAId, (tx) =>
-      loadOrgGuests(tx, { orgId: ctx.orgAId }),
-    );
+    const rows = await asUser(ctx.userAId, (tx) => loadOrgGuests(tx, { orgId: ctx.orgAId }));
     const ids = new Set(rows.map((r) => r.id));
     expect(ids.has(ctx.guest1Id)).toBe(true);
     expect(ids.has(ctx.guest2Id)).toBe(true);
@@ -322,9 +320,7 @@ describe("loadOrgGuests — cross-tenant fail-closed", () => {
 
 describe("requirePlan — Plus gate", () => {
   it("Free org throws InsufficientPlanError when 'plus' is required", async () => {
-    await expect(requirePlan(ctx.orgFreeId, "plus")).rejects.toBeInstanceOf(
-      InsufficientPlanError,
-    );
+    await expect(requirePlan(ctx.orgFreeId, "plus")).rejects.toBeInstanceOf(InsufficientPlanError);
   });
 
   it("Plus org returns 'plus'", async () => {
