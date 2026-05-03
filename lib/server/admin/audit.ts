@@ -104,6 +104,10 @@ export type AuditAction =
   // ai-enquiry phase
   | "enquiry.received"
   | "enquiry.rejected"
+  | "enquiry.replied"
+  | "enquiry.dismissed"
+  | "enquiry.reset"
+  | "enquiry.retried"
   | "enquiry.retention.swept"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"

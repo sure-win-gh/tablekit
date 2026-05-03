@@ -119,6 +119,7 @@ Posture:
 - Access logs exclude query strings and request bodies by default.
 - **Webhook routes that handle untrusted bodies must catch-and-rethrow as bland errors** — never let an upstream parser/verifier exception propagate to Sentry with the request body in `cause` or `message`. Pattern: `} catch { throw new Error("verify-failed"); }` (no error chaining). The `app/api/webhooks/resend-inbound` route is the load-bearing example.
 - **Sanitiser-bound error columns** (`enquiries.error`, `import_jobs.error`) — errors that flow into these columns via `sanitiseEnquiryError` / `sanitiseImportError` MUST carry sanitisable text in `.message`. Do NOT attach raw request/response payloads to `.cause` — the sanitisers only inspect `.message`, so any PII in `.cause` would silently survive to the at-rest plaintext column. If a future SDK starts payload-chaining errors (some AWS SDKs do), extend the sanitiser before relying on it.
+- **Outbound mail SDK errors** — Resend SDK error messages can echo the recipient email verbatim on validation failures (`invalid_to_address` etc.). The recipient on an enquiry reply is the decrypted guest email — PII. Wrap the SDK call so the typed error carries only a bland code (e.g. `resend:<error_name>`), and do NOT attach the raw SDK error object as `.cause`. `lib/enquiries/send-reply.ts` is the load-bearing example; copy that pattern for any future operator-initiated outbound.
 
 ## Breach response
 
