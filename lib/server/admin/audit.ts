@@ -109,6 +109,9 @@ export type AuditAction =
   | "enquiry.reset"
   | "enquiry.retried"
   | "enquiry.retention.swept"
+  // public-api phase
+  | "api_key.issued"
+  | "api_key.revoked"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
@@ -133,7 +136,8 @@ export type AuditTargetType =
   | "review"
   | "export"
   | "import_job"
-  | "enquiry";
+  | "enquiry"
+  | "api_key";
 
 export type AuditInput = {
   organisationId: string;

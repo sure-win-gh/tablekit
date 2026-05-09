@@ -1159,3 +1159,66 @@ export const inboundWebhookEvents = pgTable("inbound_webhook_events", {
   provider: text("provider").notNull(),
   receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// =============================================================================
+// API keys (Plus tier)
+// =============================================================================
+//
+// Bearer tokens for the public REST API at api.tablekit.uk/v1.
+// Format: `sk_live_<base64url(24 random bytes)>` — 32 chars after the
+// prefix, ~192 bits of entropy. The plaintext key is shown to the
+// operator exactly once at issuance and never persisted; we store
+// SHA-256(plaintext) as the unique lookup column. The `prefix` column
+// holds the first 12 chars (`sk_live_xxxx`) for display in the
+// dashboard so operators can identify which key is which without
+// exposing the secret.
+//
+// RLS: members can SELECT their org's keys (so the dashboard list
+// works under withUser). All writes (issue, revoke) flow via
+// adminDb after requireRole("owner") + requirePlan(orgId, "plus").
+//
+// Lookup at request time: hash the incoming Bearer token, SELECT by
+// hash WHERE revoked_at IS NULL. The hash column has a unique index
+// so the lookup is one row at most. last_used_at is updated
+// best-effort (debounced ≥1h) — bumping it on every request would
+// make every API key a hot row.
+
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    // First 12 chars of the plaintext key (`sk_live_xxxx`) — safe to
+    // display, used for "which key is this?" in the dashboard list.
+    prefix: text("prefix").notNull(),
+    // SHA-256 of the full plaintext key, hex-encoded (64 chars).
+    // Lookup column. Unique index ensures O(log n) auth.
+    hash: text("hash").notNull(),
+    // Operator-given label. Free text up to 80 chars (CHECK in mig).
+    label: text("label").notNull(),
+    // Audit trail — who issued this key. SET NULL on user delete so
+    // a deleted operator's keys still show with a "deleted user"
+    // label rather than orphaning the row.
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    // Set on first authenticated request and bumped best-effort
+    // (debounced ≥1h). Null means the key has never been used.
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    // Set when revoked. Auth lookups filter `revoked_at IS NULL` so
+    // a revoked key is immediately rejected. We don't hard-delete —
+    // keeping the row preserves audit trail (who issued, when, when
+    // revoked).
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Auth lookup hot path. Unique guarantees no two keys can collide
+    // (the entropy makes this vanishingly unlikely, but enforce it).
+    uniqueIndex("api_keys_hash_unique").on(t.hash),
+    // Dashboard list — newest first per org.
+    index("api_keys_org_created_idx").on(t.organisationId, t.createdAt.desc()),
+  ],
+);

@@ -55,3 +55,5 @@ drizzle/meta/_journal.json.backup
 
 # Claude plans are working notes, not source of truth — but we keep them
 # so don't ignore .claude/plans/
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks.json
