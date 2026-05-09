@@ -12,7 +12,7 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import * as schema from "@/lib/db/schema";
 import { POST } from "@/app/api/v1/bookings/route";
@@ -163,6 +163,56 @@ describe("POST /api/v1/bookings", () => {
       }) as never,
     );
     expect(res.status).toBe(400);
+  });
+
+  it("returns 429 when the per-email rate limit is saturated", async () => {
+    // Mock Upstash so the rate-limit helper takes the network path
+    // and returns a "limit exceeded" response. Without mocking, the
+    // helper falls open (no UPSTASH_REDIS_REST_URL in test env).
+    // The IP bucket is checked first — return a low ZCARD for it,
+    // then a high ZCARD for the email bucket so only the email
+    // limit trips. Pipeline result index 2 is the ZCARD; the
+    // limiter rejects when count > limit (3 per hour for email).
+    const originalUrl = process.env["UPSTASH_REDIS_REST_URL"];
+    const originalToken = process.env["UPSTASH_REDIS_REST_TOKEN"];
+    process.env["UPSTASH_REDIS_REST_URL"] = "https://mock-upstash.test";
+    process.env["UPSTASH_REDIS_REST_TOKEN"] = "mock-token";
+
+    let call = 0;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      // First call = IP bucket (allow); second = email bucket (saturate at 99).
+      const count = call++ === 0 ? 1 : 99;
+      return new Response(
+        JSON.stringify([{ result: 1 }, { result: 1 }, { result: count }, { result: 1 }]),
+        { status: 200 },
+      );
+    });
+
+    try {
+      const res = await POST(
+        makeRequest({
+          venueId,
+          serviceId,
+          date: DATE,
+          wallStart: "13:00",
+          partySize: 2,
+          guest: {
+            firstName: "Spammer",
+            email: `rl-test-${run}@example.com`,
+          },
+        }) as never,
+      );
+      expect(res.status).toBe(429);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toBe("rate-limited");
+      expect(res.headers.get("retry-after")).toBeTruthy();
+    } finally {
+      fetchSpy.mockRestore();
+      if (originalUrl === undefined) delete process.env["UPSTASH_REDIS_REST_URL"];
+      else process.env["UPSTASH_REDIS_REST_URL"] = originalUrl;
+      if (originalToken === undefined) delete process.env["UPSTASH_REDIS_REST_TOKEN"];
+      else process.env["UPSTASH_REDIS_REST_TOKEN"] = originalToken;
+    }
   });
 
   it("returns 409 when the exact slot is already taken", async () => {
