@@ -6,7 +6,7 @@ This folder holds the source of truth for every feature. Claude should read the 
 
 | # | Spec                        | Status | Notes |
 |---|-----------------------------|--------|-------|
-| 1 | [`auth.md`](auth.md)         | draft  | Sign up, login, organisations, roles |
+| 1 | [`auth.md`](auth.md)         | shipped | Sign up, login, multi-org membership, role + plan + venue gates, RLS. TOTP + invite flow + org switcher UI deferred — see spec. |
 | 2 | [`venues.md`](venues.md)     | partial | Venue + service + floor plan model. URL slug routing split out into `venue-slug.md` |
 | 3 | [`bookings.md`](bookings.md) | partial | Day list with search/filter, detail/edit dialog, table picker shipped; full acceptance-criteria sweep still pending |
 | 4 | [`widget.md`](widget.md)     | partial | Embeddable iframe loader + `/embed` route + dashboard snippet shipped; remaining acceptance criteria pending |
