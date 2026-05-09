@@ -3,10 +3,10 @@ import { asc, eq } from "drizzle-orm";
 import { getActiveOrg } from "@/lib/auth/active-org";
 import { hasPlan, toPlan } from "@/lib/auth/plan-level";
 import { withUser } from "@/lib/db/client";
-import { organisations, users, venues } from "@/lib/db/schema";
+import { memberships, organisations, users, venues } from "@/lib/db/schema";
 import { supabaseServer } from "@/lib/db/supabase-server";
 
-import { signOut } from "./actions";
+import { signOut, switchActiveOrgAction } from "./actions";
 import { SidebarShell, type SidebarData } from "./sidebar-shell";
 
 // Server-side data loader for the sidebar. One round-trip to fetch
@@ -47,7 +47,20 @@ export async function Sidebar() {
       .select({ id: venues.id, name: venues.name })
       .from(venues)
       .orderBy(asc(venues.name));
-    return { me, org, venues: venueRows };
+    // Memberships for the org-switcher dropdown. RLS scopes this
+    // to (memberships.organisation_id IN user_organisation_ids()),
+    // so we'd see other people's rows in our orgs too — filter to
+    // just our own to keep the projection tight.
+    const myMemberships = await db
+      .select({
+        orgId: memberships.organisationId,
+        orgName: organisations.name,
+      })
+      .from(memberships)
+      .innerJoin(organisations, eq(organisations.id, memberships.organisationId))
+      .where(eq(memberships.userId, user.id))
+      .orderBy(asc(organisations.name));
+    return { me, org, venues: venueRows, memberships: myMemberships };
   });
 
   if (!data.me || !data.org) return null;
@@ -58,6 +71,7 @@ export async function Sidebar() {
       email: data.me.email,
     },
     org: {
+      id: data.org.id,
       name: data.org.name,
       // CRM (per-venue + cross-venue) is Plus-only. The shell uses
       // this single boolean rather than re-deriving from plan strings.
@@ -71,7 +85,10 @@ export async function Sidebar() {
       multiVenue: data.venues.length >= 2,
     },
     venues: data.venues,
+    memberships: data.memberships,
   };
 
-  return <SidebarShell data={payload} signOut={signOut} />;
+  return (
+    <SidebarShell data={payload} signOut={signOut} switchActiveOrg={switchActiveOrgAction} />
+  );
 }

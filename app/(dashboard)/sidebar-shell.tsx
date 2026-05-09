@@ -4,8 +4,10 @@ import {
   Building2,
   CalendarDays,
   CalendarRange,
+  Check,
   ChevronLeft,
   ChevronRight,
+  ChevronsUpDown,
   Clock,
   CreditCard,
   Database,
@@ -43,6 +45,7 @@ const DRAWER_KEY = "tablekit:sidebar-drawer";
 export type SidebarData = {
   user: { name: string; email: string };
   org: {
+    id: string;
     name: string;
     // True iff org is on Plus tier — gates both the per-venue Guests
     // link inside venueItems and the cross-venue Guests link in
@@ -54,6 +57,10 @@ export type SidebarData = {
     multiVenue: boolean;
   };
   venues: Array<{ id: string; name: string }>;
+  // The user's full membership list, including the active org.
+  // Used by the org switcher dropdown — only rendered when this
+  // has 2+ entries.
+  memberships: Array<{ orgId: string; orgName: string }>;
 };
 
 type Item = {
@@ -66,9 +73,11 @@ type Item = {
 export function SidebarShell({
   data,
   signOut,
+  switchActiveOrg,
 }: {
   data: SidebarData;
   signOut: () => Promise<void>;
+  switchActiveOrg: (input: { orgId: string }) => Promise<void>;
 }) {
   const pathname = usePathname();
   const collapsed = useFlagStore(COLLAPSE_KEY);
@@ -177,26 +186,41 @@ export function SidebarShell({
           )}
         </button>
 
-        {/* Brand header */}
+        {/* Brand header. The org name slot is either a static label
+            or — for users with 2+ memberships — a click-to-switch
+            dropdown. Brand mark + "TableKit" wordmark always link to
+            /dashboard; only the org-name row is the switcher trigger,
+            so we don't accidentally swallow the brand-link click. */}
         <div
           className={cn(
-            "border-hairline flex items-center border-b px-4 py-4",
+            "border-hairline flex items-center gap-2 border-b px-4 py-4",
             collapsed ? "justify-center px-3" : "justify-start",
           )}
         >
-          <Link href="/dashboard" className="flex items-center gap-2">
+          <Link href="/dashboard" className="flex shrink-0 items-center">
             <span className="bg-coral inline-flex h-7 w-7 items-center justify-center rounded-md text-[13px] font-bold text-white">
               T
             </span>
-            {!collapsed ? (
-              <div className="flex flex-col">
-                <span className="text-ink text-sm leading-none font-bold tracking-tight">
-                  TableKit
-                </span>
-                <span className="text-ash mt-0.5 truncate text-[11px]">{data.org.name}</span>
-              </div>
-            ) : null}
           </Link>
+          {!collapsed ? (
+            <div className="flex min-w-0 flex-col">
+              <Link
+                href="/dashboard"
+                className="text-ink text-sm leading-none font-bold tracking-tight"
+              >
+                TableKit
+              </Link>
+              {data.memberships.length >= 2 ? (
+                <OrgSwitcher
+                  current={data.org}
+                  memberships={data.memberships}
+                  switchActiveOrg={switchActiveOrg}
+                />
+              ) : (
+                <span className="text-ash mt-0.5 truncate text-[11px]">{data.org.name}</span>
+              )}
+            </div>
+          ) : null}
         </div>
 
         {/* Nav */}
@@ -298,6 +322,61 @@ function NavLink({ item, active, collapsed }: { item: Item; active: boolean; col
       <Icon className={cn("h-4 w-4 shrink-0", active && "text-coral")} aria-hidden />
       {!collapsed ? <span className="truncate">{item.label}</span> : null}
     </Link>
+  );
+}
+
+// Click-to-switch dropdown rendered in place of the static org-name
+// label when the user has 2+ memberships. Uses native <details> so we
+// get free keyboard + a11y semantics without bringing in a popover
+// dependency. The dropdown closes implicitly on switch — the server
+// action redirects to /dashboard and the page re-renders fresh.
+function OrgSwitcher({
+  current,
+  memberships,
+  switchActiveOrg,
+}: {
+  current: { id: string; name: string };
+  memberships: Array<{ orgId: string; orgName: string }>;
+  switchActiveOrg: (input: { orgId: string }) => Promise<void>;
+}) {
+  return (
+    <details className="group relative mt-0.5">
+      <summary className="text-ash hover:text-ink flex cursor-pointer list-none items-center gap-1 truncate text-[11px] [&::-webkit-details-marker]:hidden">
+        <span className="truncate">{current.name}</span>
+        <ChevronsUpDown className="h-3 w-3 shrink-0" aria-hidden />
+      </summary>
+      <div
+        role="menu"
+        className="border-hairline absolute top-full left-0 z-50 mt-1 w-52 overflow-hidden rounded-md border bg-white py-1 shadow-lg"
+      >
+        {memberships.map((m) => {
+          const isCurrent = m.orgId === current.id;
+          return (
+            <button
+              key={m.orgId}
+              type="button"
+              role="menuitem"
+              disabled={isCurrent}
+              onClick={() => {
+                if (isCurrent) return;
+                void switchActiveOrg({ orgId: m.orgId });
+              }}
+              className={cn(
+                "flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs",
+                isCurrent
+                  ? "text-ink cursor-default font-semibold"
+                  : "text-charcoal hover:bg-cloud hover:text-ink",
+              )}
+            >
+              <span className="truncate">{m.orgName}</span>
+              {isCurrent ? (
+                <Check className="text-coral h-3.5 w-3.5 shrink-0" aria-hidden />
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    </details>
   );
 }
 
