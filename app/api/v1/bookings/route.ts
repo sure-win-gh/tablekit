@@ -1,18 +1,25 @@
 // Public booking API.
 //
-// POST /api/v1/bookings — anonymous. Rate-limited + captcha-verified
-// at the boundary, then delegates to the same `createBooking` domain
-// function the host flow uses. `source: "widget"` differentiates the
-// two in reporting.
+// POST /api/v1/bookings — anonymous, captcha + IP rate-limit. Used by
+//   the embeddable widget. Same handler as the host dashboard's
+//   create flow, just with `source: "widget"`.
 //
-// Intentionally narrow: no org context header, no auth. The venueId
-// in the body is the only input that matters; everything else is
-// derived from the DB. If a caller tries to forge an organisation,
-// the availability + exclusion layers still reject.
+// GET  /api/v1/bookings — Plus-tier REST list endpoint. Bearer auth
+//   via API key (lib/api-keys/auth.ts). Org scope is resolved from
+//   the key — never trust a query param. Filters: venue_id, from,
+//   to, status. Cursor pagination. Lives in this PR (PR2 of public-api).
+//
+// The two handlers share a URL but are otherwise independent — one
+// uses captcha + IP rate-limit, the other uses Bearer auth + (in
+// PR3) per-key rate-limit.
 
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
+import { withApiAuth } from "@/lib/api/v1/auth-wrapper";
+import { BOOKING_STATUSES, type BookingStatusLiteral, listBookings } from "@/lib/api/v1/bookings";
+import { decodeCursor, parseLimit } from "@/lib/api/v1/cursor";
+import { errorResponse } from "@/lib/api/v1/responses";
 import { createBooking } from "@/lib/bookings/create";
 import { bookingsReadOnly, widgetDisabled } from "@/lib/feature-flags";
 import { upsertGuestInput } from "@/lib/guests/schema";
@@ -20,6 +27,7 @@ import { sweepAbandonedDeposits } from "@/lib/payments/janitor";
 import { bookingReference, verifyCaptcha } from "@/lib/public/captcha";
 import { ipFromHeaders, rateLimit } from "@/lib/public/rate-limit";
 import { resolveVenueOrg } from "@/lib/public/venue";
+import { adminDb } from "@/lib/server/admin/db";
 
 const Body = z.object({
   venueId: z.string().uuid(),
@@ -139,4 +147,48 @@ export async function POST(req: NextRequest) {
     },
     { status: 201 },
   );
+}
+
+// ---------------------------------------------------------------------------
+// GET — list bookings (Plus-tier REST API)
+// ---------------------------------------------------------------------------
+
+export const GET = withApiAuth(async ({ req, orgId }) => {
+  const url = new URL(req.url);
+  const venueId = url.searchParams.get("venue_id") ?? undefined;
+  const fromRaw = url.searchParams.get("from");
+  const toRaw = url.searchParams.get("to");
+  const statusRaw = url.searchParams.get("status");
+
+  const from = fromRaw ? parseDate(fromRaw) : null;
+  if (fromRaw && !from) return errorResponse("bad_request", "Invalid `from` timestamp.");
+  const to = toRaw ? parseDate(toRaw) : null;
+  if (toRaw && !to) return errorResponse("bad_request", "Invalid `to` timestamp.");
+
+  let status: BookingStatusLiteral[] | undefined;
+  if (statusRaw) {
+    const requested = statusRaw.split(",").map((s) => s.trim());
+    const invalid = requested.filter((s) => !BOOKING_STATUSES.includes(s as BookingStatusLiteral));
+    if (invalid.length > 0) {
+      return errorResponse("bad_request", `Unknown status value: ${invalid.join(", ")}.`);
+    }
+    status = requested as BookingStatusLiteral[];
+  }
+
+  const result = await listBookings(adminDb(), {
+    organisationId: orgId,
+    venueId,
+    from: from ?? undefined,
+    to: to ?? undefined,
+    status,
+    cursor: decodeCursor<string>(url.searchParams.get("cursor")),
+    limit: parseLimit(url.searchParams.get("limit")),
+  });
+
+  return NextResponse.json(result);
+});
+
+function parseDate(raw: string): Date | null {
+  const d = new Date(raw);
+  return Number.isFinite(d.getTime()) ? d : null;
 }
