@@ -20,7 +20,11 @@ import { adminDb } from "@/lib/server/admin/db";
 
 export type ShiftBookingTimeInput = {
   organisationId: string;
-  actorUserId: string;
+  // Null when the shift was triggered by an API key rather than a
+  // dashboard user. The audit log records null on those rows; PR7
+  // of the public-api series adds the api_key_id to the audit
+  // metadata so machine-initiated shifts remain traceable.
+  actorUserId: string | null;
   bookingId: string;
   newStartAt: Date;
 };
