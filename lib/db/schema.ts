@@ -1222,3 +1222,40 @@ export const apiKeys = pgTable(
     index("api_keys_org_created_idx").on(t.organisationId, t.createdAt.desc()),
   ],
 );
+
+// =============================================================================
+// API write-endpoint idempotency keys
+// =============================================================================
+//
+// Stripe-style Idempotency-Key support for POST/PATCH on /v1/*. The
+// claim row is INSERTed with response_status=null first; the handler
+// then runs and UPDATEs the row with the final status + body. A
+// concurrent retry hitting the same (api_key_id, key) sees the
+// claim row and either returns the cached response (status non-null)
+// or 409 in_flight (status null — original handler still running).
+//
+// Bucketed per api_key_id so two organisations using the same
+// idempotency-key value (or two keys in the same org) cannot collide.
+//
+// RLS: deny all from authenticated/anon — this is API infrastructure.
+// All access via adminDb. Cleanup (24h expiry) lands in a future
+// cron — for now rows accumulate but are bounded by API key revocation
+// (FK cascade).
+
+export const apiIdempotencyKeys = pgTable(
+  "api_idempotency_keys",
+  {
+    apiKeyId: uuid("api_key_id")
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: "cascade" }),
+    // Operator-supplied Idempotency-Key header value. Capped at 200
+    // chars by CHECK in the migration — Stripe also caps at 255.
+    key: text("key").notNull(),
+    // Final response cached after the original handler completed.
+    // Both null while the handler is still running (the claim state).
+    responseStatus: integer("response_status"),
+    responseBody: jsonb("response_body"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.apiKeyId, t.key] })],
+);
