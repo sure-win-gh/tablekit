@@ -27,6 +27,7 @@ import { sweepAbandonedDeposits } from "@/lib/payments/janitor";
 import { bookingReference, verifyCaptcha } from "@/lib/public/captcha";
 import { ipFromHeaders, rateLimit } from "@/lib/public/rate-limit";
 import { resolveVenueOrg } from "@/lib/public/venue";
+import { hashForLookup } from "@/lib/security/crypto";
 import { adminDb } from "@/lib/server/admin/db";
 
 const Body = z.object({
@@ -82,6 +83,23 @@ export async function POST(req: NextRequest): Promise<Response> {
         issues: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
       },
       { status: 400 },
+    );
+  }
+
+  // 2b. Per-email rate limit (spec acceptance #8). The IP bucket
+  //     above blunts a single attacker hammering one venue; this
+  //     bucket blunts a distributed bot net all submitting under the
+  //     same guest email (e.g. card-testing or harassment of one
+  //     real address). Hashed via hashForLookup so the bucket key
+  //     is non-PII even on Upstash. 3 successful posts per hour per
+  //     email is generous for a real human re-trying a flaky
+  //     network — anything more is automation.
+  const emailHash = hashForLookup(parsed.data.guest.email, "email");
+  const emailRl = await rateLimit(`bookings:email:${emailHash}`, 3, 60 * 60);
+  if (!emailRl.ok) {
+    return NextResponse.json(
+      { error: "rate-limited" },
+      { status: 429, headers: { "retry-after": String(emailRl.retryAfterSec ?? 3600) } },
     );
   }
 
