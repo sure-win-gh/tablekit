@@ -17,6 +17,7 @@ import { and, eq } from "drizzle-orm";
 import { bookings } from "@/lib/db/schema";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
+import { dispatchEvent } from "@/lib/webhooks/dispatch";
 
 export type ShiftBookingTimeInput = {
   organisationId: string;
@@ -81,6 +82,26 @@ export async function shiftBookingTime(
       fromStartAt: booking.startAt.toISOString(),
       toStartAt: input.newStartAt.toISOString(),
     },
+  });
+
+  // booking.updated webhook — time shifts are the canonical "the
+  // booking changed without changing status" case. Fire-and-forget.
+  void dispatchEvent({
+    organisationId: input.organisationId,
+    eventType: "booking.updated",
+    eventId: `booking.updated:${input.bookingId}:${Date.now()}`,
+    payload: {
+      booking_id: input.bookingId,
+      kind: "time-shift",
+      from_start_at: booking.startAt.toISOString(),
+      to_start_at: input.newStartAt.toISOString(),
+      to_end_at: newEndAt.toISOString(),
+    },
+  }).catch((err) => {
+    console.error("[lib/bookings/shift.ts] webhook dispatch failed:", {
+      bookingId: input.bookingId,
+      message: err instanceof Error ? err.message : String(err),
+    });
   });
 
   return { ok: true, newStartAt: input.newStartAt, newEndAt };

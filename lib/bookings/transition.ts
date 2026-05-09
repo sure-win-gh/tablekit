@@ -16,6 +16,8 @@ import { bookingEvents, bookings } from "@/lib/db/schema";
 import { onBookingCancelled, onBookingFinished } from "@/lib/messaging/triggers";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
+import { dispatchEvent } from "@/lib/webhooks/dispatch";
+import type { WebhookEvent } from "@/lib/webhooks/events";
 
 import { InvalidTransitionError, assertTransition, type BookingStatus } from "./state";
 
@@ -103,6 +105,48 @@ export async function transitionBooking(
       });
     }
 
+    // Outbound webhook for the matching subscribed event. Map the
+    // booking_status enum to our public event taxonomy. `requested`,
+    // `confirmed`, and `finished` don't have dedicated public events
+    // — they fall under `booking.updated` so subscribers can react
+    // to the status change generically.
+    const eventType = transitionToEventType(to);
+    void dispatchEvent({
+      organisationId,
+      eventType,
+      eventId: `${eventType}:${bookingId}:${Date.now()}`,
+      payload: {
+        booking_id: bookingId,
+        from,
+        to,
+        ...(options?.cancelledReason ? { cancelled_reason: options.cancelledReason } : {}),
+      },
+    }).catch((err) => {
+      console.error("[lib/bookings/transition.ts] webhook dispatch failed:", {
+        bookingId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
+
     return { ok: true, from, to };
   });
+}
+
+// Map booking_status enum → public webhook event. The five public
+// events the spec promises are subscribers' contract; status values
+// without a dedicated event collapse to `booking.updated` so the
+// subscriber sees every state change. Exported for unit testing.
+export function transitionToEventType(to: BookingStatus): WebhookEvent {
+  switch (to) {
+    case "cancelled":
+      return "booking.cancelled";
+    case "seated":
+      return "booking.seated";
+    case "no_show":
+      return "booking.no_show";
+    case "requested":
+    case "confirmed":
+    case "finished":
+      return "booking.updated";
+  }
 }
