@@ -96,6 +96,7 @@ We also expose a guest-facing page at `/privacy/request?v=<venue-slug>` that pos
 - **Lookup hashing:** `hashForLookup(input, kind)` is HMAC-SHA256 under the master key, hex-encoded. `kind="email"` lowercases + trims; `kind="phone"` strips non-digits. Used for `(org_id, email_hash)` uniqueness on guests and "find-by-email" without decrypting rows.
 - **In transit:** TLS 1.3 everywhere. HSTS preload on dashboard and widget origins.
 - **Backups:** encrypted, region-locked. 30-day point-in-time recovery via Supabase.
+- **Operator-typed notes are NOT encrypted** (`bookings.notes`, plus equivalent free-text columns elsewhere). They live in plaintext because they're operator-curated context for legitimate use. As of PR2 of the public REST API series, `bookings.notes` is reachable via `GET /v1/bookings`. Operators must not paste guest contact details (email, phone, full name) into `notes` — those have their own encrypted columns. The dashboard's booking-edit UI surfaces this in helper text.
 
 ## Special-category data (Article 9)
 
