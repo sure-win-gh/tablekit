@@ -37,6 +37,7 @@ import { CardHoldIntentError, createCardHoldIntent } from "@/lib/payments/holds"
 import { createDepositIntent, DepositIntentError } from "@/lib/payments/intents";
 import { type DepositRule, resolveRule } from "@/lib/payments/rules";
 import { audit } from "@/lib/server/admin/audit";
+import { dispatchEvent } from "@/lib/webhooks/dispatch";
 import { adminDb } from "@/lib/server/admin/db";
 import { stripeEnabled } from "@/lib/stripe/client";
 import { getAccount } from "@/lib/stripe/connect";
@@ -339,6 +340,30 @@ export async function createBooking(
       status: initialStatus,
       depositRequired: Boolean(depositReq),
     },
+  });
+
+  // Outbound webhook: booking.created. Fire-and-forget — a webhook
+  // dispatch failure must not break booking creation. PR6b only
+  // wires this single event; the other 4 (updated/cancelled/seated/
+  // no_show) land in PR6b₂. Payload is non-PII (ids + ints + status).
+  void dispatchEvent({
+    organisationId,
+    eventType: "booking.created",
+    eventId: `booking.created:${bookingId}`,
+    payload: {
+      booking_id: bookingId,
+      venue_id: input.venueId,
+      service_id: input.serviceId,
+      guest_id: guestR.guestId,
+      party_size: input.partySize,
+      status: initialStatus,
+      table_ids: option.tableIds,
+    },
+  }).catch((err) => {
+    console.error("[lib/bookings/create.ts] webhook dispatch failed:", {
+      bookingId,
+      message: err instanceof Error ? err.message : String(err),
+    });
   });
 
   // If no deposit required, we're done — caller sees a confirmed booking.

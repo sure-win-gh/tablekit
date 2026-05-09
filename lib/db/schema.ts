@@ -1325,3 +1325,74 @@ export const webhookSubscriptions = pgTable(
     index("webhook_subscriptions_org_created_idx").on(t.organisationId, t.createdAt.desc()),
   ],
 );
+
+// =============================================================================
+// Webhook deliveries (Plus tier)
+// =============================================================================
+//
+// One row per attempt to deliver an event to a subscription. Created
+// in `pending` by the dispatcher; the cron drains pending +
+// ready-for-retry rows, POSTs the signed body, and updates the row
+// to `succeeded` or `failed`. Failures with attempts < 5 reschedule
+// via next_attempt_at; the cron picks them up next tick.
+//
+// Payload: stored as plaintext jsonb. Booking events carry ids +
+// timestamps + status — no PII columns. If a future event surface
+// includes guest contact details, encrypt at the column level.
+//
+// RLS: deny-all from authenticated/anon. All access via adminDb.
+// PR6c adds an org-scoped read policy + dashboard log view + replay.
+// Until then, the surface is admin-only.
+
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    subscriptionId: uuid("subscription_id")
+      .notNull()
+      .references(() => webhookSubscriptions.id, { onDelete: "cascade" }),
+    // Denormalised so the cron + retention sweep don't need to join
+    // back to subscriptions (which the FK cascade handles for us).
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    // Event name (e.g. "booking.created"). Free text for forward
+    // compat; the dispatcher only enqueues subscribed events from
+    // WEBHOOK_EVENTS so storage gets a bounded set in practice.
+    eventType: text("event_type").notNull(),
+    // Stable identifier for the event instance. Same value across
+    // attempts (so a subscriber can dedupe at their end if they
+    // implement idempotency). Currently `${eventType}:${bookingId}:${createdAt}`.
+    eventId: text("event_id").notNull(),
+    // Plaintext jsonb. Booking events are non-PII at the column
+    // level; future events with PII fields must encrypt before this.
+    payload: jsonb("payload").notNull(),
+    // 'pending' | 'succeeded' | 'failed'. CHECK in mig.
+    status: text("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    // When the cron should next attempt this delivery. Null on
+    // succeeded/permanent-failed rows. The cron picks rows where
+    // status='pending' AND next_attempt_at <= now().
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).defaultNow(),
+    // Cached HTTP status of the last attempt. Useful for dashboard
+    // triage — operators see "23 deliveries failing 502 to https://X".
+    lastStatus: integer("last_status"),
+    // Sanitised error string from the last attempt (network error
+    // class or HTTP status). Bounded at 500 chars by CHECK.
+    lastError: text("last_error"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Cron picker: pending rows due to fire. Partial index keeps it
+    // small — succeeded/failed rows don't bloat it.
+    index("webhook_deliveries_due_idx")
+      .on(t.nextAttemptAt)
+      .where(sql`${t.status} = 'pending'`),
+    // Dashboard log (PR6c) — newest first per org.
+    index("webhook_deliveries_org_created_idx").on(t.organisationId, t.createdAt.desc()),
+    // Per-subscription history.
+    index("webhook_deliveries_subscription_idx").on(t.subscriptionId),
+  ],
+);
