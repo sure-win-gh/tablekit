@@ -1259,3 +1259,69 @@ export const apiIdempotencyKeys = pgTable(
   },
   (t) => [primaryKey({ columns: [t.apiKeyId, t.key] })],
 );
+
+// =============================================================================
+// Webhook subscriptions (Plus tier)
+// =============================================================================
+//
+// Per-organisation outbound webhook registrations. Plus customers
+// register an HTTPS endpoint + select which booking events they
+// want pushed to it. Each subscription has a shared secret used
+// to HMAC-SHA256 sign delivery bodies — recipients verify via the
+// X-TableKit-Signature header.
+//
+// Secret storage: envelope-encrypted under the org's DEK. The
+// plaintext is shown to the operator exactly once at creation
+// (same pattern as api_keys' plaintext token). Lost? Rotate the
+// subscription.
+//
+// RLS: members SELECT their org's subscriptions so the dashboard
+// list works under withUser. Writes (create, revoke) flow via
+// adminDb after requireRole("owner") + requirePlan(orgId, "plus")
+// at the action layer.
+//
+// Delivery + retry tables land in PR6b — the splittable seam is
+// "registration vs sending". This PR only ships registration.
+
+export const webhookSubscriptions = pgTable(
+  "webhook_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    // Operator-supplied HTTPS endpoint. Format check enforced both
+    // in Zod at the action layer + as a CHECK constraint in the
+    // migration.
+    url: text("url").notNull(),
+    // Operator-given label, e.g. "Mailchimp sync". 1–80 chars
+    // (CHECK in mig).
+    label: text("label").notNull(),
+    // Envelope-encrypted shared secret. Used to HMAC the delivery
+    // body. PR6b's `lib/webhooks/sign.ts` will decrypt + sign.
+    secretCipher: text("secret_cipher").notNull(),
+    // Subscribed event names. Currently a free-text array; PR6b
+    // bounds it via Zod to the documented set
+    // (booking.created, booking.updated, booking.cancelled,
+    // booking.seated, booking.no_show).
+    events: text("events").array().notNull(),
+    // Toggleable. False subscriptions are skipped at dispatch time
+    // without the operator having to revoke + re-create.
+    active: boolean("active").notNull().default(true),
+    // Audit trail for who registered this subscription. SET NULL on
+    // user delete so a removed operator's subscriptions still show
+    // their history.
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    // Set when revoked. Subscriptions stay visible in the dashboard
+    // (with a Revoked badge) for audit trail; dispatcher filters
+    // them out via revokedAt IS NULL.
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Dashboard list — newest first per org.
+    index("webhook_subscriptions_org_created_idx").on(t.organisationId, t.createdAt.desc()),
+  ],
+);

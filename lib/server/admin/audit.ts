@@ -112,6 +112,8 @@ export type AuditAction =
   // public-api phase
   | "api_key.issued"
   | "api_key.revoked"
+  | "webhook_subscription.created"
+  | "webhook_subscription.revoked"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
@@ -137,7 +139,8 @@ export type AuditTargetType =
   | "export"
   | "import_job"
   | "enquiry"
-  | "api_key";
+  | "api_key"
+  | "webhook_subscription";
 
 export type AuditInput = {
   organisationId: string;
