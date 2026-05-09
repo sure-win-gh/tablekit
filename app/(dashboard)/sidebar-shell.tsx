@@ -12,6 +12,7 @@ import {
   Hourglass,
   Inbox,
   LayoutDashboard,
+  Lock,
   LogOut,
   Menu,
   Settings,
@@ -96,6 +97,7 @@ export function SidebarShell({
     },
     { href: "/dashboard/data", label: "Data", icon: Database },
     { href: "/dashboard/privacy-requests", label: "Privacy requests", icon: ShieldCheck },
+    { href: "/dashboard/settings/security", label: "Security", icon: Lock },
   ];
 
   // Venue-section items, only rendered while inside a venue route.
