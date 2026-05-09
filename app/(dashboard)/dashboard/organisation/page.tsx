@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { Building2, ChevronRight, KeyRound } from "lucide-react";
+import { Building2, ChevronRight, KeyRound, Webhook } from "lucide-react";
 import Link from "next/link";
 
 import { hasPlan, toPlan } from "@/lib/auth/plan-level";
@@ -101,14 +101,24 @@ export default async function OrganisationPage() {
             Issue Bearer tokens for the public REST API at{" "}
             <span className="font-mono">api.tablekit.uk/v1</span>. Owner-only.
           </p>
-          <Link
-            href="/dashboard/organisation/api-keys"
-            className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
-          >
-            <KeyRound className="text-ash h-4 w-4" aria-hidden />
-            Manage API keys
-            <ChevronRight className="text-stone h-4 w-4" aria-hidden />
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/dashboard/organisation/api-keys"
+              className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
+            >
+              <KeyRound className="text-ash h-4 w-4" aria-hidden />
+              Manage API keys
+              <ChevronRight className="text-stone h-4 w-4" aria-hidden />
+            </Link>
+            <Link
+              href="/dashboard/organisation/webhooks"
+              className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
+            >
+              <Webhook className="text-ash h-4 w-4" aria-hidden />
+              Manage webhooks
+              <ChevronRight className="text-stone h-4 w-4" aria-hidden />
+            </Link>
+          </div>
         </section>
       ) : null}
     </main>
