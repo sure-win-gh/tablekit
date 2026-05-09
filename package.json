@@ -4,7 +4,7 @@
   "private": true,
   "description": "UK table booking SaaS for independent hospitality.",
   "engines": {
-    "node": "22.11.0"
+    "node": ">=22.12.0"
   },
   "packageManager": "pnpm@9.15.0",
   "scripts": {
@@ -82,6 +82,9 @@
       "libc": [
         "glibc"
       ]
+    },
+    "overrides": {
+      "fast-xml-builder": ">=1.1.7"
     }
   }
 }
