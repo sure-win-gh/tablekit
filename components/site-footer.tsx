@@ -17,6 +17,10 @@ const PRODUCT = [
   { href: "/signup", label: "Sign up" },
 ];
 
+// Developer surface — currently just the public API reference.
+// Future: SDK packages, changelog, status page.
+const DEVELOPERS = [{ href: "/docs/api", label: "API reference" }];
+
 export function SiteFooter() {
   const year = new Date().getFullYear();
   return (
@@ -28,6 +32,7 @@ export function SiteFooter() {
         </div>
         <div className="flex flex-wrap gap-10 text-xs">
           <FooterColumn label="Product" links={PRODUCT} />
+          <FooterColumn label="Developers" links={DEVELOPERS} />
           <FooterColumn label="Legal" links={LEGAL} />
         </div>
       </div>
