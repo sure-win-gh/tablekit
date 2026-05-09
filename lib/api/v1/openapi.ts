@@ -359,6 +359,58 @@ export function buildOpenApiDocument() {
           },
         },
       },
+      "/availability": {
+        get: {
+          summary: "List bookable slots for a venue on a date",
+          description:
+            "Public, anonymous (no Bearer auth required). IP rate-limited (30/min). Returns the slots the booking POST will accept on that date for the given party size. Times are venue-local in `wall_start` and UTC ISO-8601 in `start_at`/`end_at`.",
+          security: [],
+          parameters: [
+            Uuid.meta({ param: { name: "venue_id", in: "query" } }),
+            z
+              .string()
+              .regex(/^\d{4}-\d{2}-\d{2}$/)
+              .meta({
+                param: { name: "date", in: "query" },
+                example: "2026-06-15",
+                description: "Venue-local date (YYYY-MM-DD).",
+              }),
+            z
+              .number()
+              .int()
+              .min(1)
+              .max(20)
+              .meta({ param: { name: "party_size", in: "query" } }),
+          ],
+          responses: {
+            "200": {
+              description: "Slots for the requested date + party size.",
+              content: {
+                "application/json": {
+                  schema: z.object({
+                    venue_id: Uuid,
+                    timezone: z.string(),
+                    date: z.string(),
+                    party_size: z.number().int(),
+                    slots: z.array(
+                      z.object({
+                        service_id: Uuid,
+                        service_name: z.string(),
+                        wall_start: z.string().meta({ example: "19:00" }),
+                        start_at: Iso8601,
+                        end_at: Iso8601,
+                      }),
+                    ),
+                  }),
+                },
+              },
+            },
+            "400": errorRef(),
+            "404": errorRef(),
+            "429": errorRef(),
+          },
+        },
+      },
     },
   });
 }

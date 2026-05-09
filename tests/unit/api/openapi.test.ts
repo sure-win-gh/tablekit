@@ -19,7 +19,15 @@ describe("OpenAPI document", () => {
     const doc = buildOpenApiDocument();
     const paths = Object.keys(doc.paths ?? {}).sort();
     expect(paths).toEqual(
-      ["/bookings", "/bookings/{id}", "/guests", "/guests/{id}", "/services", "/venues"].sort(),
+      [
+        "/availability",
+        "/bookings",
+        "/bookings/{id}",
+        "/guests",
+        "/guests/{id}",
+        "/services",
+        "/venues",
+      ].sort(),
     );
   });
 
@@ -36,6 +44,7 @@ describe("OpenAPI document", () => {
     expect(methodsOf("/guests/{id}")).toEqual(["get"]);
     expect(methodsOf("/venues")).toEqual(["get"]);
     expect(methodsOf("/services")).toEqual(["get"]);
+    expect(methodsOf("/availability")).toEqual(["get"]);
   });
 
   it("declares Bearer auth as the global security scheme", () => {
