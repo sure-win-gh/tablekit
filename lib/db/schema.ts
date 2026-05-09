@@ -1396,3 +1396,49 @@ export const webhookDeliveries = pgTable(
     index("webhook_deliveries_subscription_idx").on(t.subscriptionId),
   ],
 );
+
+// =============================================================================
+// API request log (Plus tier — operational telemetry)
+// =============================================================================
+//
+// One row per authenticated request to /api/v1/*. Captures the
+// minimum fields the spec promises: method, path, organisation,
+// status, latency. NEVER request or response bodies — operator-
+// typed `notes` and guest PII are reachable through the API
+// surface and we don't want them in this table.
+//
+// Retention: 90 days, swept by /api/cron/api-request-log-retention.
+//
+// RLS: deny-all from authenticated/anon (admin-only). PR7's scope
+// is the data + retention; an operator-facing "API activity"
+// dashboard view could lift to member-read later.
+//
+// FK posture:
+//   • organisation_id: CASCADE — log dies with the org.
+//   • api_key_id: SET NULL — preserve the row when a key is
+//     revoked + deleted, so the org can audit "what did key X do
+//     in its lifetime" via the row's created_at + path.
+
+export const apiRequestLog = pgTable(
+  "api_request_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    apiKeyId: uuid("api_key_id").references(() => apiKeys.id, { onDelete: "set null" }),
+    method: text("method").notNull(),
+    // URL path without query string. Bounded by CHECK to prevent a
+    // pathological request from inflating storage.
+    path: text("path").notNull(),
+    status: integer("status").notNull(),
+    latencyMs: integer("latency_ms").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Org-scoped chronological reads (future operator UI).
+    index("api_request_log_org_created_idx").on(t.organisationId, t.createdAt.desc()),
+    // Retention sweep — by raw created_at across orgs.
+    index("api_request_log_created_at_idx").on(t.createdAt),
+  ],
+);

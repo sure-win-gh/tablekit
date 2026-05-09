@@ -33,6 +33,7 @@ import type { NextRequest } from "next/server";
 import { resolveBearerToken } from "@/lib/api-keys/auth";
 import { rateLimit } from "@/lib/public/rate-limit";
 
+import { logRequest } from "./request-log";
 import { errorResponse, rateLimitedResponse } from "./responses";
 
 // Per-spec: 600 requests per minute per key (10/s sustained).
@@ -54,10 +55,23 @@ export function withApiAuth(handler: ApiHandler) {
       return errorResponse("unauthorized", "Invalid or missing API key.");
     }
 
+    const startedAt = performance.now();
+    const path = new URL(req.url).pathname;
+    const log = (status: number) =>
+      logRequest({
+        organisationId: resolved.organisationId,
+        apiKeyId: resolved.id,
+        method: req.method,
+        path,
+        status,
+        latencyMs: performance.now() - startedAt,
+      });
+
     // Per-key sliding-window rate limit. Bucket on keyId (not orgId)
     // so two keys in the same org have independent budgets.
     const rl = await rateLimit(`apikey:${resolved.id}`, RATE_LIMIT_PER_MIN, RATE_WINDOW_SEC);
     if (!rl.ok) {
+      void log(429);
       return rateLimitedResponse(rl.retryAfterSec ?? RATE_WINDOW_SEC);
     }
 
@@ -68,6 +82,9 @@ export function withApiAuth(handler: ApiHandler) {
       // spec's required surface but cheap to add.
       res.headers.set("x-ratelimit-limit", String(RATE_LIMIT_PER_MIN));
       res.headers.set("x-ratelimit-remaining", String(rl.remaining));
+      // Fire-and-forget request-log INSERT. Per spec acceptance #6:
+      // method, path, org, status, latency. No bodies.
+      void log(res.status);
       return res;
     } catch (err) {
       // Bland 500 to the client; structured but PII-redacted log to
@@ -84,6 +101,7 @@ export function withApiAuth(handler: ApiHandler) {
         keyId: resolved.id,
         ...meta,
       });
+      void log(500);
       return errorResponse("internal_error", "An internal error occurred.");
     }
   };
