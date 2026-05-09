@@ -30,3 +30,21 @@ const STATUS: Record<ApiErrorCode, number> = {
 export function errorResponse(code: ApiErrorCode, message: string): NextResponse {
   return NextResponse.json({ error: { code, message } }, { status: STATUS[code] });
 }
+
+// 429 with Retry-After. RFC 6585 + RFC 7231: Retry-After is in
+// seconds. Our limiter exposes `retryAfterSec` directly (window
+// length until the oldest request in the sliding window expires).
+export function rateLimitedResponse(retryAfterSec: number): NextResponse {
+  return NextResponse.json(
+    {
+      error: {
+        code: "rate_limited" as const,
+        message: `Rate limit exceeded. Retry after ${retryAfterSec}s.`,
+      },
+    },
+    {
+      status: 429,
+      headers: { "retry-after": String(retryAfterSec) },
+    },
+  );
+}
