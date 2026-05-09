@@ -236,8 +236,15 @@
     {
       "idx": 33,
       "version": "7",
-      "when": 1778365000000,
+      "when": 1778352000000,
       "tag": "0033_curious_mister_immortal",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1778355607543,
+      "tag": "0034_cute_annihilus",
       "breakpoints": true
     }
   ]
