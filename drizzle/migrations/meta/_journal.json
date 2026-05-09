@@ -232,6 +232,13 @@
       "when": 1778349111907,
       "tag": "0032_thin_owl",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1778365000000,
+      "tag": "0033_curious_mister_immortal",
+      "breakpoints": true
     }
   ]
 }

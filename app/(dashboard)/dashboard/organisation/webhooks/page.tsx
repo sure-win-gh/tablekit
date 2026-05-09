@@ -87,7 +87,12 @@ export default async function WebhooksPage() {
               >
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-ink text-sm font-semibold">{s.label}</span>
+                    <Link
+                      href={`/dashboard/organisation/webhooks/${s.id}`}
+                      className="text-ink text-sm font-semibold hover:underline"
+                    >
+                      {s.label}
+                    </Link>
                     <StatusBadge revokedAt={s.revokedAt} active={s.active} />
                   </div>
                   <p className="text-ash mt-1 font-mono text-xs break-all">{s.url}</p>

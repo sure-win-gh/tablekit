@@ -114,6 +114,7 @@ export type AuditAction =
   | "api_key.revoked"
   | "webhook_subscription.created"
   | "webhook_subscription.revoked"
+  | "webhook_subscription.delivery_replayed"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
