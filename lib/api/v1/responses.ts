@@ -16,6 +16,7 @@ export type ApiErrorCode =
   | "unauthorized"
   | "not_found"
   | "bad_request"
+  | "conflict"
   | "rate_limited"
   | "internal_error";
 
@@ -23,6 +24,10 @@ const STATUS: Record<ApiErrorCode, number> = {
   unauthorized: 401,
   not_found: 404,
   bad_request: 400,
+  // 409 — used by the Idempotency-Key path when the original handler
+  // is still in flight. RFC 7231: "the request could not be completed
+  // due to a conflict with the current state of the target resource".
+  conflict: 409,
   rate_limited: 429,
   internal_error: 500,
 };
