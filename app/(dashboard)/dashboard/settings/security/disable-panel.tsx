@@ -8,13 +8,7 @@ import { disableMfa } from "../../../mfa-actions";
 // AAL2 lives in disableMfa(); the `canDisable` prop is just UX —
 // disabling the button + showing the explanatory text — to avoid
 // a confusing round-trip when the user clearly can't disable yet.
-export function DisablePanel({
-  factorId,
-  canDisable,
-}: {
-  factorId: string;
-  canDisable: boolean;
-}) {
+export function DisablePanel({ factorId, canDisable }: { factorId: string; canDisable: boolean }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -38,7 +32,7 @@ export function DisablePanel({
         type="button"
         onClick={onClick}
         disabled={!canDisable || pending}
-        className="text-coral border-coral hover:bg-coral hover:text-white disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-coral inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition"
+        className="text-coral border-coral hover:bg-coral disabled:hover:text-coral inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition hover:text-white disabled:opacity-50 disabled:hover:bg-transparent"
       >
         {pending ? "Disabling…" : "Disable TOTP"}
       </button>

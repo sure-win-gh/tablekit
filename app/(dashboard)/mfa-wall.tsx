@@ -25,9 +25,7 @@ import {
 // the gate now passes, and the wall is replaced by the normal
 // dashboard chrome.
 
-type Props =
-  | { mode: "enrol" }
-  | { mode: "challenge"; factorId: string };
+type Props = { mode: "enrol" } | { mode: "challenge"; factorId: string };
 
 export function MfaWall(props: Props) {
   return (
@@ -80,7 +78,7 @@ function EnrolPanel() {
           type="button"
           onClick={begin}
           disabled={pending}
-          className="bg-ink text-white hover:bg-ink/90 disabled:opacity-60 inline-flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium transition"
+          className="bg-ink hover:bg-ink/90 inline-flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium text-white transition disabled:opacity-60"
         >
           {pending ? "Generating secret…" : "Set up TOTP"}
         </button>
@@ -89,7 +87,14 @@ function EnrolPanel() {
     );
   }
 
-  return <VerifyForm mode="enrol" factorId={enrolment.factorId} qrCodeSvg={enrolment.qrCodeSvg} secret={enrolment.secret} />;
+  return (
+    <VerifyForm
+      mode="enrol"
+      factorId={enrolment.factorId}
+      qrCodeSvg={enrolment.qrCodeSvg}
+      secret={enrolment.secret}
+    />
+  );
 }
 
 function ChallengePanel({ factorId }: { factorId: string }) {
@@ -178,7 +183,7 @@ function VerifyForm({
       <button
         type="submit"
         disabled={pending || code.length < 6}
-        className="bg-ink text-white hover:bg-ink/90 disabled:opacity-60 inline-flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium transition"
+        className="bg-ink hover:bg-ink/90 inline-flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium text-white transition disabled:opacity-60"
       >
         {pending ? "Verifying…" : "Verify"}
       </button>

@@ -34,9 +34,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         const [row] = await db
           .select({ role: memberships.role })
           .from(memberships)
-          .where(
-            and(eq(memberships.userId, user.id), eq(memberships.organisationId, orgId)),
-          )
+          .where(and(eq(memberships.userId, user.id), eq(memberships.organisationId, orgId)))
           .limit(1);
         return row;
       });
