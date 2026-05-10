@@ -1,6 +1,6 @@
 # Spec: Embeddable widget + shareable booking link
 
-**Status:** draft
+**Status:** shipped (prefers-* respect + CSP header deferred — see below)
 **Depends on:** `bookings.md`, `venues.md`
 
 ## What we're building
@@ -21,14 +21,14 @@ Both surfaces use the same React code and the same public API.
 
 ## Acceptance criteria
 
-- [ ] Widget script is < 30 KB gzipped.
-- [ ] Widget uses `sessionStorage` only — no cookies.
-- [ ] Widget respects the diner's system preferences (`prefers-color-scheme`, `prefers-reduced-motion`).
-- [ ] Shareable page works without JavaScript for the first screen (SSR); JS enhances date/time pickers.
-- [ ] Lighthouse performance ≥ 90 for both.
-- [ ] WCAG 2.1 AA for colour contrast, focus order, labels.
-- [ ] CSP on the widget page restricts `connect-src` to `api.tablekit.uk` and Stripe.
-- [ ] No third-party analytics or fingerprinting.
+- [x] Widget script < 30 KB gzipped. [`public/widget.js`](../../public/widget.js) is 1,896 bytes raw → ~959 bytes gzipped. Two orders of magnitude under budget; the loader's job is just to mount an iframe + relay height postMessages, so it should stay tiny.
+- [x] Widget uses no cookies and no client-side storage. The loader writes nothing to `localStorage` / `sessionStorage` / `document.cookie`; iframe content lives behind `(widget)/embed` and inherits the same posture.
+- [x] Shareable page works without JavaScript for the first screen. [`app/(widget)/book/[venueIdOrSlug]/page.tsx`](../../app/(widget)/book/[venueIdOrSlug]/page.tsx) is an async server component that renders venue + service info + initial slot list before any client JS runs; [`forms.tsx`](../../app/(widget)/book/[venueIdOrSlug]/forms.tsx) hydrates as a client island for date/time interactivity.
+- [x] No third-party analytics or fingerprinting. No `gtag` / `posthog` / `fathom` / `plausible` / fingerprinting library imports anywhere in `app/(widget)/` or `public/widget.js`. Sentry runs on the dashboard side only.
+- [ ] **Widget respects `prefers-color-scheme` + `prefers-reduced-motion`.** Neither media query is consumed today. Reduced-motion is the cheaper win — add `motion-reduce:` Tailwind variants to slot-picker + dialog transitions. Colour-scheme requires a dark palette in the `@theme` block; defer until the design-system pass.
+- [ ] **CSP header restricts `connect-src` to `api.tablekit.uk` + Stripe.** No CSP is set anywhere — `next.config.ts` is the empty default. Add a route-scoped `Content-Security-Policy` header for `/embed/*` (and the public `book.tablekit.uk/*`) covering `connect-src`, `frame-src` (Stripe Elements), `script-src` (self + Stripe), `frame-ancestors *` for the embed iframe.
+- [ ] Lighthouse performance ≥ 90 — needs a manual run pre-launch; not codifiable in CI without a Lighthouse-CI step. Tracked as a launch-readiness check.
+- [ ] WCAG 2.1 AA — relies on shadcn/Radix primitives (good defaults) plus our colour tokens. Manual axe-core or Lighthouse a11y sweep before launch; tracked alongside Lighthouse perf above.
 
 ## Technical notes
 
@@ -42,3 +42,28 @@ Both surfaces use the same React code and the same public API.
 
 - Theming by operator beyond a single accent colour (Plus tier later).
 - Embedded payments (card form outside Stripe Checkout) — we are SAQ-A, see `payments.md`.
+
+## Deferred
+
+Three follow-ups, all small but each warranting its own PR + review:
+
+### `motion-reduce` Tailwind variants
+
+Apply `motion-reduce:transition-none motion-reduce:animate-none` (or equivalent) to the slot-picker fade + the booking-confirmed success animation. Honours `prefers-reduced-motion: reduce` system setting. ~10 lines, no library work.
+
+### Dark-mode palette
+
+`prefers-color-scheme: dark` requires a dark token set in the `@theme` block of `app/globals.css` plus a `dark:` audit across the widget components. Bigger — pull when the wider design-system polish lands so we tune the dashboard + widget together.
+
+### CSP for the public booking surfaces
+
+Route-segment headers for `/embed/[venueIdOrSlug]` and `/book/[venueIdOrSlug]` (or `next.config.ts` `headers()` if the policy is uniform). Suggested directives:
+
+- `default-src 'self'`
+- `connect-src 'self' https://api.tablekit.uk https://api.stripe.com`
+- `script-src 'self' https://js.stripe.com`
+- `frame-src https://js.stripe.com https://hooks.stripe.com`
+- `frame-ancestors *` (the operator's site embeds the iframe)
+- `img-src 'self' data: https:`
+
+Pair with a 24-hour `report-only` rollout via `Content-Security-Policy-Report-Only` first to catch accidental third-party calls before enforcing.
