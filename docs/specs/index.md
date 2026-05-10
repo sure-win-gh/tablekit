@@ -13,7 +13,7 @@ This folder holds the source of truth for every feature. Claude should read the 
 | 5 | [`payments.md`](payments.md) | draft  | Deposits, Stripe Connect, no-show capture — charter |
 | 5a| [`payments-deposits.md`](payments-deposits.md) | shipped | Deposits + card hold + refunds + no-show capture (flows A/B/C) |
 | 6 | [`messaging.md`](messaging.md) | shipped | Email + SMS transactional flow (waitlist_ready ships with waitlist) |
-| 7 | [`guests.md`](guests.md)     | partial | Per-guest profile + consent + erasure shipped; erasure scrub job shipped; remaining CRM acceptance criteria pending |
+| 7 | [`guests.md`](guests.md)     | shipped | Envelope-encrypted PII (email/last name/phone/DoB/notes), hashed lookup, per-channel marketing consent (off by default), RLS-tested isolation, DSAR erasure with 30-day SLA + scrub job, Plus-tier group-CRM opt-in. |
 | 8 | [`waitlist.md`](waitlist.md) | shipped | Walk-in + waitlist |
 | 9 | [`reserve-with-google.md`](reserve-with-google.md) | paused | Blocked on Google partner onboarding + spec needs fleshing out — see file |
 |10 | [`reporting.md`](reporting.md) | shipped | Covers, no-show rate, deposits, source mix, top guests + CSV export |
