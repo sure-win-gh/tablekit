@@ -1,6 +1,6 @@
 # Spec: Authentication, organisations, roles
 
-**Status:** shipped (TOTP + invite flow deferred — see "Deferred" below)
+**Status:** shipped (invite flow deferred — see "Deferred" below)
 **Depends on:** nothing (this is foundational)
 
 ## What we're building
@@ -60,10 +60,10 @@ files: `rls-bookings`, `rls-deposits`, `rls-dsar`, `rls-enquiries`,
 ## User stories
 
 - ✅ As a prospective operator I can sign up with email + password and be put into a fresh organisation as `owner`.
-- ✅ As a user I can belong to multiple organisations (multiple memberships rows) and switch between them via the active-org cookie.
+- ✅ As a user I can belong to multiple organisations (multiple memberships rows) and switch between them via the org switcher in the dashboard sidebar.
 - ✅ As any user I can reset my password via Supabase's magic-link flow.
-- ✅ As an owner I can invite a teammate by email; they get a signup link and are added with the role I specified. Pending invites + revoke surfaced at `/dashboard/organisation/team`.
-- 🚧 As an owner/manager I must set up TOTP MFA. **Deferred — see below.**
+- ✅ As an owner/manager I must set up TOTP MFA — the dashboard renders a fullscreen MfaWall until I enrol (or, if a factor exists, complete the challenge for this session). Hosts may opt in voluntarily from `/dashboard/settings/security`.
+- 🚧 As an owner I can invite a teammate by email; they get a signup link and are added with the role I specified. **Deferred — see below.**
 
 ## Acceptance criteria
 
@@ -72,21 +72,18 @@ files: `rls-bookings`, `rls-deposits`, `rls-dsar`, `rls-enquiries`,
 - [x] Supabase Auth used as the identity provider.
 - [x] Row-level security policies: a user can only read data for organisations they are a member of. Enforced at the DB layer via `public.user_organisation_ids()`.
 - [x] Integration test proves RLS isolation across two organisations (`rls-cross-tenant.test.ts`).
-- [x] Audit log entry on signup, `invite.created`, `invite.accepted`. (Revocation isn't audit-logged separately — `org_invitations.revoked_at` is the source of truth.) `role.changed`, `mfa.enrolled`, `mfa.disabled` action types pre-declared and wired when those flows ship.
-- [x] **Invite flow with token + email + role assignment.** Owner-only invite form at `/dashboard/organisation/team`; SHA-256-hashed opaque token (72h expiry) emailed via Resend; `/invite/[token]` accept page handles new-user signup AND existing-user one-click accept. RLS verified by `tests/integration/rls-org-invitations.test.ts`.
+- [x] Audit log entry on signup + `mfa.enrolled` + `mfa.disabled`. Invite / role.changed action types pre-declared and wired when the invite flow ships.
+- [x] Organisation switcher visible in the dashboard nav. Dropdown rendered in the sidebar brand header for users with 2+ memberships, calls `switchActiveOrgAction({ orgId })` (zod-validated, RLS-scoped membership check).
+- [x] **TOTP enforced for `owner` and `manager` roles on next login after signup.** Dashboard layout (`app/(dashboard)/layout.tsx`) renders an MfaWall (`app/(dashboard)/mfa-wall.tsx`) when `decideMfaGate()` returns `enrol` or `challenge`. Enrolment writes `mfa.enrolled`; disable from `/dashboard/settings/security` requires AAL2 and writes `mfa.disabled`.
+- [ ] **Invite flow with token + email + role assignment.** Not implemented — see Deferred.
 
 ## Invitations
 
-`org_invitations` rows track the state of a pending team invite. The
-plaintext token is 32 random bytes encoded base64url, emailed in the
-accept URL; only its SHA-256 hash lives in the table. State machine:
+One item from the original spec hasn't shipped. It's deliberately
+scoped out of v1 because the operator base is small + it's bigger
+than its bullet point suggests.
 
-```
-pending  : accepted_at IS NULL AND revoked_at IS NULL
-accepted : accepted_at IS NOT NULL  (one-shot)
-revoked  : revoked_at IS NOT NULL
-expired  : expires_at < now()       (no UPDATE — accept handler refuses)
-```
+### Invite flow
 
 A partial unique index on `(organisation_id, email) WHERE accepted_at IS NULL AND revoked_at IS NULL` keeps duplicate live invites at bay; revoking + re-inviting is allowed.
 
@@ -95,13 +92,6 @@ Mutations (insert / update) flow through `adminDb()` in
 [`lib/auth/invitations.ts`](../../lib/auth/invitations.ts) after explicit
 `requireRole("owner")` gating. RLS exposes only SELECT to org members
 (no write policies for `authenticated`) — defence in depth.
-
-The accept handler at `/invite/[token]`:
-
-1. Resolves the token via SHA-256 lookup; rejects expired / accepted / revoked rows with a generic "no longer valid" message (no oracle for which reason).
-2. New-user path: signs up through Supabase Auth at the invite-bound email (read-only on the form), then attaches the membership in a transaction that flips `accepted_at`.
-3. Existing-user path: a single click joins the org if the signed-in email matches the invite email; mismatched signed-in users see "wrong account" and a sign-out prompt.
-4. Audits `invite.accepted` with the role + email metadata.
 
 ## Data model (current)
 
