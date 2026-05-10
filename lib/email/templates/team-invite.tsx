@@ -52,10 +52,7 @@ function TeamInviteEmail({ ctx }: { ctx: TeamInviteContext }) {
           }}
         >
           <Section>
-            <Heading
-              as="h1"
-              style={{ fontSize: "20px", fontWeight: 600, margin: "0 0 16px 0" }}
-            >
+            <Heading as="h1" style={{ fontSize: "20px", fontWeight: 600, margin: "0 0 16px 0" }}>
               Join {ctx.organisationName} on TableKit
             </Heading>
           </Section>
@@ -83,14 +80,15 @@ function TeamInviteEmail({ ctx }: { ctx: TeamInviteContext }) {
               Accept invitation
             </Button>
             <Text style={{ fontSize: "13px", color: "#737373", margin: "24px 0 0 0" }}>
-              Or paste this link into your browser: <Link href={ctx.acceptUrl}>{ctx.acceptUrl}</Link>
+              Or paste this link into your browser:{" "}
+              <Link href={ctx.acceptUrl}>{ctx.acceptUrl}</Link>
             </Text>
           </Section>
           <Hr style={{ borderColor: "#e5e5e5", margin: "24px 0" }} />
           <Section>
             <Text style={{ fontSize: "12px", color: "#737373", margin: 0 }}>
-              If you weren&apos;t expecting this email, you can safely ignore it. The invite expires on{" "}
-              {ctx.expiresAtIso}.
+              If you weren&apos;t expecting this email, you can safely ignore it. The invite expires
+              on {ctx.expiresAtIso}.
             </Text>
           </Section>
         </Container>

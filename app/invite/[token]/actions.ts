@@ -88,7 +88,7 @@ export async function acceptAsNewUser(
     action: "invite.accepted",
     targetType: "invitation",
     targetId: invite.id,
-    metadata: { email: invite.email, role: invite.role },
+    metadata: { role: invite.role },
   });
 
   if (!authData.session) {
@@ -130,7 +130,7 @@ export async function acceptAsExistingUser(input: { token: string }): Promise<vo
     action: "invite.accepted",
     targetType: "invitation",
     targetId: invite.id,
-    metadata: { email: invite.email, role: invite.role },
+    metadata: { role: invite.role },
   });
 
   await setActiveOrg(invite.organisationId);

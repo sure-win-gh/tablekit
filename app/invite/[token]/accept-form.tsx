@@ -31,8 +31,7 @@ function NewUserAccept({ token, email }: { token: string; email: string }) {
       <div className="rounded-lg bg-emerald-50 p-4">
         <p className="text-sm font-medium text-emerald-900">Check your email</p>
         <p className="mt-1 text-xs text-emerald-800">
-          We sent a confirmation link to {state.email}. Open it to finish setting up your
-          account.
+          We sent a confirmation link to {state.email}. Open it to finish setting up your account.
         </p>
       </div>
     );
@@ -87,7 +86,7 @@ function NewUserAccept({ token, email }: { token: string; email: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="bg-ink hover:bg-ink/90 disabled:opacity-60 inline-flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium text-white transition"
+        className="bg-ink hover:bg-ink/90 inline-flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium text-white transition disabled:opacity-60"
       >
         {pending ? "Creating account…" : "Accept invitation"}
       </button>
@@ -108,7 +107,7 @@ function ExistingUserAccept({ token, orgName }: { token: string; orgName: string
             await acceptAsExistingUser({ token });
           });
         }}
-        className="bg-ink hover:bg-ink/90 disabled:opacity-60 inline-flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium text-white transition"
+        className="bg-ink hover:bg-ink/90 inline-flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium text-white transition disabled:opacity-60"
       >
         {pending ? "Joining…" : `Join ${orgName}`}
       </button>

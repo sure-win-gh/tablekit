@@ -108,13 +108,15 @@ export async function createInvite(_prev: CreateState, formData: FormData): Prom
     // retry. Audit captures the create regardless.
   }
 
+  // Audit metadata stays PII-free — the invite UUID joins back to
+  // org_invitations.email if the audit feed ever needs the address.
   await audit.log({
     organisationId: ctx.orgId,
     actorUserId: ctx.userId,
     action: "invite.created",
     targetType: "invitation",
     targetId: mint.inviteId,
-    metadata: { email: parsed.data.email, role: parsed.data.role },
+    metadata: { role: parsed.data.role },
   });
 
   revalidatePath("/dashboard/organisation/team");

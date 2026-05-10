@@ -24,11 +24,7 @@ export const metadata = { title: "Accept invitation — TableKit" };
 // site. We don't distinguish reasons — small but real anti-enum
 // signal for attackers fishing token URLs.
 
-export default async function AcceptInvitePage({
-  params,
-}: {
-  params: Promise<{ token: string }>;
-}) {
+export default async function AcceptInvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const invite = await resolveInvitation(token);
 
@@ -38,8 +34,8 @@ export default async function AcceptInvitePage({
         <div className="border-hairline w-full max-w-md rounded-2xl border bg-white p-8 text-center shadow-sm">
           <h1 className="text-ink text-xl font-bold tracking-tight">Invitation unavailable</h1>
           <p className="text-ash mt-2 text-sm">
-            This invite link is no longer valid — it may have expired, been revoked, or already
-            been used.
+            This invite link is no longer valid — it may have expired, been revoked, or already been
+            used.
           </p>
           <Link
             href="/"
@@ -59,8 +55,7 @@ export default async function AcceptInvitePage({
   } = await supabase.auth.getUser();
 
   if (user) {
-    const emailMatches =
-      (user.email ?? "").toLowerCase() === invite.email.toLowerCase();
+    const emailMatches = (user.email ?? "").toLowerCase() === invite.email.toLowerCase();
 
     // Already a member of this org? (e.g. the inviter clicked their
     // own link by mistake.) Skip the accept flow and bounce.
@@ -91,7 +86,8 @@ export default async function AcceptInvitePage({
             />
             {alreadyMember ? (
               <p className="text-ash mt-3 text-xs">
-                You&apos;re already a member of another organisation. Accepting will add this one — you can switch between them in the dashboard sidebar.
+                You&apos;re already a member of another organisation. Accepting will add this one —
+                you can switch between them in the dashboard sidebar.
               </p>
             ) : null}
           </div>

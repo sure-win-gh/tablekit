@@ -77,9 +77,7 @@ export default async function TeamPage() {
           {data.members.map((m) => (
             <li key={m.userId} className="flex items-center justify-between py-3">
               <div className="min-w-0">
-                <p className="text-ink truncate text-sm font-medium">
-                  {m.fullName ?? m.email}
-                </p>
+                <p className="text-ink truncate text-sm font-medium">{m.fullName ?? m.email}</p>
                 <p className="text-ash truncate text-xs">{m.email}</p>
               </div>
               <span className="bg-cloud text-charcoal rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase">
