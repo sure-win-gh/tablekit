@@ -1,7 +1,9 @@
 # Spec: Deposits, pre-auth, no-show capture (Stripe)
 
-**Status:** draft
+**Status:** superseded by [`payments-deposits.md`](payments-deposits.md) (shipped)
 **Depends on:** `bookings.md`. See also `docs/playbooks/payments.md`.
+
+> **Heads up:** this is the original charter, kept as historical context (Non-negotiables + the original flow sketches). The live spec for the same scope — deposits, card holds, refunds, no-show capture — is [`payments-deposits.md`](payments-deposits.md), which tracks the actual acceptance criteria + shipped behaviour for flows A / B / C. Treat that file as the source of truth; update *this* file only if the charter principles (SAQ-A, Connect Standard, forced 3DS) themselves change.
 
 ## What we're building
 

@@ -10,7 +10,7 @@ This folder holds the source of truth for every feature. Claude should read the 
 | 2 | [`venues.md`](venues.md)     | shipped | Venue + service + floor plan model, opinionated seed templates per venue_type, drag-drop floor plan (see `floor-plan-visual.md`), JSON schedule + per-service turn time, RLS-tested cross-tenant isolation. URL slug routing split out into `venue-slug.md`. |
 | 3 | [`bookings.md`](bookings.md) | shipped | Public anonymous create + availability, transactional creation with deposits, GIST exclusion against double-booking, code-enforced state machine + booking_events audit, IP+email rate limits, RLS-tested cross-tenant isolation. |
 | 4 | [`widget.md`](widget.md)     | shipped | 959 B gzipped iframe loader + cookieless + SSR-first `/book/[slug]` + zero third-party analytics. CSP header + `prefers-*` respect deferred — see spec. |
-| 5 | [`payments.md`](payments.md) | draft  | Deposits, Stripe Connect, no-show capture — charter |
+| 5 | [`payments.md`](payments.md) | superseded | Original charter — live spec is `payments-deposits.md` below. |
 | 5a| [`payments-deposits.md`](payments-deposits.md) | shipped | Deposits + card hold + refunds + no-show capture (flows A/B/C) |
 | 6 | [`messaging.md`](messaging.md) | shipped | Email + SMS transactional flow (waitlist_ready ships with waitlist) |
 | 7 | [`guests.md`](guests.md)     | shipped | Envelope-encrypted PII (email/last name/phone/DoB/notes), hashed lookup, per-channel marketing consent (off by default), RLS-tested isolation, DSAR erasure with 30-day SLA + scrub job, Plus-tier group-CRM opt-in. |
