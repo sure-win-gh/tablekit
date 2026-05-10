@@ -1,6 +1,6 @@
 # Spec: Visual floor plan with booking overlay
 
-**Status:** shipped (mobile read-only gating deferred — see footer)
+**Status:** shipped
 **Depends on:** `bookings.md`, `venues.md`, `timeline.md` (status-colour vocabulary)
 
 ## What we're building
@@ -25,7 +25,7 @@ This is the screen the bookings spec at `bookings.md` promises with *"As a host 
 - [x] Booking-status overlay updates on a 30-second SWR refresh ([`auto-refresh.tsx`](../../app/(dashboard)/dashboard/venues/[venueId]/floor-plan/auto-refresh.tsx) — `router.refresh()` on an interval, paused while the tab is hidden). Realtime subscription not pursued; the polling cost is negligible at projected operator concurrency.
 - [x] Canvas viewport: wheel zoom anchored to cursor + zoom-in/out buttons + drag-to-pan + "Fit" button. Implemented in `canvas.tsx`.
 - [x] Replaces the current `/floor-plan` page — the canvas is the page; the side panel shows table + booking detail when a shape is selected; the old "add area / add table" CRUD landed inline behind the edit-mode toggle.
-- [ ] **Mobile: read-only, no drag.** Currently edit-mode is offered regardless of viewport; on a phone the toggle should hide and pointer-drag should no-op. Small follow-up — gate `canEdit` on a media-query check or hide the toggle below `md`.
+- [x] Mobile: read-only, no drag. Edit-mode toggle hidden below the `md` breakpoint (`hidden md:inline-flex`); since `editMode` state can only flip via that button, touch-screen drag handlers never fire on phones.
 
 ## Open questions (resolve in plan-phase)
 
