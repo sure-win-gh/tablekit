@@ -1,6 +1,6 @@
 # Spec: Venues, services, floor plan
 
-**Status:** draft
+**Status:** shipped
 **Depends on:** `auth.md`
 
 ## What we're building
@@ -23,12 +23,13 @@ A venue is a physical location. Each venue has one or more services (e.g. "Brunc
 
 ## Acceptance criteria
 
-- [ ] Venue creation requires name, timezone, locale (defaults to `Europe/London` and `en-GB`).
-- [ ] Floor plan editor supports drag-drop in a 2D grid (simple — not pixel-perfect).
-- [ ] Tables can be combined at booking time if `max_cover` is exceeded (handled in bookings spec).
-- [ ] Services carry a JSON `schedule` like `{"days":["mon","tue",...],"start":"18:00","end":"22:00"}`.
-- [ ] Turn time per service, default 90 minutes.
-- [ ] RLS: every table scoped by `organisation_id` via `venues.organisation_id`.
+- [x] Venue creation requires name, timezone, locale with defaults. [`app/(dashboard)/dashboard/venues/new/form.tsx`](../../app/(dashboard)/dashboard/venues/new/form.tsx) — name required, `timezone` defaults `Europe/London`, `locale` defaults `en-GB`, plus a `venue_type` radio (cafe / restaurant / bar_pub) that drives the seed template below.
+- [x] Floor plan editor supports drag-drop. [`app/(dashboard)/dashboard/venues/[venueId]/floor-plan/table-shape.tsx`](../../app/(dashboard)/dashboard/venues/[venueId]/floor-plan/table-shape.tsx) — pointer-event drag in user-coord space with optimistic positioning + server-action persistence; covered by `floor-plan-visual.md`.
+- [x] Tables combinable at booking time when `max_cover` is exceeded. [`lib/bookings/availability.ts`](../../lib/bookings/availability.ts) — combinable rule: two tables combine iff they share an area; unit-tested in `tests/unit/bookings-availability.test.ts`.
+- [x] Services carry a JSON `schedule`. `services.schedule` (jsonb) + `services.turn_minutes` defined in [`lib/db/schema.ts`](../../lib/db/schema.ts).
+- [x] Turn time default 90 minutes. `services.turnMinutes` column has `.default(90)` in the schema.
+- [x] RLS — venues + areas + tables + services all scoped by `organisation_id` (denormalised on each table, populated by trigger). Verified by [`tests/integration/rls-venues-cross-tenant.test.ts`](../../tests/integration/rls-venues-cross-tenant.test.ts).
+- [x] Opinionated default templates per `venue_type` for 15-minute activation. [`lib/venues/templates.ts`](../../lib/venues/templates.ts) — cafe (1 area, 6 tables, "Open" Mon–Sun 8–17, 45-min turn) / restaurant (Main + Bar, Lunch + Dinner, 90-min turn) / bar_pub (Inside + Outside, "Open", 60-min turn). Seeded on first venue create.
 
 ## Data model
 
