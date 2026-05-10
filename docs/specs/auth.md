@@ -77,7 +77,7 @@ files: `rls-bookings`, `rls-deposits`, `rls-dsar`, `rls-enquiries`,
 - [x] **TOTP enforced for `owner` and `manager` roles on next login after signup.** Dashboard layout (`app/(dashboard)/layout.tsx`) renders an MfaWall (`app/(dashboard)/mfa-wall.tsx`) when `decideMfaGate()` returns `enrol` or `challenge`. Enrolment writes `mfa.enrolled`; disable from `/dashboard/settings/security` requires AAL2 and writes `mfa.disabled`.
 - [ ] **Invite flow with token + email + role assignment.** Not implemented — see Deferred.
 
-## Deferred
+## Invitations
 
 One item from the original spec hasn't shipped. It's deliberately
 scoped out of v1 because the operator base is small + it's bigger
@@ -85,12 +85,13 @@ than its bullet point suggests.
 
 ### Invite flow
 
-Owners can invite teammates. Implementation scaffold:
+A partial unique index on `(organisation_id, email) WHERE accepted_at IS NULL AND revoked_at IS NULL` keeps duplicate live invites at bay; revoking + re-inviting is allowed.
 
-- `org_invitations` table: id, organisation_id, email, role, token (signed JWT, 72h expiry), invited_by, accepted_at, revoked_at.
-- Send the email via Resend (existing transactional sender). Token in the link.
-- Accept-invite flow: the invitee signs up via the existing signup form, then a side-effect creates the membership at the role from the invite + marks the invite accepted. If the email doesn't match the signup email exactly, reject.
-- Audit on `invite.created` / `invite.accepted` (declared).
+Mutations (insert / update) flow through `adminDb()` in
+[`app/(dashboard)/dashboard/organisation/team/actions.ts`](../../app/(dashboard)/dashboard/organisation/team/actions.ts) and
+[`lib/auth/invitations.ts`](../../lib/auth/invitations.ts) after explicit
+`requireRole("owner")` gating. RLS exposes only SELECT to org members
+(no write policies for `authenticated`) — defence in depth.
 
 ## Data model (current)
 
