@@ -9,7 +9,7 @@ This folder holds the source of truth for every feature. Claude should read the 
 | 1 | [`auth.md`](auth.md)         | shipped | Sign up, login, multi-org membership + sidebar switcher, role + plan + venue gates, RLS, TOTP MFA enforcement for owners/managers, team invite flow. |
 | 2 | [`venues.md`](venues.md)     | partial | Venue + service + floor plan model. URL slug routing split out into `venue-slug.md` |
 | 3 | [`bookings.md`](bookings.md) | shipped | Public anonymous create + availability, transactional creation with deposits, GIST exclusion against double-booking, code-enforced state machine + booking_events audit, IP+email rate limits, RLS-tested cross-tenant isolation. |
-| 4 | [`widget.md`](widget.md)     | partial | Embeddable iframe loader + `/embed` route + dashboard snippet shipped; remaining acceptance criteria pending |
+| 4 | [`widget.md`](widget.md)     | shipped | 959 B gzipped iframe loader + cookieless + SSR-first `/book/[slug]` + zero third-party analytics. CSP header + `prefers-*` respect deferred — see spec. |
 | 5 | [`payments.md`](payments.md) | draft  | Deposits, Stripe Connect, no-show capture — charter |
 | 5a| [`payments-deposits.md`](payments-deposits.md) | shipped | Deposits + card hold + refunds + no-show capture (flows A/B/C) |
 | 6 | [`messaging.md`](messaging.md) | shipped | Email + SMS transactional flow (waitlist_ready ships with waitlist) |
