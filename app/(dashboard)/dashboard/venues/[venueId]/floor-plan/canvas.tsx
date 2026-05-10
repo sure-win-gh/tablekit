@@ -251,10 +251,16 @@ export function FloorPlanCanvas({
           <Minus className="h-3.5 w-3.5" aria-hidden />
         </Button>
         {canEdit ? (
+          // Hidden below the md breakpoint — mobile is read-only per
+          // floor-plan-visual.md acceptance. Drag handlers in
+          // table-shape only fire when editMode is true; with the
+          // toggle hidden the state never flips and pointer-drag on
+          // touch screens can't move tables.
           <Button
             variant={editMode ? "primary" : "secondary"}
             size="sm"
             onClick={() => setEditMode((m) => !m)}
+            className="hidden md:inline-flex"
           >
             <Pencil className="h-3.5 w-3.5" aria-hidden />
             {editMode ? "Editing" : "Edit"}
