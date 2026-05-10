@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { Building2, ChevronRight, KeyRound, Webhook } from "lucide-react";
+import { Building2, ChevronRight, KeyRound, UserPlus, Webhook } from "lucide-react";
 import Link from "next/link";
 
 import { hasPlan, toPlan } from "@/lib/auth/plan-level";
@@ -92,6 +92,22 @@ export default async function OrganisationPage() {
           disabled={!isOwner || !isPlus || venueCount < 2}
           ownerOnlyHint={!isOwner}
         />
+      </section>
+
+      <section className="mt-8 flex flex-col gap-2">
+        <h2 className="text-ink text-sm font-semibold tracking-tight">Team</h2>
+        <p className="text-ash text-sm">
+          Members of this organisation and pending invitations. Owners can invite teammates by
+          email.
+        </p>
+        <Link
+          href="/dashboard/organisation/team"
+          className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
+        >
+          <UserPlus className="text-ash h-4 w-4" aria-hidden />
+          Manage team
+          <ChevronRight className="text-stone h-4 w-4" aria-hidden />
+        </Link>
       </section>
 
       {isPlus && isOwner ? (

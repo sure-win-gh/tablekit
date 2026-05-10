@@ -62,7 +62,7 @@ files: `rls-bookings`, `rls-deposits`, `rls-dsar`, `rls-enquiries`,
 - ✅ As a prospective operator I can sign up with email + password and be put into a fresh organisation as `owner`.
 - ✅ As a user I can belong to multiple organisations (multiple memberships rows) and switch between them via the active-org cookie.
 - ✅ As any user I can reset my password via Supabase's magic-link flow.
-- 🚧 As an owner I can invite a teammate by email; they get a signup link and are added with the role I specified. **Deferred — see below.**
+- ✅ As an owner I can invite a teammate by email; they get a signup link and are added with the role I specified. Pending invites + revoke surfaced at `/dashboard/organisation/team`.
 - 🚧 As an owner/manager I must set up TOTP MFA. **Deferred — see below.**
 
 ## Acceptance criteria
@@ -72,39 +72,36 @@ files: `rls-bookings`, `rls-deposits`, `rls-dsar`, `rls-enquiries`,
 - [x] Supabase Auth used as the identity provider.
 - [x] Row-level security policies: a user can only read data for organisations they are a member of. Enforced at the DB layer via `public.user_organisation_ids()`.
 - [x] Integration test proves RLS isolation across two organisations (`rls-cross-tenant.test.ts`).
-- [x] Audit log entry on signup. Action types pre-declared for invite / role.changed / mfa.enrolled / mfa.disabled — wired when those flows ship.
-- [ ] **Organisation switcher visible in the dashboard nav.** The current sidebar (`app/(dashboard)/sidebar.tsx`) shows the active org name but doesn't expose a switcher UI for users with >1 membership. Fix is a small dashboard PR — render a dropdown that calls `setActiveOrg(orgId)` from a server action.
-- [ ] **TOTP enforced for `owner` and `manager` roles on next login after signup.** Not implemented — see Deferred.
-- [ ] **Invite flow with token + email + role assignment.** Not implemented — see Deferred.
+- [x] Audit log entry on signup, `invite.created`, `invite.accepted`. (Revocation isn't audit-logged separately — `org_invitations.revoked_at` is the source of truth.) `role.changed`, `mfa.enrolled`, `mfa.disabled` action types pre-declared and wired when those flows ship.
+- [x] **Invite flow with token + email + role assignment.** Owner-only invite form at `/dashboard/organisation/team`; SHA-256-hashed opaque token (72h expiry) emailed via Resend; `/invite/[token]` accept page handles new-user signup AND existing-user one-click accept. RLS verified by `tests/integration/rls-org-invitations.test.ts`.
 
-## Deferred
+## Invitations
 
-Three items from the original spec haven't shipped. They're
-deliberately scoped out of v1 because the operator base is
-small + each one is bigger than its bullet point suggests.
+`org_invitations` rows track the state of a pending team invite. The
+plaintext token is 32 random bytes encoded base64url, emailed in the
+accept URL; only its SHA-256 hash lives in the table. State machine:
 
-### TOTP MFA enforcement (highest priority)
+```
+pending  : accepted_at IS NULL AND revoked_at IS NULL
+accepted : accepted_at IS NOT NULL  (one-shot)
+revoked  : revoked_at IS NOT NULL
+expired  : expires_at < now()       (no UPDATE — accept handler refuses)
+```
 
-Supabase Auth supports MFA factors out of the box; the gap is the
-enforcement layer. To ship this we'd add:
+A partial unique index on `(organisation_id, email) WHERE accepted_at IS NULL AND revoked_at IS NULL` keeps duplicate live invites at bay; revoking + re-inviting is allowed.
 
-- Enrolment UI at `/dashboard/account/mfa` — `supabase.auth.mfa.enroll({ factorType: "totp" })`, render the QR code, ask for the first 6-digit code to verify.
-- A `requireRole` upgrade path that 302s to `/login/mfa` on `aal: "aal1"` for owner/manager when their org has any member with `mfa.enrolled` (so an enrolled owner can't be trivially demoted by a phished password).
-- Audit log on `mfa.enrolled` / `mfa.disabled` (action types already declared).
+Mutations (insert / update) flow through `adminDb()` in
+[`app/(dashboard)/dashboard/organisation/team/actions.ts`](../../app/(dashboard)/dashboard/organisation/team/actions.ts) and
+[`lib/auth/invitations.ts`](../../lib/auth/invitations.ts) after explicit
+`requireRole("owner")` gating. RLS exposes only SELECT to org members
+(no write policies for `authenticated`) — defence in depth.
 
-### Invite flow
+The accept handler at `/invite/[token]`:
 
-Owners can invite teammates. Implementation scaffold:
-
-- `org_invitations` table: id, organisation_id, email, role, token (signed JWT, 72h expiry), invited_by, accepted_at, revoked_at.
-- Send the email via Resend (existing transactional sender). Token in the link.
-- Accept-invite flow: the invitee signs up via the existing signup form, then a side-effect creates the membership at the role from the invite + marks the invite accepted. If the email doesn't match the signup email exactly, reject.
-- Audit on `invite.created` / `invite.accepted` (declared).
-
-### Org switcher UI
-
-Smallest of the three. Stub described above under acceptance
-criteria.
+1. Resolves the token via SHA-256 lookup; rejects expired / accepted / revoked rows with a generic "no longer valid" message (no oracle for which reason).
+2. New-user path: signs up through Supabase Auth at the invite-bound email (read-only on the form), then attaches the membership in a transaction that flips `accepted_at`.
+3. Existing-user path: a single click joins the org if the signed-in email matches the invite email; mismatched signed-in users see "wrong account" and a sign-out prompt.
+4. Audits `invite.accepted` with the role + email metadata.
 
 ## Data model (current)
 

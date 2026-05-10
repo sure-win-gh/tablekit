@@ -111,6 +111,39 @@ export const memberships = pgTable(
   ],
 );
 
+// Pending invitations for an organisation. The token sent by email
+// is opaque random bytes; only its SHA-256 hash lives here, so a DB
+// leak doesn't expose live invite URLs. State machine: rows start
+// pending (acceptedAt + revokedAt both null), become "accepted" once
+// the invitee signs up + a membership lands, or "revoked" once an
+// owner cancels. Expired rows (expiresAt < now) are treated as dead
+// without UPDATE — the accept handler refuses them.
+export const orgInvitations = pgTable(
+  "org_invitations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    email: citext("email").notNull(),
+    role: orgRole("role").notNull(),
+    // SHA-256 hash of the random token. Plaintext lives only in the
+    // emailed URL + the inviter's browser session for ~1 second.
+    tokenHash: text("token_hash").notNull().unique(),
+    invitedByUserId: uuid("invited_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("org_invitations_org_created_idx").on(t.organisationId, t.createdAt.desc()),
+    index("org_invitations_email_idx").on(t.email),
+  ],
+);
+
 // Append-only log of security-relevant events. Per gdpr.md retention
 // table: 2 years. Inserts are restricted by RLS — writes go through
 // the audit.log() helper under lib/server/admin/.
