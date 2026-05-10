@@ -1,6 +1,6 @@
 # Spec: Embeddable widget + shareable booking link
 
-**Status:** shipped (prefers-* respect + CSP header deferred — see below)
+**Status:** shipped (CSP enforcement flip + `prefers-color-scheme` deferred — see below)
 **Depends on:** `bookings.md`, `venues.md`
 
 ## What we're building
@@ -26,7 +26,7 @@ Both surfaces use the same React code and the same public API.
 - [x] Shareable page works without JavaScript for the first screen. [`app/(widget)/book/[venueIdOrSlug]/page.tsx`](../../app/(widget)/book/[venueIdOrSlug]/page.tsx) is an async server component that renders venue + service info + initial slot list before any client JS runs; [`forms.tsx`](../../app/(widget)/book/[venueIdOrSlug]/forms.tsx) hydrates as a client island for date/time interactivity.
 - [x] No third-party analytics or fingerprinting. No `gtag` / `posthog` / `fathom` / `plausible` / fingerprinting library imports anywhere in `app/(widget)/` or `public/widget.js`. Sentry runs on the dashboard side only.
 - [ ] **Widget respects `prefers-color-scheme` + `prefers-reduced-motion`.** Neither media query is consumed today. Reduced-motion is the cheaper win — add `motion-reduce:` Tailwind variants to slot-picker + dialog transitions. Colour-scheme requires a dark palette in the `@theme` block; defer until the design-system pass.
-- [ ] **CSP header restricts `connect-src` to `api.tablekit.uk` + Stripe.** No CSP is set anywhere — `next.config.ts` is the empty default. Add a route-scoped `Content-Security-Policy` header for `/embed/*` (and the public `book.tablekit.uk/*`) covering `connect-src`, `frame-src` (Stripe Elements), `script-src` (self + Stripe), `frame-ancestors *` for the embed iframe.
+- [~] **CSP header restricts `connect-src` to `api.tablekit.uk` + Stripe.** Route-scoped `Content-Security-Policy-Report-Only` header set for `/embed/*` and `/book/*` in [`next.config.ts`](../../next.config.ts). Covers `connect-src` (self + api.tablekit.uk + Stripe + hCaptcha), `script-src` / `frame-src` (Stripe + hCaptcha), `frame-ancestors *` on `/embed`, `frame-ancestors 'self'` on `/book`, plus `base-uri`, `form-action`, and `object-src 'none'`. Report-only first to surface false positives; a follow-up flips the header to enforcing once we've watched real traffic.
 - [ ] Lighthouse performance ≥ 90 — needs a manual run pre-launch; not codifiable in CI without a Lighthouse-CI step. Tracked as a launch-readiness check.
 - [ ] WCAG 2.1 AA — relies on shadcn/Radix primitives (good defaults) plus our colour tokens. Manual axe-core or Lighthouse a11y sweep before launch; tracked alongside Lighthouse perf above.
 
@@ -55,15 +55,10 @@ Apply `motion-reduce:transition-none motion-reduce:animate-none` (or equivalent)
 
 `prefers-color-scheme: dark` requires a dark token set in the `@theme` block of `app/globals.css` plus a `dark:` audit across the widget components. Bigger — pull when the wider design-system polish lands so we tune the dashboard + widget together.
 
-### CSP for the public booking surfaces
+### Flip CSP from report-only to enforcing
 
-Route-segment headers for `/embed/[venueIdOrSlug]` and `/book/[venueIdOrSlug]` (or `next.config.ts` `headers()` if the policy is uniform). Suggested directives:
+`next.config.ts` currently emits `Content-Security-Policy-Report-Only` on `/embed/*` and `/book/*`. Once we've watched real traffic for a day or so (browser dev tools + any noticed regressions), the follow-up rename is one-line: change the header `key` from `"Content-Security-Policy-Report-Only"` to `"Content-Security-Policy"`. Same directive set; same routes.
 
-- `default-src 'self'`
-- `connect-src 'self' https://api.tablekit.uk https://api.stripe.com`
-- `script-src 'self' https://js.stripe.com`
-- `frame-src https://js.stripe.com https://hooks.stripe.com`
-- `frame-ancestors *` (the operator's site embeds the iframe)
-- `img-src 'self' data: https:`
-
-Pair with a 24-hour `report-only` rollout via `Content-Security-Policy-Report-Only` first to catch accidental third-party calls before enforcing.
+Tighter follow-ups while we're in there:
+- Drop `'unsafe-inline'` from `script-src` by switching to nonce-based CSP. Requires a custom Next.js shim — non-trivial, hold for a focused PR.
+- Wire a `report-uri` / `report-to` endpoint so production violations surface server-side (Sentry-routed or a tiny `/api/csp-report` endpoint).
