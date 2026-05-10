@@ -52,15 +52,10 @@ Three follow-ups, all small but each warranting its own PR + review:
 
 `prefers-color-scheme: dark` requires a dark token set in the `@theme` block of `app/globals.css` plus a `dark:` audit across the widget components. Bigger — pull when the wider design-system polish lands so we tune the dashboard + widget together.
 
-### CSP for the public booking surfaces
+### Flip CSP from report-only to enforcing
 
-Route-segment headers for `/embed/[venueIdOrSlug]` and `/book/[venueIdOrSlug]` (or `next.config.ts` `headers()` if the policy is uniform). Suggested directives:
+`next.config.ts` currently emits `Content-Security-Policy-Report-Only` on `/embed/*` and `/book/*`. Once we've watched real traffic for a day or so (browser dev tools + any noticed regressions), the follow-up rename is one-line: change the header `key` from `"Content-Security-Policy-Report-Only"` to `"Content-Security-Policy"`. Same directive set; same routes.
 
-- `default-src 'self'`
-- `connect-src 'self' https://api.tablekit.uk https://api.stripe.com`
-- `script-src 'self' https://js.stripe.com`
-- `frame-src https://js.stripe.com https://hooks.stripe.com`
-- `frame-ancestors *` (the operator's site embeds the iframe)
-- `img-src 'self' data: https:`
-
-Pair with a 24-hour `report-only` rollout via `Content-Security-Policy-Report-Only` first to catch accidental third-party calls before enforcing.
+Tighter follow-ups while we're in there:
+- Drop `'unsafe-inline'` from `script-src` by switching to nonce-based CSP. Requires a custom Next.js shim — non-trivial, hold for a focused PR.
+- Wire a `report-uri` / `report-to` endpoint so production violations surface server-side (Sentry-routed or a tiny `/api/csp-report` endpoint).
