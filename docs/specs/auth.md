@@ -1,6 +1,6 @@
 # Spec: Authentication, organisations, roles
 
-**Status:** shipped (invite flow deferred — see "Deferred" below)
+**Status:** shipped
 **Depends on:** nothing (this is foundational)
 
 ## What we're building
@@ -63,7 +63,7 @@ files: `rls-bookings`, `rls-deposits`, `rls-dsar`, `rls-enquiries`,
 - ✅ As a user I can belong to multiple organisations (multiple memberships rows) and switch between them via the org switcher in the dashboard sidebar.
 - ✅ As any user I can reset my password via Supabase's magic-link flow.
 - ✅ As an owner/manager I must set up TOTP MFA — the dashboard renders a fullscreen MfaWall until I enrol (or, if a factor exists, complete the challenge for this session). Hosts may opt in voluntarily from `/dashboard/settings/security`.
-- 🚧 As an owner I can invite a teammate by email; they get a signup link and are added with the role I specified. **Deferred — see below.**
+- ✅ As an owner I can invite a teammate by email; they get a signup link and are added with the role I specified. Pending invites + revoke surfaced at `/dashboard/organisation/team`.
 
 ## Acceptance criteria
 
@@ -72,10 +72,10 @@ files: `rls-bookings`, `rls-deposits`, `rls-dsar`, `rls-enquiries`,
 - [x] Supabase Auth used as the identity provider.
 - [x] Row-level security policies: a user can only read data for organisations they are a member of. Enforced at the DB layer via `public.user_organisation_ids()`.
 - [x] Integration test proves RLS isolation across two organisations (`rls-cross-tenant.test.ts`).
-- [x] Audit log entry on signup + `mfa.enrolled` + `mfa.disabled`. Invite / role.changed action types pre-declared and wired when the invite flow ships.
+- [x] Audit log entry on signup + `mfa.enrolled` + `mfa.disabled` + `invite.created` + `invite.accepted`. `role.changed` action type pre-declared, wired when the role-change flow ships.
 - [x] Organisation switcher visible in the dashboard nav. Dropdown rendered in the sidebar brand header for users with 2+ memberships, calls `switchActiveOrgAction({ orgId })` (zod-validated, RLS-scoped membership check).
 - [x] **TOTP enforced for `owner` and `manager` roles on next login after signup.** Dashboard layout (`app/(dashboard)/layout.tsx`) renders an MfaWall (`app/(dashboard)/mfa-wall.tsx`) when `decideMfaGate()` returns `enrol` or `challenge`. Enrolment writes `mfa.enrolled`; disable from `/dashboard/settings/security` requires AAL2 and writes `mfa.disabled`.
-- [ ] **Invite flow with token + email + role assignment.** Not implemented — see Deferred.
+- [x] **Invite flow with token + email + role assignment.** Owner-only invite form at `/dashboard/organisation/team`; SHA-256-hashed opaque token (72h expiry) emailed via Resend; `/invite/[token]` accept page handles new-user signup AND existing-user one-click accept. RLS verified by `tests/integration/rls-org-invitations.test.ts`.
 
 ## Invitations
 

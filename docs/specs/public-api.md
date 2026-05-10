@@ -1,6 +1,6 @@
 # Spec: Public REST API (Plus tier)
 
-**Status:** draft — Plus tier only
+**Status:** shipped — Plus tier only
 **Depends on:** `auth.md`, `bookings.md`
 
 ## What we're building
