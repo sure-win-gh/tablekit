@@ -19,7 +19,7 @@ This folder holds the source of truth for every feature. Claude should read the 
 |10 | [`reporting.md`](reporting.md) | shipped | Covers, no-show rate, deposits, source mix, top guests + CSV export |
 |11 | [`timeline.md`](timeline.md) | shipped | Per-table time-blocks view + drag-to-reassign |
 |12 | [`floor-plan-visual.md`](floor-plan-visual.md) | shipped | SVG canvas, role-gated edit mode with drag-persist, wheel/button pan+zoom, fit-to-viewport, 30s auto-refresh, multi-table connectors, mobile read-only. |
-|13 | [`reviews.md`](reviews.md)   | partial | Phase 1, 2, 3a–c, 6, 7a shipped; Phase 4 + 5 deferred; Phase 7b cut |
+|13 | [`reviews.md`](reviews.md)   | shipped | Internal review capture (HMAC token URL + encrypted comment), operator dashboard + reply, Google OAuth + location picker + review pull/reply, escalation alerts + recovery offers, opt-in public showcase. Phase 4 (TripAdvisor / Facebook) + Phase 5 (AI sentiment) deferred; Phase 7b cut. |
 |14 | [`venue-slug.md`](venue-slug.md) | shipped | Friendly public URLs (`book.tablekit.uk/jane-cafe`); UUID URLs keep working + 308-redirect |
 
 ## Plus-tier features (weeks 13–24)

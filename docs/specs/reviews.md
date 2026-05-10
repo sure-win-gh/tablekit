@@ -1,6 +1,6 @@
 # Spec: Reviews & reputation management
 
-**Status:** draft (Phase 1, 2, 3a, 3b, 3c, 6, 7a — shipped; Phase 4 + 5 deferred; Phase 7b cut)
+**Status:** shipped (Phase 1, 2, 3a, 3b, 3c, 6, 7a; Phase 4 + 5 deferred; Phase 7b cut — see footer)
 **Depends on:** `bookings.md`, `messaging.md`
 
 ## What we're building
@@ -56,16 +56,16 @@ Stored in `venues.settings` JSONB:
 
 If `googlePlaceId` is unset, the post-submission screen shows only "Done" (no Google link).
 
-## Acceptance criteria
+## Acceptance criteria (Phase 1)
 
-- [ ] `finished` booking → `messages` row created at `+reviewRequestDelayHours` (gated on toggle).
-- [ ] Idempotent: second `finished` → `confirmed` → `finished` cycle doesn't double-enqueue.
-- [ ] Token URL renders the public page; tampered tokens 404.
-- [ ] Submit creates one `reviews` row; second submit with same token updates the existing row (unique on `booking_id`).
-- [ ] RLS: org-A members cannot see org-B reviews.
-- [ ] Comment is encrypted at rest (`comment_cipher` is base64-shaped, never plaintext in DB).
-- [ ] Google deep link uses `https://search.google.com/local/writereview?placeid=<placeId>` only when `googlePlaceId` is set.
-- [ ] Operator can toggle the feature off and adjust delay in the venue settings page.
+- [x] `finished` booking → `messages` row created at `+reviewRequestDelayHours` (gated on `venue.settings.reviewRequestEnabled`). Wired via `onBookingFinished()` in [`lib/messaging/triggers.ts`](../../lib/messaging/triggers.ts) calling the `booking.review_request` template.
+- [x] Idempotent — a second `finished` → `confirmed` → `finished` cycle doesn't double-enqueue. The messages outbox dedupes on `(booking_id, template, channel)`; the trigger handles re-finished bookings as no-ops.
+- [x] Token URL renders the public page; tampered tokens 404. HMAC-signed `?p=<base64url(bookingId)>&s=<HMAC-SHA256>` minted by `signReviewToken`; verifier rejects on signature mismatch.
+- [x] Submit creates one `reviews` row; second submit with the same token updates instead of inserting. Partial UNIQUE `(booking_id) WHERE booking_id IS NOT NULL` ([`lib/db/schema.ts`](../../lib/db/schema.ts)) — internal rows dedupe on booking; external rows dedupe on `(venue_id, source, external_id)`.
+- [x] RLS — cross-org isolation. [`tests/integration/rls-reviews.test.ts`](../../tests/integration/rls-reviews.test.ts) verifies venue-scoped read access via `public.user_visible_venue_ids()`.
+- [x] Comment encrypted at rest. `reviews.comment_cipher` populated via `encryptPii(orgId, …)`; plaintext is never written.
+- [x] Google deep link only when `googlePlaceId` set. Submission landing screen shows the Google CTA only if `venue.settings.googlePlaceId` is present; otherwise shows the "Done" path.
+- [x] Operator toggle + delay control in venue settings. Phase 1 added `reviewRequestEnabled` + `reviewRequestDelayHours` to `venues.settings`; settings page surfaces both.
 
 ## Phase 2 — Operator dashboard + reply
 
@@ -109,9 +109,9 @@ Manual "Sync now" button on the reviews page reuses `syncGoogleReviewsForVenue` 
 
 ## Out of scope (next phases)
 
-- TripAdvisor / Facebook ingestion (Phase 4).
-- AI sentiment + reply drafting.
-- Negative-review escalation alerts.
-- Public review showcase widget.
+- TripAdvisor / Facebook ingestion (Phase 4 — deferred).
+- AI sentiment + reply drafting (Phase 5 — deferred).
 - SMS channel for review requests.
 - Multi-dimensional ratings (food/service/value/atmosphere).
+
+Removed from this list after shipping: escalation alerts (Phase 6) and the public review showcase widget (Phase 7a) — both now part of the spec body above.
