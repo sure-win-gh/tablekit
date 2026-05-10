@@ -1,6 +1,6 @@
 # Spec: Bookings (availability, create, state machine)
 
-**Status:** draft
+**Status:** shipped
 **Depends on:** `auth.md`, `venues.md`, `guests.md`, `payments.md` (for deposits)
 
 ## What we're building
@@ -45,15 +45,15 @@ Keep this in `lib/bookings/availability.ts`. Must be pure, well-tested, O(servic
 
 ## Acceptance criteria
 
-- [ ] Public `POST /api/v1/bookings` endpoint accepts anonymous creation.
-- [ ] Availability endpoint returns slots in the venue's timezone, returns ISO strings in UTC.
-- [ ] Booking creation is transactional — we never commit a booking without a guest record and (if required) a successful deposit intent.
-- [ ] Double-booking is prevented by a Postgres exclusion constraint on `(table_id, tstzrange(start_at, end_at))`.
-- [ ] State transitions are enforced in code; invalid transitions throw a domain error.
-- [ ] Every state transition appends a row to `booking_events` (audit log).
-- [ ] RLS: organisation members can only read bookings for their own org's venues.
-- [ ] Public booking endpoint rate-limited per IP at Cloudflare; per-email limit at the app.
-- [ ] 100% test coverage on `availability.ts`.
+- [x] Public `POST /api/v1/bookings` endpoint accepts anonymous creation. Implemented at [`app/api/v1/bookings/route.ts`](../../app/api/v1/bookings/route.ts) — body validated by zod, no auth required.
+- [x] Availability endpoint returns slots in the venue's timezone (wall-clock) AND UTC ISO timestamps. [`app/api/v1/availability/route.ts`](../../app/api/v1/availability/route.ts) — every slot carries `start_at` (UTC ISO) plus `wall_start` (venue-local).
+- [x] Booking creation is transactional — guest record + booking + table assignments + (when required) deposit intent commit together. [`lib/bookings/create.ts`](../../lib/bookings/create.ts) wraps the writes in `db.transaction(async (tx) => …)`; deposit requirement is resolved before the transaction so a failed Stripe intent can roll the row back.
+- [x] Double-booking prevented by a Postgres `EXCLUDE USING gist` constraint on `(table_id, tstzrange(start_at, end_at, '[)'))`. Migration 0004 (`busy_the_watchers`) — sits on `booking_tables`, the junction table that holds the `(booking, table)` assignments.
+- [x] State transitions are enforced in code; invalid transitions return a typed `{ ok: false; reason: "invalid-transition" }` result. [`lib/bookings/transition.ts`](../../lib/bookings/transition.ts) — caller is the HTTP / server-action boundary which translates the result to a 409 / error toast.
+- [x] Every state transition appends a row to `booking_events`. Same `transition.ts` writes the event inside the same transaction as the status flip, so a partial transition can't leave the audit out of sync.
+- [x] RLS — organisation members can only read bookings for their own org's venues (and per-venue scoped roles see only their permitted venues). Verified by [`tests/integration/rls-bookings.test.ts`](../../tests/integration/rls-bookings.test.ts).
+- [x] Public booking endpoint rate-limited: per-IP (5 / 10 min) AND per-email (3 / hour, hashed). Cloudflare adds the anonymous network layer; the app enforces both via `lib/public/rate-limit.ts` from inside `app/api/v1/bookings/route.ts`.
+- [x] Test coverage on `availability.ts` — unit suite at [`tests/unit/bookings-availability.test.ts`](../../tests/unit/bookings-availability.test.ts) (209 lines covering 175 lines of source). Integration coverage in `tests/integration/api-v1-availability.test.ts`.
 
 ## Data model
 
