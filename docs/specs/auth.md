@@ -1,6 +1,6 @@
 # Spec: Authentication, organisations, roles
 
-**Status:** shipped (TOTP + invite flow deferred — see "Deferred" below)
+**Status:** shipped (invite flow deferred — see "Deferred" below)
 **Depends on:** nothing (this is foundational)
 
 ## What we're building
@@ -60,10 +60,10 @@ files: `rls-bookings`, `rls-deposits`, `rls-dsar`, `rls-enquiries`,
 ## User stories
 
 - ✅ As a prospective operator I can sign up with email + password and be put into a fresh organisation as `owner`.
-- ✅ As a user I can belong to multiple organisations (multiple memberships rows) and switch between them via the active-org cookie.
+- ✅ As a user I can belong to multiple organisations (multiple memberships rows) and switch between them via the org switcher in the dashboard sidebar.
 - ✅ As any user I can reset my password via Supabase's magic-link flow.
+- ✅ As an owner/manager I must set up TOTP MFA — the dashboard renders a fullscreen MfaWall until I enrol (or, if a factor exists, complete the challenge for this session). Hosts may opt in voluntarily from `/dashboard/settings/security`.
 - 🚧 As an owner I can invite a teammate by email; they get a signup link and are added with the role I specified. **Deferred — see below.**
-- 🚧 As an owner/manager I must set up TOTP MFA. **Deferred — see below.**
 
 ## Acceptance criteria
 
@@ -72,25 +72,16 @@ files: `rls-bookings`, `rls-deposits`, `rls-dsar`, `rls-enquiries`,
 - [x] Supabase Auth used as the identity provider.
 - [x] Row-level security policies: a user can only read data for organisations they are a member of. Enforced at the DB layer via `public.user_organisation_ids()`.
 - [x] Integration test proves RLS isolation across two organisations (`rls-cross-tenant.test.ts`).
-- [x] Audit log entry on signup. Action types pre-declared for invite / role.changed / mfa.enrolled / mfa.disabled — wired when those flows ship.
-- [ ] **Organisation switcher visible in the dashboard nav.** The current sidebar (`app/(dashboard)/sidebar.tsx`) shows the active org name but doesn't expose a switcher UI for users with >1 membership. Fix is a small dashboard PR — render a dropdown that calls `setActiveOrg(orgId)` from a server action.
-- [ ] **TOTP enforced for `owner` and `manager` roles on next login after signup.** Not implemented — see Deferred.
+- [x] Audit log entry on signup + `mfa.enrolled` + `mfa.disabled`. Invite / role.changed action types pre-declared and wired when the invite flow ships.
+- [x] Organisation switcher visible in the dashboard nav. Dropdown rendered in the sidebar brand header for users with 2+ memberships, calls `switchActiveOrgAction({ orgId })` (zod-validated, RLS-scoped membership check).
+- [x] **TOTP enforced for `owner` and `manager` roles on next login after signup.** Dashboard layout (`app/(dashboard)/layout.tsx`) renders an MfaWall (`app/(dashboard)/mfa-wall.tsx`) when `decideMfaGate()` returns `enrol` or `challenge`. Enrolment writes `mfa.enrolled`; disable from `/dashboard/settings/security` requires AAL2 and writes `mfa.disabled`.
 - [ ] **Invite flow with token + email + role assignment.** Not implemented — see Deferred.
 
 ## Deferred
 
-Three items from the original spec haven't shipped. They're
-deliberately scoped out of v1 because the operator base is
-small + each one is bigger than its bullet point suggests.
-
-### TOTP MFA enforcement (highest priority)
-
-Supabase Auth supports MFA factors out of the box; the gap is the
-enforcement layer. To ship this we'd add:
-
-- Enrolment UI at `/dashboard/account/mfa` — `supabase.auth.mfa.enroll({ factorType: "totp" })`, render the QR code, ask for the first 6-digit code to verify.
-- A `requireRole` upgrade path that 302s to `/login/mfa` on `aal: "aal1"` for owner/manager when their org has any member with `mfa.enrolled` (so an enrolled owner can't be trivially demoted by a phished password).
-- Audit log on `mfa.enrolled` / `mfa.disabled` (action types already declared).
+One item from the original spec hasn't shipped. It's deliberately
+scoped out of v1 because the operator base is small + it's bigger
+than its bullet point suggests.
 
 ### Invite flow
 
@@ -100,11 +91,6 @@ Owners can invite teammates. Implementation scaffold:
 - Send the email via Resend (existing transactional sender). Token in the link.
 - Accept-invite flow: the invitee signs up via the existing signup form, then a side-effect creates the membership at the role from the invite + marks the invite accepted. If the email doesn't match the signup email exactly, reject.
 - Audit on `invite.created` / `invite.accepted` (declared).
-
-### Org switcher UI
-
-Smallest of the three. Stub described above under acceptance
-criteria.
 
 ## Data model (current)
 
