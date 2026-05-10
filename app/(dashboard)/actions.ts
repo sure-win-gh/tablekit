@@ -39,10 +39,7 @@ export async function switchActiveOrgAction(input: { orgId: string }): Promise<v
       .select({ id: memberships.organisationId })
       .from(memberships)
       .where(
-        and(
-          eq(memberships.userId, user.id),
-          eq(memberships.organisationId, parsed.data.orgId),
-        ),
+        and(eq(memberships.userId, user.id), eq(memberships.organisationId, parsed.data.orgId)),
       )
       .limit(1);
     return Boolean(row);

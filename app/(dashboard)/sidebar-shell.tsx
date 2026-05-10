@@ -369,9 +369,7 @@ function OrgSwitcher({
               )}
             >
               <span className="truncate">{m.orgName}</span>
-              {isCurrent ? (
-                <Check className="text-coral h-3.5 w-3.5 shrink-0" aria-hidden />
-              ) : null}
+              {isCurrent ? <Check className="text-coral h-3.5 w-3.5 shrink-0" aria-hidden /> : null}
             </button>
           );
         })}

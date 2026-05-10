@@ -88,7 +88,5 @@ export async function Sidebar() {
     memberships: data.memberships,
   };
 
-  return (
-    <SidebarShell data={payload} signOut={signOut} switchActiveOrg={switchActiveOrgAction} />
-  );
+  return <SidebarShell data={payload} signOut={signOut} switchActiveOrg={switchActiveOrgAction} />;
 }
