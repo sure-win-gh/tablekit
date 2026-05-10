@@ -30,7 +30,7 @@ export function ReviewForm({ p, s, mode }: { p: string; s: string; mode: "public
               aria-label={`${n} star${n === 1 ? "" : "s"}`}
               aria-pressed={rating >= n}
               onClick={() => setRating(n)}
-              className={`flex h-11 w-11 items-center justify-center rounded-md border text-2xl transition ${
+              className={`flex h-11 w-11 items-center justify-center rounded-md border text-2xl transition motion-reduce:transition-none ${
                 rating >= n
                   ? "border-ink bg-ink text-white"
                   : "border-hairline text-ash hover:border-ink bg-white"
@@ -83,7 +83,7 @@ export function ReviewForm({ p, s, mode }: { p: string; s: string; mode: "public
         <button
           type="submit"
           disabled={pending || rating === 0}
-          className="bg-ink hover:bg-charcoal rounded-md px-4 py-2 text-sm font-medium text-white transition disabled:opacity-50"
+          className="bg-ink hover:bg-charcoal rounded-md px-4 py-2 text-sm font-medium text-white transition motion-reduce:transition-none disabled:opacity-50"
         >
           {pending ? "Sending…" : "Send"}
         </button>
@@ -127,7 +127,7 @@ function ThankYou({
             // Fire-and-forget — we don't block the redirect on its result.
             void markRedirectedToGoogle(p, s);
           }}
-          className={`inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition ${
+          className={`inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition motion-reduce:transition-none ${
             lowRating
               ? "border-hairline text-ink hover:border-ink border bg-white"
               : "bg-ink hover:bg-charcoal text-white"

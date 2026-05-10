@@ -98,7 +98,7 @@ export function SlotPicker({
                       type="button"
                       onClick={() => navigate({ serviceId: s.serviceId, wallStart: s.wallStart })}
                       className={cn(
-                        "rounded-input border px-3 py-1.5 text-sm font-semibold tabular-nums transition",
+                        "rounded-input border px-3 py-1.5 text-sm font-semibold tabular-nums transition motion-reduce:transition-none",
                         "focus-visible:ring-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
                         isPicked
                           ? "border-ink bg-ink text-white"
