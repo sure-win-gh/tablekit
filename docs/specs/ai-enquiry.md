@@ -1,6 +1,6 @@
 # Spec: AI enquiry handler (Plus tier)
 
-**Status:** draft — Plus tier only
+**Status:** shipped — Plus tier only (per-venue verified sending domain deferred — see footer)
 **Depends on:** `bookings.md`, `messaging.md`, `guests.md`
 
 ## What we're building
@@ -54,15 +54,21 @@ Email content is untrusted. Rules:
 
 ## Acceptance criteria
 
-- [ ] Parse rate >90% on a test set of 50 real-world enquiries (stripped and consented).
-- [ ] p95 parse-to-draft latency <10s.
-- [ ] Cost <£0.02 per enquiry (Haiku pricing buffer).
-- [ ] Never sends a reply without operator approval unless auto-send mode is enabled for the venue and the enquiry passes the guardrail.
-- [ ] Replies always include a human fallback line: "Not quite right? Reply and our team will help."
-- [ ] Enquiry emails and drafts retained for 90 days then purged (see `gdpr.md`).
+- [ ] Parse rate >90% on a test set of 50 real-world enquiries (stripped and consented). Tracked as a manual launch-readiness check — not codified in CI.
+- [ ] p95 parse-to-draft latency <10s. Observed via Bedrock telemetry; not in CI.
+- [ ] Cost <£0.02 per enquiry (Haiku pricing buffer). Tracked in `lib/llm/bedrock.ts` per-call telemetry; spot-checks against monthly Bedrock invoices.
+- [x] Never sends a reply without operator approval unless auto-send mode is enabled for the venue AND the enquiry passes the guardrail. Auto-send wired in [`lib/enquiries/runner.ts`](../../lib/enquiries/runner.ts) → `attemptAutoSend`. Guardrail at [`lib/enquiries/guardrail.ts`](../../lib/enquiries/guardrail.ts) holds on: no slots, any `specialRequests` (Article-9 surface), body >2000 chars, reply-chain markers, prompt-injection keywords. Per-venue toggle at `venue.settings.aiEnquiryAutoSendEnabled` (default false). Audit: `enquiry.auto_sent` on success, `enquiry.auto_sent_held` with reason on guard miss.
+- [x] Replies always include a human fallback line. Baked into [`lib/enquiries/draft.ts`](../../lib/enquiries/draft.ts) — every generated draft (whether operator-sent or auto-sent) ends with "Not quite right? Reply to this email and our team will help."
+- [x] Enquiry emails and drafts retained for 90 days then purged. [`lib/enquiries/retention.ts`](../../lib/enquiries/retention.ts) sweep + `/api/cron/enquiry-retention` daily cron; audit `enquiry.retention.swept`.
 
 ## Out of scope
 
 - Inbound phone calls / voice AI.
 - Multi-turn conversations beyond a single round-trip.
 - Languages other than en-GB on first release.
+
+## Deferred
+
+### Per-venue verified sending domain
+
+Auto-send (and operator-driven send) currently goes out via the platform's `RESEND_FROM_EMAIL`. Gmail shows "via tablekit.uk" beneath the venue name, which is fine for v1 but reduces sender authority over time. The real fix is per-venue domain verification in Resend: operator pastes their domain → Resend issues DKIM/SPF DNS records → operator adds them → we poll until verified → subsequent enquiry replies use that domain in `From:`. Substantial — needs a Resend Domains-API integration, the DNS instructions UI, a verification poller, and a fallback path so a half-set-up domain doesn't drop replies on the floor. Pull when one of the first ten Plus-tier customers asks for it.

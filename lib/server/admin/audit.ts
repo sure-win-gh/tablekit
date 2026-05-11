@@ -109,6 +109,8 @@ export type AuditAction =
   | "enquiry.reset"
   | "enquiry.retried"
   | "enquiry.retention.swept"
+  | "enquiry.auto_sent"
+  | "enquiry.auto_sent_held"
   // public-api phase
   | "api_key.issued"
   | "api_key.revoked"

@@ -23,6 +23,7 @@ type Props = {
   escalationThreshold: 1 | 2 | 3;
   escalationEmail: string;
   showcaseEnabled: boolean;
+  aiEnquiryAutoSendEnabled: boolean;
 };
 
 export function VenueSettingsForm({
@@ -39,6 +40,7 @@ export function VenueSettingsForm({
   escalationThreshold,
   escalationEmail,
   showcaseEnabled,
+  aiEnquiryAutoSendEnabled,
 }: Props) {
   const [state, formAction, pending] = useActionState(updateVenue, initial);
   const fieldErrors = state.status === "error" ? state.fieldErrors : undefined;
@@ -204,6 +206,26 @@ export function VenueSettingsForm({
           Threshold is the highest rating that triggers an alert (e.g. 2 alerts on 1- and 2-star).
           Leave the email blank to fall back to the org owner&apos;s address.
         </p>
+      </fieldset>
+
+      <fieldset id="ai-enquiry" className="border-hairline flex flex-col gap-3 border-t pt-4">
+        <legend className="text-ink text-sm font-semibold">AI enquiry handler — auto-send</legend>
+        <p className="text-ash text-xs">
+          When on, replies pass through automatically if the parsed enquiry has no special
+          requests, the body is short, isn&apos;t part of a reply chain, and at least one slot
+          matched. Everything else is held for you to review. Auto-sent replies still carry the
+          &quot;Not quite right? Reply and our team will help&quot; line, so guests have a path
+          back to a human.
+        </p>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="ai_enquiry_auto_send_enabled"
+            defaultChecked={aiEnquiryAutoSendEnabled}
+            className="border-hairline h-4 w-4 rounded"
+          />
+          <span>Auto-send replies on simple booking requests</span>
+        </label>
       </fieldset>
 
       {state.status === "error" && !fieldErrors ? (
