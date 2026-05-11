@@ -35,22 +35,34 @@ import "server-only";
 
 import { eq, sql } from "drizzle-orm";
 
-import { enquiries } from "@/lib/db/schema";
+import { enquiries, venues as venuesTable } from "@/lib/db/schema";
 import { loadPublicAvailability, loadPublicVenue } from "@/lib/public/venue";
 import { type Ciphertext, type Plaintext, decryptPii, encryptPii } from "@/lib/security/crypto";
 import { adminDb } from "@/lib/server/admin/db";
 
 import { generateDraft } from "./draft";
+import { evaluateGuardrail, loadAutoSendEnabled } from "./guardrail";
+import { applySendDraftPostSend } from "./operator-actions";
 import { parseEnquiry } from "./parse";
 import { checkEnquiryRateLimit } from "./rate-limit";
 import { sanitiseEnquiryError } from "./sanitise-error";
+import { sendEnquiryReply } from "./send-reply";
 import type { ParsedEnquiry, SuggestedSlot } from "./types";
+
+import { audit } from "@/lib/server/admin/audit";
 
 // Cap on parse attempts — every retry costs Bedrock tokens.
 const MAX_PARSE_ATTEMPTS = 3;
 
+// Reply-To address suffix for auto-sent replies — same value as
+// app/api/webhooks/resend-inbound/route.ts INBOUND_DOMAIN. Duplicated
+// rather than imported so the cron-time runner stays decoupled from
+// the webhook route's module graph.
+const INBOUND_DOMAIN = "enquiries.tablekit.uk";
+
 export type ProcessResult =
   | { status: "draft_ready"; enquiryId: string }
+  | { status: "auto_sent"; enquiryId: string }
   | { status: "discarded"; enquiryId: string }
   | { status: "failed"; enquiryId: string; error: string }
   | {
@@ -188,7 +200,15 @@ export async function processEnquiry(enquiryId: string): Promise<ProcessResult> 
 
     const draft = generateDraft({ parsed, slots, venue });
     await persistDraftReady(db, job, parsed, slots, draft);
-    return { status: "draft_ready", enquiryId: job.id };
+
+    // Auto-send branch. Venue-opt-in + guardrail-gated. Errors here
+    // are intentionally swallowed: the draft already exists, so the
+    // operator can still send manually — there's no graceful path to
+    // surface an auto-send failure to the diner anyway. We don't
+    // fail-roll-back to "received" because the parse already cost
+    // Bedrock tokens.
+    const finalStatus = await attemptAutoSend(db, job, parsed, slots.length, draft, bodyText);
+    return { status: finalStatus, enquiryId: job.id };
   } catch (err) {
     // Catch-all — anything below the try shouldn't normally throw,
     // but if it does we sanitise + fail rather than 500 the cron.
@@ -229,6 +249,128 @@ async function persistDraftReady(
       draftReplyCipher: draftCipher,
     })
     .where(eq(enquiries.id, job.id));
+}
+
+// Attempt to auto-send the freshly drafted reply on behalf of the
+// operator. Two gates in series — venue opt-in then guardrail. The
+// guardrail is the security-critical one (Article 9 + injection
+// vectors); the venue opt-in is the business-decision lever.
+//
+// Returns the final status: "auto_sent" if we sent + flipped the
+// row, otherwise "draft_ready" (unchanged from persistDraftReady).
+// Never throws — a send failure leaves the operator their normal
+// manual review path.
+//
+// PII posture (per gdpr.md §Logs):
+//   - We decrypt the guest email + body for the duration of this
+//     function only. Neither is stored, logged, or attached to audit
+//     metadata.
+//   - On failure we sanitise the error before logging; audit metadata
+//     carries only correlation handles (enquiry id, guardrail reason).
+async function attemptAutoSend(
+  db: ReturnType<typeof adminDb>,
+  job: { id: string; organisationId: string; venueId: string },
+  parsed: ParsedEnquiry,
+  slotCount: number,
+  draft: { subject: string; body: string },
+  rawBody: string,
+): Promise<"draft_ready" | "auto_sent"> {
+  // 1. Venue opt-in. Default false; a missing key means "off". Reads
+  //    venues.settings via adminDb (no user session in this cron path).
+  const enabled = await loadAutoSendEnabled(job.venueId);
+  if (!enabled) return "draft_ready";
+
+  // 2. Guardrail. Pure — no I/O. The guard tests every condition we
+  //    care about (slot availability, Article-9 special requests,
+  //    body length, reply chain, prompt-injection). Hold on any miss.
+  const guardrail = evaluateGuardrail({ parsed, rawBody, slotCount });
+  if (!guardrail.pass) {
+    await audit.log({
+      organisationId: job.organisationId,
+      action: "enquiry.auto_sent_held",
+      targetType: "enquiry",
+      targetId: job.id,
+      metadata: { venueId: job.venueId, reason: guardrail.reason },
+    });
+    return "draft_ready";
+  }
+
+  // 3. Resolve send context — guest email (encrypted) + the venue
+  //    slug that owns the inbound Reply-To address. A venue without a
+  //    slug can't have received this enquiry at all (the inbound
+  //    webhook resolves by slug), so the null branch is defensive.
+  const [row] = await db
+    .select({
+      fromEmailCipher: enquiries.fromEmailCipher,
+    })
+    .from(enquiries)
+    .where(eq(enquiries.id, job.id));
+  const [venueRow] = await db
+    .select({ slug: venuesTable.slug })
+    .from(venuesTable)
+    .where(eq(venuesTable.id, job.venueId));
+  if (!row || !venueRow?.slug) {
+    return "draft_ready";
+  }
+
+  let guestEmail: string;
+  try {
+    guestEmail = await decryptPii(
+      job.organisationId,
+      row.fromEmailCipher as Ciphertext,
+    );
+  } catch {
+    // Crypto failure (key rotation mid-flight, etc.). Fall back to
+    // manual review — operator can still send via the inbox.
+    return "draft_ready";
+  }
+
+  const replyTo = `${venueRow.slug}@${INBOUND_DOMAIN}`;
+
+  try {
+    await sendEnquiryReply({
+      to: guestEmail,
+      replyTo,
+      subject: draft.subject,
+      body: draft.body,
+      // Distinct key from the operator-action send so a manual click
+      // after auto-send fires on a different idempotency lane.
+      idempotencyKey: `enquiry-auto-send:${job.id}`,
+    });
+  } catch (err) {
+    // Sanitised at the source (sendEnquiryReply wraps SDK errors
+    // before throwing). Log + leave the draft for the operator.
+    console.warn(`enquiry.auto_send.failed ${job.id} ${sanitiseEnquiryError(err)}`);
+    return "draft_ready";
+  }
+
+  // Re-encrypt the body so the persisted ciphertext matches what
+  // actually went out — mirrors the operator action's contract.
+  const finalBodyCipher = await encryptPii(job.organisationId, draft.body as Plaintext);
+
+  const result = await applySendDraftPostSend(db, {
+    enquiryId: job.id,
+    venueId: job.venueId,
+    finalBodyCipher,
+    repliedAt: new Date(),
+  });
+  if (result.rowsAffected === 0) {
+    // Status no longer 'draft_ready' — extremely unlikely (no other
+    // path flips it in this runner), but if it happened we already
+    // sent the email. Caller still sees the draft as replied via the
+    // operator UI later.
+    return "draft_ready";
+  }
+
+  await audit.log({
+    organisationId: job.organisationId,
+    action: "enquiry.auto_sent",
+    targetType: "enquiry",
+    targetId: job.id,
+    metadata: { venueId: job.venueId, slots: slotCount },
+  });
+
+  return "auto_sent";
 }
 
 // Persist a not-a-booking-request — same shape but status='discarded'

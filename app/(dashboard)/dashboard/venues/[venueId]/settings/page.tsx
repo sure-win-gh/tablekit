@@ -75,6 +75,10 @@ export default async function VenueSettingsPage({
   };
 
   const showcaseEnabled = settings["showcaseEnabled"] === true;
+  // AI enquiry auto-send — Plus tier only on the surface, but we
+  // surface the toggle to every venue and let the runner's
+  // requirePlan-equivalent gate (if/when added) refuse. Default off.
+  const aiEnquiryAutoSendEnabled = settings["aiEnquiryAutoSendEnabled"] === true;
 
   // Stripe Connect state is org-scoped — one connected account per
   // organisation (D1 in the phase plan). The billing section is
@@ -168,6 +172,7 @@ export default async function VenueSettingsPage({
           escalationThreshold={escalationSettings.threshold}
           escalationEmail={escalationSettings.email}
           showcaseEnabled={showcaseEnabled}
+          aiEnquiryAutoSendEnabled={aiEnquiryAutoSendEnabled}
         />
       </div>
 

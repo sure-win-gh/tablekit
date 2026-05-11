@@ -27,7 +27,7 @@ This folder holds the source of truth for every feature. Claude should read the 
 | # | Spec                                | Notes |
 |---|-------------------------------------|-------|
 |11 | [`multi-venue.md`](multi-venue.md)   | shipped — group overview + cross-venue guests + venue-scoped RLS + ⌘K switcher |
-|12 | [`ai-enquiry.md`](ai-enquiry.md)     | shipped — inbound webhook + Bedrock parser + runner/cron + operator inbox + 90-day retention sweep. Auto-send mode + per-venue verified sending domain deferred. |
+|12 | [`ai-enquiry.md`](ai-enquiry.md)     | shipped — inbound webhook + Bedrock parser + runner/cron + operator inbox + 90-day retention sweep + opt-in auto-send (guardrail-gated). Per-venue verified sending domain deferred. |
 |13 | [`import-export.md`](import-export.md) | shipped — inline CSV+JSON export + competitor-format import (OpenTable / ResDiary / SevenRooms) with mapping wizard. Manual UI verification + adapter-signature confirmation tracked separately. |
 |14 | [`public-api.md`](public-api.md)     | shipped — Bearer-auth REST API at `api.tablekit.uk/v1` (bookings + read-extras + idempotency) + webhook subscriptions/deliveries/replay + 90d request log + OpenAPI 3.1 + Stoplight docs at `/docs/api`. |
 

@@ -57,6 +57,11 @@ const Schema = z.object({
       message: "Enter a valid email or leave blank",
     })
     .optional(),
+  // AI enquiry handler — auto-send. Off by default. The runner re-
+  // checks this value at send time (`loadAutoSendEnabled`) — toggling
+  // it off here stops the next enquiry without affecting in-flight
+  // ones (the parse + persist already happened on those).
+  aiEnquiryAutoSendEnabled: z.coerce.boolean().optional(),
 });
 
 export type UpdateVenueState =
@@ -82,6 +87,7 @@ export async function updateVenue(
     escalationEnabled: formData.get("escalation_enabled") === "on",
     escalationThreshold: formData.get("escalation_threshold"),
     escalationEmail: formData.get("escalation_email"),
+    aiEnquiryAutoSendEnabled: formData.get("ai_enquiry_auto_send_enabled") === "on",
   });
 
   if (!parsed.success) {
@@ -150,6 +156,7 @@ export async function updateVenue(
     escalationEnabled: escalationEnabled ?? true,
     escalationThreshold: escalationThreshold ?? 2,
     escalationEmail: trimmedEscalationEmail.length > 0 ? trimmedEscalationEmail : null,
+    aiEnquiryAutoSendEnabled: parsed.data.aiEnquiryAutoSendEnabled ?? false,
   };
 
   let updated: { id: string } | undefined;
