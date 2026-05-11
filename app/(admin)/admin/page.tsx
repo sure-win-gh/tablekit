@@ -1,3 +1,5 @@
+import { Download } from "lucide-react";
+
 import { Sparkline } from "@/components/admin/sparkline";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui";
 import { requirePlatformAdmin } from "@/lib/server/admin/auth";
@@ -31,7 +33,7 @@ export default async function AdminOverviewPage() {
         </p>
       </header>
 
-      <Section title="Signups">
+      <Section title="Signups" csvHref="/admin/export/signups">
         <div className="grid grid-cols-3 gap-3">
           <Stat label="Today" value={signups.today.toString()} />
           <Stat label="Last 7 days" value={signups.last7d.toString()} />
@@ -39,7 +41,7 @@ export default async function AdminOverviewPage() {
         </div>
       </Section>
 
-      <Section title="Bookings">
+      <Section title="Bookings" csvHref="/admin/export/bookings">
         <div className="grid grid-cols-3 gap-3">
           <Stat label="Today" value={bookings.today.toString()} />
           <Stat label="Last 7 days" value={bookings.last7d.toString()} />
@@ -71,7 +73,7 @@ export default async function AdminOverviewPage() {
         )}
       </Section>
 
-      <Section title="Transactional messages — last 7 days">
+      <Section title="Transactional messages — last 7 days" csvHref="/admin/export/messages">
         {messages.length === 0 ? (
           <Empty message="No messages dispatched in the last 7 days." />
         ) : (
@@ -99,11 +101,28 @@ export default async function AdminOverviewPage() {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  csvHref,
+  children,
+}: {
+  title: string;
+  csvHref?: string;
+  children: React.ReactNode;
+}) {
   return (
     <Card padding="lg">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
+        {csvHref ? (
+          <a
+            href={csvHref}
+            className="rounded-pill border-hairline text-ink hover:border-ink inline-flex items-center gap-1.5 border bg-white px-3 py-1 text-xs font-semibold transition"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden />
+            CSV
+          </a>
+        ) : null}
       </CardHeader>
       <CardBody>{children}</CardBody>
     </Card>

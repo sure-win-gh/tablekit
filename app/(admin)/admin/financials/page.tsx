@@ -28,6 +28,13 @@ export default async function AdminFinancialsPage() {
       <Card padding="lg">
         <CardHeader>
           <CardTitle>Monthly recurring revenue</CardTitle>
+          <a
+            href="/admin/export/financials"
+            className="rounded-pill border-hairline text-ink hover:border-ink inline-flex items-center gap-1.5 border bg-white px-3 py-1 text-xs font-semibold transition"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden />
+            CSV
+          </a>
         </CardHeader>
         <CardBody>
           <div className="grid grid-cols-3 gap-3">
