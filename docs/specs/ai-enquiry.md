@@ -1,6 +1,6 @@
 # Spec: AI enquiry handler (Plus tier)
 
-**Status:** shipped — Plus tier only (sending-domain setup shipped; `From:`-header wiring deferred — see footer)
+**Status:** shipped — Plus tier only
 **Depends on:** `bookings.md`, `messaging.md`, `guests.md`
 
 ## What we're building
@@ -67,12 +67,14 @@ Email content is untrusted. Rules:
 - Multi-turn conversations beyond a single round-trip.
 - Languages other than en-GB on first release.
 
+## Sending identity
+
+Replies go from the venue's verified domain when one is registered + verified, otherwise from the platform default. Resolution lives in [`lib/enquiries/send-reply.ts`](../../lib/enquiries/send-reply.ts) → `resolveFromAddress(venueId)` and is called by both the operator-action send path and the runner's auto-send path. Fallback is permissive: a missing row, a non-`verified` status, or a venue without a slug all fall through to `fromEmail()` — a half-set-up domain must never drop replies on the floor.
+
+Setup UI lives at `/dashboard/venues/[venueId]/settings` — owner adds a domain, sees the DKIM/SPF/DMARC records Resend issued, pastes them into DNS, clicks "Verify now", and watches the status badge flip. Backed by `venue_sending_domains` (migration 0036, RLS-tested) and the Resend wrapper at [`lib/email/sending-domains.ts`](../../lib/email/sending-domains.ts).
+
 ## Deferred
 
-### Use the verified domain in enquiry replies (`From:` header)
+### Cron-based verification polling
 
-Setup-flow shipped: operators can register a domain on the venue settings page, see the DKIM/SPF/DMARC records Resend issued, paste them into their DNS host, click "Verify now", and watch the status badge flip. Backed by `venue_sending_domains` (migration 0036, RLS-tested) and the wrapper in [`lib/email/sending-domains.ts`](../../lib/email/sending-domains.ts).
-
-What's NOT yet wired: enquiry replies still go out via the platform's `RESEND_FROM_EMAIL`. The follow-up is to teach [`lib/enquiries/send-reply.ts`](../../lib/enquiries/send-reply.ts) to look up the venue's verified-domain row and, when present, set `From: <slug>@<verified-domain>` instead of the platform default. Fallback: if the row is missing or status is anything other than `verified`, keep the existing platform sender — a half-set-up domain must never drop replies on the floor.
-
-Optional follow-on after that: a daily cron to poll Resend for any non-verified rows (so an operator who pastes the records and walks away gets verified the next morning without clicking the button). The manual "Verify now" path is sufficient for launch.
+Operators currently click "Verify now" to re-check a pending domain. An optional daily sweep (small cron route) would re-check any non-verified rows so an operator who pastes DNS records and walks away gets verified the next morning without revisiting the dashboard. Cheap to add when warranted — the manual path is sufficient for launch.

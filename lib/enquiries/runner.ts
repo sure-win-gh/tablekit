@@ -46,7 +46,7 @@ import { applySendDraftPostSend } from "./operator-actions";
 import { parseEnquiry } from "./parse";
 import { checkEnquiryRateLimit } from "./rate-limit";
 import { sanitiseEnquiryError } from "./sanitise-error";
-import { sendEnquiryReply } from "./send-reply";
+import { resolveFromAddress, sendEnquiryReply } from "./send-reply";
 import type { ParsedEnquiry, SuggestedSlot } from "./types";
 
 import { audit } from "@/lib/server/admin/audit";
@@ -323,9 +323,13 @@ async function attemptAutoSend(
   }
 
   const replyTo = `${venueRow.slug}@${INBOUND_DOMAIN}`;
+  // Same resolver as the operator path — a verified per-venue domain
+  // takes over, otherwise platform sender.
+  const from = await resolveFromAddress(job.venueId);
 
   try {
     await sendEnquiryReply({
+      from,
       to: guestEmail,
       replyTo,
       subject: draft.subject,
