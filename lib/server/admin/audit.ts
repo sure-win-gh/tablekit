@@ -111,6 +111,9 @@ export type AuditAction =
   | "enquiry.retention.swept"
   | "enquiry.auto_sent"
   | "enquiry.auto_sent_held"
+  | "enquiry.sending_domain.added"
+  | "enquiry.sending_domain.removed"
+  | "enquiry.sending_domain.verified"
   // public-api phase
   | "api_key.issued"
   | "api_key.revoked"

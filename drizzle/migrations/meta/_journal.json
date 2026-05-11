@@ -253,6 +253,13 @@
       "when": 1778363187878,
       "tag": "0035_lonely_excalibur",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1778500681432,
+      "tag": "0036_absurd_makkari",
+      "breakpoints": true
     }
   ]
 }
