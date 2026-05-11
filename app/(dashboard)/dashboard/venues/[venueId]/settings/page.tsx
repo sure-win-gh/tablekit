@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { getAccount } from "@/lib/stripe/connect";
 import { withUser } from "@/lib/db/client";
-import { venueOauthConnections, venues } from "@/lib/db/schema";
+import { venueOauthConnections, venueSendingDomains, venues } from "@/lib/db/schema";
 import { listAccounts, listLocations } from "@/lib/google/business-profile";
 import { getActiveGoogleConnection } from "@/lib/google/connection";
 import { isConfigured as googleOauthConfigured } from "@/lib/oauth/google";
@@ -12,6 +12,7 @@ import { isConfigured as googleOauthConfigured } from "@/lib/oauth/google";
 import { BillingSection } from "./billing";
 import { GoogleConnectionSection } from "./google-connection";
 import { GoogleLocationPicker, type PickerLocation } from "./google-location-picker";
+import { SendingDomainSection, type SendingDomainRow } from "./sending-domain-section";
 import { VenueSettingsForm } from "./form";
 
 export const metadata = {
@@ -25,7 +26,8 @@ export default async function VenueSettingsPage({
   params: Promise<{ venueId: string }>;
   searchParams: Promise<{ stripe?: string; google?: string }>;
 }) {
-  const { orgId } = await requireRole("manager");
+  const { orgId, role } = await requireRole("manager");
+  const isOwner = role === "owner";
   const { venueId } = await params;
   const sp = await searchParams;
 
@@ -79,6 +81,32 @@ export default async function VenueSettingsPage({
   // surface the toggle to every venue and let the runner's
   // requirePlan-equivalent gate (if/when added) refuse. Default off.
   const aiEnquiryAutoSendEnabled = settings["aiEnquiryAutoSendEnabled"] === true;
+
+  // Per-venue sending domain. Optional — most venues use the platform
+  // default until they care about "via tablekit.uk" in client UX.
+  const sendingDomainRowRaw = await withUser(async (db) => {
+    const rows = await db
+      .select({
+        domain: venueSendingDomains.domain,
+        status: venueSendingDomains.status,
+        dnsRecords: venueSendingDomains.dnsRecords,
+        lastCheckedAt: venueSendingDomains.lastCheckedAt,
+      })
+      .from(venueSendingDomains)
+      .where(eq(venueSendingDomains.venueId, venueId))
+      .limit(1);
+    return rows[0] ?? null;
+  });
+  const sendingDomainRow: SendingDomainRow | null = sendingDomainRowRaw
+    ? {
+        domain: sendingDomainRowRaw.domain,
+        status: sendingDomainRowRaw.status as SendingDomainRow["status"],
+        records: Array.isArray(sendingDomainRowRaw.dnsRecords)
+          ? (sendingDomainRowRaw.dnsRecords as SendingDomainRow["records"])
+          : [],
+        lastCheckedAt: sendingDomainRowRaw.lastCheckedAt?.toISOString() ?? null,
+      }
+    : null;
 
   // Stripe Connect state is org-scoped — one connected account per
   // organisation (D1 in the phase plan). The billing section is
@@ -174,6 +202,8 @@ export default async function VenueSettingsPage({
           showcaseEnabled={showcaseEnabled}
           aiEnquiryAutoSendEnabled={aiEnquiryAutoSendEnabled}
         />
+
+        <SendingDomainSection venueId={venue.id} isOwner={isOwner} row={sendingDomainRow} />
       </div>
 
       <BillingSection

@@ -1,6 +1,6 @@
 # Spec: AI enquiry handler (Plus tier)
 
-**Status:** shipped — Plus tier only (per-venue verified sending domain deferred — see footer)
+**Status:** shipped — Plus tier only (sending-domain setup shipped; `From:`-header wiring deferred — see footer)
 **Depends on:** `bookings.md`, `messaging.md`, `guests.md`
 
 ## What we're building
@@ -69,6 +69,10 @@ Email content is untrusted. Rules:
 
 ## Deferred
 
-### Per-venue verified sending domain
+### Use the verified domain in enquiry replies (`From:` header)
 
-Auto-send (and operator-driven send) currently goes out via the platform's `RESEND_FROM_EMAIL`. Gmail shows "via tablekit.uk" beneath the venue name, which is fine for v1 but reduces sender authority over time. The real fix is per-venue domain verification in Resend: operator pastes their domain → Resend issues DKIM/SPF DNS records → operator adds them → we poll until verified → subsequent enquiry replies use that domain in `From:`. Substantial — needs a Resend Domains-API integration, the DNS instructions UI, a verification poller, and a fallback path so a half-set-up domain doesn't drop replies on the floor. Pull when one of the first ten Plus-tier customers asks for it.
+Setup-flow shipped: operators can register a domain on the venue settings page, see the DKIM/SPF/DMARC records Resend issued, paste them into their DNS host, click "Verify now", and watch the status badge flip. Backed by `venue_sending_domains` (migration 0036, RLS-tested) and the wrapper in [`lib/email/sending-domains.ts`](../../lib/email/sending-domains.ts).
+
+What's NOT yet wired: enquiry replies still go out via the platform's `RESEND_FROM_EMAIL`. The follow-up is to teach [`lib/enquiries/send-reply.ts`](../../lib/enquiries/send-reply.ts) to look up the venue's verified-domain row and, when present, set `From: <slug>@<verified-domain>` instead of the platform default. Fallback: if the row is missing or status is anything other than `verified`, keep the existing platform sender — a half-set-up domain must never drop replies on the floor.
+
+Optional follow-on after that: a daily cron to poll Resend for any non-verified rows (so an operator who pastes the records and walks away gets verified the next morning without clicking the button). The manual "Verify now" path is sufficient for launch.

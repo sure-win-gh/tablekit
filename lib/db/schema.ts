@@ -1169,6 +1169,72 @@ export const enquiries = pgTable(
 );
 
 // =============================================================================
+// Per-venue verified sending domain (AI enquiry handler)
+// =============================================================================
+//
+// Operators can add a domain they own (e.g. `mail.jane-cafe.co.uk`)
+// and prove ownership via DKIM/SPF DNS records; once verified, enquiry
+// replies go out from that domain instead of the platform default —
+// dropping the "via tablekit.uk" suffix Gmail otherwise appends.
+//
+// Source of truth for verification status is Resend's Domains API.
+// We mirror enough into this row to render status server-side without
+// a Resend round-trip on every settings page load (just the values
+// that change rarely: domain, resend_domain_id, status, dns_records).
+//
+// Domain text is operator-chosen + publishable (it goes in `From:`
+// headers), not PII. DNS records (DKIM public key, SPF, DMARC) are
+// also public by design — no encryption.
+//
+// RLS: SELECT for org members where the venue is in their visible set
+// (matches the `venues` policy via user_visible_venue_ids()). No
+// write policies — all mutations flow through adminDb in server
+// actions after explicit role gating. Matches venue_oauth_connections.
+export const venueSendingDomains = pgTable(
+  "venue_sending_domains",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    domain: text("domain").notNull(),
+    // Resend's internal id for this domain. Used for subsequent
+    // verify / get / delete API calls.
+    resendDomainId: text("resend_domain_id").notNull(),
+    // Mirrors Resend's status field verbatim: 'not_started' | 'pending'
+    // | 'verified' | 'failure' | 'temporary_failure'. CHECK constrained
+    // in the migration.
+    status: text("status").notNull().default("pending"),
+    // Plaintext jsonb of the DNS records Resend issued at create time.
+    // Shape: [{ record, name, type, value, ttl?, priority?, status? }].
+    // Reads-only — operators paste these into their DNS host. Stable
+    // for the lifetime of the row (rotating DKIM keys would require
+    // remove + re-add).
+    dnsRecords: jsonb("dns_records")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // Set on the first successful verification check. Nulled-back if a
+    // domain falls into 'failure' so the UI can show "was verified,
+    // re-verify".
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    // Updated every time we poll Resend (manual "verify now" or future
+    // cron sweep). Surfaces "we last checked 3 minutes ago" in the UI.
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+  },
+  (t) => [
+    // One row per venue. Operator removes + re-adds to switch domain;
+    // we don't keep history (the previous row's resend_domain_id was
+    // deleted in Resend at remove time anyway).
+    uniqueIndex("venue_sending_domains_venue_unique").on(t.venueId),
+    index("venue_sending_domains_org_idx").on(t.organisationId),
+  ],
+);
+
+// =============================================================================
 // Inbound webhook event log (idempotency)
 // =============================================================================
 //
