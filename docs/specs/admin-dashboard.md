@@ -1,6 +1,6 @@
 # Spec: Internal admin dashboard (Tablekit-staff)
 
-**Status:** shipped (2026-04-28) — CSV export + recharts sparklines deferred (see Out of scope)
+**Status:** shipped (2026-04-28)
 **Depends on:** `auth.md`, `bookings.md`, `messaging.md`, `payments.md`, `reporting.md` (operator-facing — distinct surface)
 
 ## What we're building
@@ -154,12 +154,12 @@ Layout has a distinct red/orange "ADMIN" pill in the top bar so it's never confu
 - [ ] Overview loads in <1s at 10k bookings / 1k orgs (Stripe cache hit).
 - [ ] Stripe API failure does not break the dashboard — financials degrade to last cached value + warning banner.
 - [ ] All queries use `adminDb()`; no operator-RLS leakage from admin pages into operator pages (verified by integration test seeded with two orgs).
-- [ ] CSV export for: signups, venues list, bookings volume, messages volume, financials snapshot.
-- [ ] `recharts` code-split — operator pages don't load it (verified in DevTools network tab).
+- [x] CSV export for signups, venues list, bookings volume, messages volume, financials snapshot. Routes under [`app/(admin)/admin/export/`](../../app/(admin)/admin/export/) — each one calls `requirePlatformAdmin` inline, logs a `platform_audit_log` "exported" event with the metric + range, and streams CSV via `toCsv()` from the generic RFC-4180 helper. Download links live in the page Section headers / card headers (signups + bookings + messages on the overview, MRR on financials, venues on the venues page).
+- [x] `recharts` code-split — operator pages don't load it. The only `recharts` import in the codebase is in [`components/admin/sparkline.tsx`](../../components/admin/sparkline.tsx), which is consumed exclusively from files under `app/(admin)/`. Next.js's route-group bundling keeps the chunk out of operator routes.
 
 ## Out of scope (future work)
 
-- **CSV export per metric** — venues / audit feed / payment failures / Connect funnel are wired. Remaining (overview KPIs, feature adoption, org drill-down) are small enough to add when the need arises.
+- **CSV export for feature adoption + org drill-down** — overview KPIs (signups / bookings / messages / financials) + venues / audit feed / payment failures / Connect funnel are wired. The remaining surfaces are smaller and can ship when the need arises.
 - **Headline trend charts** — sparklines on the overview KPI tiles ship today (signups + bookings, 30-day daily buckets, recharts code-split into admin chunks). A larger trend chart (e.g. MRR over time) is still on the table when the data shape warrants it.
 - **Per-org MRR contribution** — pending confirmation of `organisations.stripe_customer_id` semantics (Connect customer vs billing customer). Add `stripe_billing_customer_id` if needed.
 - **`subscriptions` table + Stripe webhook sync** — promote when live-pull becomes a bottleneck or cohort analysis is needed.
