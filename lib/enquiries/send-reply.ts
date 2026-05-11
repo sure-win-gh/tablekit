@@ -25,14 +25,23 @@
 
 import "server-only";
 
+import { eq } from "drizzle-orm";
+
+import { venueSendingDomains, venues } from "@/lib/db/schema";
 import { fromEmail, messagingDisabled, resend } from "@/lib/email/client";
 import { EmailSendError } from "@/lib/email/send";
+import { adminDb } from "@/lib/server/admin/db";
 
 export type SendEnquiryReplyInput = {
   to: string;
   replyTo: string;
   subject: string;
   body: string;
+  // Optional override of the From: header. Callers compute this via
+  // `resolveFromAddress(venueId)` so a verified per-venue sending
+  // domain takes precedence over the platform default. Absent →
+  // platform default (RESEND_FROM_EMAIL).
+  from?: string;
   // Stable across retries — Resend dedupes on this. The action layer
   // uses `enquiry-reply:${enquiryId}` so a double-click can't fire a
   // second send.
@@ -54,7 +63,7 @@ export async function sendEnquiryReply(
   try {
     r = await resend().emails.send(
       {
-        from: fromEmail(),
+        from: input.from ?? fromEmail(),
         to: input.to,
         replyTo: input.replyTo,
         subject: input.subject,
@@ -89,4 +98,38 @@ function sanitiseSendError(err: unknown): string {
     return `resend:${err.name}`;
   }
   return "resend:unknown";
+}
+
+// Resolve the `From:` address to use when replying on behalf of a
+// venue. If the venue has a verified sending domain registered
+// (migration 0036) the reply goes from `<venue-slug>@<verified-domain>`
+// — dropping the "via tablekit.uk" Gmail suffix the platform default
+// would otherwise produce.
+//
+// Fall back to the platform `fromEmail()` whenever:
+//   • No venue_sending_domains row exists.
+//   • The row's status is anything other than 'verified' (a half-set-
+//     up domain must never drop replies on the floor).
+//   • The venue has no slug (shouldn't happen — inbound webhook
+//     resolves by slug — but be defensive).
+//
+// Reads via adminDb because the operator-action caller already has
+// a session-scoped read above this and the runner caller has no
+// session at all; both want the same result, so we centralise here.
+export async function resolveFromAddress(venueId: string): Promise<string> {
+  const db = adminDb();
+  const [row] = await db
+    .select({
+      slug: venues.slug,
+      domain: venueSendingDomains.domain,
+      status: venueSendingDomains.status,
+    })
+    .from(venues)
+    .leftJoin(venueSendingDomains, eq(venueSendingDomains.venueId, venues.id))
+    .where(eq(venues.id, venueId))
+    .limit(1);
+  if (!row?.slug || !row.domain || row.status !== "verified") {
+    return fromEmail();
+  }
+  return `${row.slug}@${row.domain}`;
 }

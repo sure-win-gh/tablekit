@@ -26,7 +26,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { requirePlan } from "@/lib/auth/require-plan";
 import { assertVenueVisible } from "@/lib/auth/venue-scope";
 import { enquiries, venues } from "@/lib/db/schema";
-import { sendEnquiryReply } from "@/lib/enquiries/send-reply";
+import { resolveFromAddress, sendEnquiryReply } from "@/lib/enquiries/send-reply";
 import {
   applyDismiss,
   applyResetOrphan,
@@ -114,9 +114,16 @@ export async function sendDraftAction(
   // reflects what actually went out, not the original draft.
   const finalBodyCipher = await encryptPii(row.organisationId, parsed.data.body as Plaintext);
 
+  // Verified per-venue domain wins over the platform default when
+  // present. Resolved before send so a missing/non-verified row falls
+  // through to the platform sender — replies must never drop on the
+  // floor because of a half-set-up domain.
+  const from = await resolveFromAddress(parsed.data.venueId);
+
   let providerId: string;
   try {
     const r = await sendEnquiryReply({
+      from,
       to: guestEmail,
       replyTo,
       subject: parsed.data.subject,
