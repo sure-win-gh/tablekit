@@ -38,6 +38,13 @@ const STRIPE_FRAMES = ["https://js.stripe.com", "https://hooks.stripe.com"];
 const STRIPE_SCRIPTS = ["https://js.stripe.com"];
 const HCAPTCHA = ["https://hcaptcha.com", "https://*.hcaptcha.com"];
 
+// `report-uri` is the legacy reporting directive but still has the
+// widest browser support; `report-to` is the modern Reporting-API
+// successor. We emit both — same endpoint accepts either wire format.
+// Path-relative so the report lands at the same origin that served
+// the violating page, dodging cross-origin reporting restrictions.
+const REPORT_URI = "/api/csp-report";
+
 function buildCsp({ frameAncestors }: { frameAncestors: string }): string {
   // 'unsafe-inline' on script-src is the unfortunate cost of Next.js
   // server-rendered hydration scripts. The nonce-based approach is
@@ -57,6 +64,7 @@ function buildCsp({ frameAncestors }: { frameAncestors: string }): string {
     ["base-uri", ["'self'"]],
     ["form-action", ["'self'"]],
     ["object-src", ["'none'"]],
+    ["report-uri", [REPORT_URI]],
   ];
   return directives.map(([name, values]) => `${name} ${values.join(" ")}`).join("; ");
 }

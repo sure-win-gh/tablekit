@@ -57,5 +57,5 @@ Three follow-ups, all small but each warranting its own PR + review:
 `next.config.ts` currently emits `Content-Security-Policy-Report-Only` on `/embed/*` and `/book/*`. Once we've watched real traffic for a day or so (browser dev tools + any noticed regressions), the follow-up rename is one-line: change the header `key` from `"Content-Security-Policy-Report-Only"` to `"Content-Security-Policy"`. Same directive set; same routes.
 
 Tighter follow-ups while we're in there:
-- Drop `'unsafe-inline'` from `script-src` by switching to nonce-based CSP. Requires a custom Next.js shim — non-trivial, hold for a focused PR.
-- Wire a `report-uri` / `report-to` endpoint so production violations surface server-side (Sentry-routed or a tiny `/api/csp-report` endpoint).
+- Drop `'unsafe-inline'` from `script-src` by switching to nonce-based CSP. Requires a custom Next.js shim — non-trivial, hold for a focused PR. Blocking the enforce-flip per [`security.md`](../playbooks/security.md) §CSP.
+- ~~Wire a `report-uri` / `report-to` endpoint~~ — done. [`app/api/csp-report/route.ts`](../../app/api/csp-report/route.ts) accepts both legacy `application/csp-report` payloads and modern Reporting-API arrays, redacts document/source URIs to host-or-path only (no query strings — PII safety per gdpr.md §Logs), and warns to stdout. Per-IP rate-limited at 60/min.
