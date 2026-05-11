@@ -123,12 +123,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db
-    .delete(schema.venueSendingDomains)
-    .where(eq(schema.venueSendingDomains.id, rowAId));
-  await db
-    .delete(schema.venueSendingDomains)
-    .where(eq(schema.venueSendingDomains.id, rowBId));
+  await db.delete(schema.venueSendingDomains).where(eq(schema.venueSendingDomains.id, rowAId));
+  await db.delete(schema.venueSendingDomains).where(eq(schema.venueSendingDomains.id, rowBId));
   await admin.auth.admin.deleteUser(userAId).catch(() => undefined);
   await admin.auth.admin.deleteUser(userBId).catch(() => undefined);
   await db.delete(schema.organisations).where(eq(schema.organisations.id, orgAId));
@@ -138,18 +134,14 @@ afterAll(async () => {
 
 describe("RLS — venue_sending_domains", () => {
   it("user A sees their venue's row, not org B's", async () => {
-    const rows = await asUser(userAId, (tx) =>
-      tx.select().from(schema.venueSendingDomains),
-    );
+    const rows = await asUser(userAId, (tx) => tx.select().from(schema.venueSendingDomains));
     const ids = rows.map((r) => r.id);
     expect(ids).toContain(rowAId);
     expect(ids).not.toContain(rowBId);
   });
 
   it("user B sees their venue's row, not org A's", async () => {
-    const rows = await asUser(userBId, (tx) =>
-      tx.select().from(schema.venueSendingDomains),
-    );
+    const rows = await asUser(userBId, (tx) => tx.select().from(schema.venueSendingDomains));
     const ids = rows.map((r) => r.id);
     expect(ids).toContain(rowBId);
     expect(ids).not.toContain(rowAId);

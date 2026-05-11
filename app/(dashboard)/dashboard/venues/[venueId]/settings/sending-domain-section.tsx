@@ -76,9 +76,7 @@ function AddForm({ venueId, disabled }: { venueId: string; disabled: boolean }) 
           {pending ? "Adding…" : "Add"}
         </button>
       </div>
-      {disabled ? (
-        <p className="text-ash text-xs">Only owners can add a sending domain.</p>
-      ) : null}
+      {disabled ? <p className="text-ash text-xs">Only owners can add a sending domain.</p> : null}
       {state.status === "error" ? (
         <p role="alert" className="text-coral text-xs">
           {state.message}
@@ -104,7 +102,7 @@ function DomainStatus({
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <p className="text-ink text-sm font-mono">{row.domain}</p>
+          <p className="text-ink font-mono text-sm">{row.domain}</p>
           {row.lastCheckedAt ? (
             <p className="text-ash text-[11px]">
               Last checked {new Date(row.lastCheckedAt).toLocaleString("en-GB")}

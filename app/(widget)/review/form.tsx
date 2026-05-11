@@ -83,7 +83,7 @@ export function ReviewForm({ p, s, mode }: { p: string; s: string; mode: "public
         <button
           type="submit"
           disabled={pending || rating === 0}
-          className="bg-ink hover:bg-charcoal rounded-md px-4 py-2 text-sm font-medium text-white transition motion-reduce:transition-none disabled:opacity-50"
+          className="bg-ink hover:bg-charcoal rounded-md px-4 py-2 text-sm font-medium text-white transition disabled:opacity-50 motion-reduce:transition-none"
         >
           {pending ? "Sending…" : "Send"}
         </button>

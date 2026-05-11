@@ -211,11 +211,11 @@ export function VenueSettingsForm({
       <fieldset id="ai-enquiry" className="border-hairline flex flex-col gap-3 border-t pt-4">
         <legend className="text-ink text-sm font-semibold">AI enquiry handler — auto-send</legend>
         <p className="text-ash text-xs">
-          When on, replies pass through automatically if the parsed enquiry has no special
-          requests, the body is short, isn&apos;t part of a reply chain, and at least one slot
-          matched. Everything else is held for you to review. Auto-sent replies still carry the
-          &quot;Not quite right? Reply and our team will help&quot; line, so guests have a path
-          back to a human.
+          When on, replies pass through automatically if the parsed enquiry has no special requests,
+          the body is short, isn&apos;t part of a reply chain, and at least one slot matched.
+          Everything else is held for you to review. Auto-sent replies still carry the &quot;Not
+          quite right? Reply and our team will help&quot; line, so guests have a path back to a
+          human.
         </p>
         <label className="flex items-center gap-2 text-sm">
           <input

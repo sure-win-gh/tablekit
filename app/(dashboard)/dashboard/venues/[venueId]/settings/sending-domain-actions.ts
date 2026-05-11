@@ -6,11 +6,7 @@ import { z } from "zod";
 
 import { requireRole } from "@/lib/auth/require-role";
 import { venueSendingDomains } from "@/lib/db/schema";
-import {
-  createDomain,
-  removeDomain,
-  verifyDomain,
-} from "@/lib/email/sending-domains";
+import { createDomain, removeDomain, verifyDomain } from "@/lib/email/sending-domains";
 import { adminDb } from "@/lib/server/admin/db";
 import { audit } from "@/lib/server/admin/audit";
 

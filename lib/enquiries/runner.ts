@@ -315,10 +315,7 @@ async function attemptAutoSend(
 
   let guestEmail: string;
   try {
-    guestEmail = await decryptPii(
-      job.organisationId,
-      row.fromEmailCipher as Ciphertext,
-    );
+    guestEmail = await decryptPii(job.organisationId, row.fromEmailCipher as Ciphertext);
   } catch {
     // Crypto failure (key rotation mid-flight, etc.). Fall back to
     // manual review — operator can still send via the inbox.

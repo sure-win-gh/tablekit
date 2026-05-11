@@ -25,9 +25,7 @@ import { adminDb } from "@/lib/server/admin/db";
 
 import type { ParsedEnquiry } from "./types";
 
-export type GuardrailResult =
-  | { pass: true }
-  | { pass: false; reason: GuardrailReason };
+export type GuardrailResult = { pass: true } | { pass: false; reason: GuardrailReason };
 
 // Discriminated reasons so the operator UI (or future analytics) can
 // show "auto-send held: <why>" without bleeding raw email content.
