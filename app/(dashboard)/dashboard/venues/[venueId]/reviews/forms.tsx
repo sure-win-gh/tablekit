@@ -1,11 +1,12 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState, useTransition } from "react";
 
 import { syncNowGoogle, type SyncNowGoogleState } from "../settings/google-actions";
 import {
   respondToReview,
   sendRecoveryOffer,
+  suggestReplyDraft,
   type RespondToReviewState,
   type SendRecoveryOfferState,
 } from "./actions";
@@ -125,43 +126,14 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
 
       {!responded && canReply ? (
         open ? (
-          <form action={formAction} className="flex flex-col gap-2">
-            <input type="hidden" name="review_id" value={review.id} />
-            <input type="hidden" name="venue_id" value={venueId} />
-            <textarea
-              name="reply"
-              rows={3}
-              maxLength={800}
-              placeholder={
-                review.source === "google"
-                  ? "Your reply will post publicly under this review on Google."
-                  : "Reply directly to the guest by email — they'll see this in their inbox."
-              }
-              className="border-hairline rounded-md border px-3 py-2 text-sm outline-none focus:border-neutral-900"
-              required
-            />
-            {state.status === "error" ? (
-              <p role="alert" className="text-xs text-red-600">
-                {state.message}
-              </p>
-            ) : null}
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="border-hairline text-ink hover:border-ink rounded-md border px-3 py-1.5 text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={pending}
-                className="bg-ink hover:bg-charcoal rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-              >
-                {pending ? "Sending…" : "Send reply"}
-              </button>
-            </div>
-          </form>
+          <ReplyForm
+            venueId={venueId}
+            review={review}
+            formAction={formAction}
+            state={state}
+            pending={pending}
+            onCancel={() => setOpen(false)}
+          />
         ) : (
           <div>
             <button
@@ -223,6 +195,105 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
         )
       ) : null}
     </li>
+  );
+}
+
+// Extracted from ReviewRow so the textarea-pre-fill ref + "Suggest
+// with AI" button don't clutter the row's main render. useActionState
+// stays in the parent (its `state.status === "saved"` flip is what
+// hides the form), so this component receives formAction/state/pending
+// as props rather than minting its own.
+function ReplyForm({
+  venueId,
+  review,
+  formAction,
+  state,
+  pending,
+  onCancel,
+}: {
+  venueId: string;
+  review: Review;
+  formAction: (formData: FormData) => void;
+  state: RespondToReviewState;
+  pending: boolean;
+  onCancel: () => void;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [suggesting, startSuggest] = useTransition();
+  const [suggestError, setSuggestError] = useState<string | null>(null);
+  // Only internal reviews have an encrypted comment in our DB — Google
+  // imports drop the comment text after sync. No comment = no draft.
+  const canSuggest = review.source === "internal" && review.comment !== null;
+
+  const onSuggest = () => {
+    setSuggestError(null);
+    startSuggest(async () => {
+      const r = await suggestReplyDraft({ reviewId: review.id, venueId });
+      if (!r.ok) {
+        setSuggestError(r.error);
+        return;
+      }
+      if (textareaRef.current) {
+        textareaRef.current.value = r.draft;
+        textareaRef.current.focus();
+      }
+    });
+  };
+
+  return (
+    <form action={formAction} className="flex flex-col gap-2">
+      <input type="hidden" name="review_id" value={review.id} />
+      <input type="hidden" name="venue_id" value={venueId} />
+      <textarea
+        ref={textareaRef}
+        name="reply"
+        rows={3}
+        maxLength={800}
+        placeholder={
+          review.source === "google"
+            ? "Your reply will post publicly under this review on Google."
+            : "Reply directly to the guest by email — they'll see this in their inbox."
+        }
+        className="border-hairline rounded-md border px-3 py-2 text-sm outline-none focus:border-neutral-900"
+        required
+      />
+      {state.status === "error" ? (
+        <p role="alert" className="text-xs text-red-600">
+          {state.message}
+        </p>
+      ) : null}
+      {suggestError ? (
+        <p role="alert" className="text-xs text-red-600">
+          {suggestError}
+        </p>
+      ) : null}
+      <div className="flex items-center justify-end gap-2">
+        {canSuggest ? (
+          <button
+            type="button"
+            onClick={onSuggest}
+            disabled={suggesting || pending}
+            className="border-hairline text-ink hover:border-ink mr-auto rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
+          >
+            {suggesting ? "Drafting…" : "Suggest with AI"}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={onCancel}
+          className="border-hairline text-ink hover:border-ink rounded-md border px-3 py-1.5 text-sm"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={pending}
+          className="bg-ink hover:bg-charcoal rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+        >
+          {pending ? "Sending…" : "Send reply"}
+        </button>
+      </div>
+    </form>
   );
 }
 

@@ -1,6 +1,6 @@
 # Spec: Reviews & reputation management
 
-**Status:** shipped (Phase 1, 2, 3a, 3b, 3c, 5a, 6, 7a; Phase 4 + 5b deferred; Phase 7b cut — see footer)
+**Status:** shipped (Phase 1, 2, 3a, 3b, 3c, 5a, 5b, 6, 7a; Phase 4 deferred; Phase 7b cut — see footer)
 **Depends on:** `bookings.md`, `messaging.md`
 
 ## What we're building
@@ -101,7 +101,17 @@ Hook: [`app/(widget)/review/actions.ts`](../../app/(widget)/review/actions.ts) c
 
 Display: the operator dashboard list ([`/dashboard/venues/[venueId]/reviews`](../../app/(dashboard)/dashboard/venues/[venueId]/reviews/page.tsx)) renders a small POSITIVE / NEUTRAL / NEGATIVE badge alongside each star rating. Rows where the classifier hasn't run (yet, or because comment was too short / absent) render without a badge — no badge ≠ "neutral", it means "unclassified".
 
-Phase 5b (AI-drafted reply suggestions) is the natural follow-up — same Bedrock posture, distinct UI surface, separate PR.
+## Phase 5b — AI reply-draft suggestions (shipped)
+
+When an operator opens the reply form on an internal review, a "Suggest with AI" button appears alongside Cancel / Send. Clicking it calls [`suggestReplyDraft`](../../app/(dashboard)/dashboard/venues/[venueId]/reviews/actions.ts), which decrypts the comment and asks Claude Haiku 4.5 (same Bedrock posture as Phase 5a) for a short 60-120 word draft. The draft populates the textarea so the operator can edit before sending — no auto-send. The existing reply path then encrypts + persists when they click Send.
+
+Defence chain:
+- Zod-bounded structured output ([`DraftReplySchema`](../../lib/reviews/draft-reply.ts)) — the model can only emit `{ draft: string }`, so a hostile review attempting to inject instructions can't escape the schema.
+- System prompt explicitly forbids promising vouchers, discounts, or refunds unless the comment names a discrete service failure; never invents staff names / dishes / dates.
+- Operator review + edit before the draft is sent.
+- 800-char cap on the draft (`max(800)` in the schema), matching the existing reply column cap.
+
+Only internal reviews can be drafted — Google-imported reviews drop their comment text after sync, so there's nothing for the model to read. The button is hidden when the comment is null.
 
 ## Phase 6 — Escalation alerts + recovery offers (shipped)
 
@@ -122,7 +132,6 @@ Manual "Sync now" button on the reviews page reuses `syncGoogleReviewsForVenue` 
 ## Out of scope (next phases)
 
 - TripAdvisor / Facebook ingestion (Phase 4 — deferred).
-- AI-drafted reply suggestions (Phase 5b — deferred; Phase 5a sentiment classification shipped — see body above).
 - Negative-review escalation alerts.
 - Public review showcase widget.
 - SMS channel for review requests.
