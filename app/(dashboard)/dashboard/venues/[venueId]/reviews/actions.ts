@@ -6,14 +6,15 @@ import { z } from "zod";
 
 import { requireRole } from "@/lib/auth/require-role";
 import { assertVenueVisible } from "@/lib/auth/venue-scope";
-import { reviews } from "@/lib/db/schema";
+import { reviews, venues } from "@/lib/db/schema";
 import { replyToReview as replyToGoogleReview } from "@/lib/google/business-profile";
 import { getActiveGoogleConnection } from "@/lib/google/connection";
 import { processNextBatch } from "@/lib/messaging/dispatch";
 import { enqueueMessage, truncateError } from "@/lib/messaging/enqueue";
+import { draftReply } from "@/lib/reviews/draft-reply";
+import { type Ciphertext, decryptPii, encryptPii } from "@/lib/security/crypto";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
-import { encryptPii } from "@/lib/security/crypto";
 
 // Operator reply to a guest review.
 // - internal source: claim → enqueue email → audit (transactional).
@@ -288,4 +289,71 @@ export async function sendRecoveryOffer(
 
   revalidatePath(`/dashboard/venues/${venueId}/reviews`);
   return { status: "saved" };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5b — AI reply-draft suggestion (operator-facing)
+// ---------------------------------------------------------------------------
+
+const SuggestSchema = z.object({
+  reviewId: z.uuid(),
+  venueId: z.uuid(),
+});
+
+export type SuggestReplyResult = { ok: true; draft: string } | { ok: false; error: string };
+
+// Returns a draft reply the operator can edit + send. Never persists
+// anything — the existing respondToReview action handles encryption
+// + persistence when the operator clicks Send.
+//
+// Auth chain mirrors respondToReview: requireRole + assertVenueVisible
+// + a venue-scoped row lookup so a forged reviewId from a different
+// venue silently bounces.
+//
+// PII posture: comment plaintext is decrypted on the stack inside the
+// action only. The draft we return to the client is generated content,
+// not PII per se, but treat it the same way — don't log it.
+export async function suggestReplyDraft(input: {
+  reviewId: string;
+  venueId: string;
+}): Promise<SuggestReplyResult> {
+  const parsed = SuggestSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid input." };
+
+  await requireRole("host");
+  if (!(await assertVenueVisible(parsed.data.venueId))) {
+    return { ok: false, error: "Venue not visible." };
+  }
+
+  const db = adminDb();
+  const [row] = await db
+    .select({
+      id: reviews.id,
+      organisationId: reviews.organisationId,
+      rating: reviews.rating,
+      commentCipher: reviews.commentCipher,
+      venueName: venues.name,
+    })
+    .from(reviews)
+    .innerJoin(venues, eq(venues.id, reviews.venueId))
+    .where(and(eq(reviews.id, parsed.data.reviewId), eq(reviews.venueId, parsed.data.venueId)))
+    .limit(1);
+
+  if (!row) return { ok: false, error: "Review not found." };
+  if (!row.commentCipher) {
+    return { ok: false, error: "This review has no comment — nothing to draft from." };
+  }
+
+  let comment: string;
+  try {
+    comment = await decryptPii(row.organisationId, row.commentCipher as Ciphertext);
+  } catch {
+    return { ok: false, error: "Couldn't read the comment. Try again shortly." };
+  }
+
+  const r = await draftReply({ rating: row.rating, comment, venueName: row.venueName });
+  if (!r.ok) {
+    return { ok: false, error: "The AI is unavailable right now. Try again in a moment." };
+  }
+  return { ok: true, draft: r.draft };
 }
