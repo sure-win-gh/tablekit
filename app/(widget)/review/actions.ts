@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { bookings, reviews, venues } from "@/lib/db/schema";
 import { sendEscalationAlertIfNeeded } from "@/lib/reviews/escalation";
+import { classifyReviewSentimentInBackground } from "@/lib/reviews/sentiment";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 import { encryptPii } from "@/lib/security/crypto";
@@ -118,6 +119,10 @@ export async function submitReview(
     // escalation_alert_at idempotently.
     if (inserted) {
       void sendEscalationAlertIfNeeded(inserted.id);
+      // Same posture for the Phase 5 sentiment classifier — never
+      // blocks the redirect, leaves `sentiment` NULL on failure for a
+      // future backfill to pick up.
+      void classifyReviewSentimentInBackground(inserted.id);
     }
   }
   // No else-branch: subsequent submits are silently ignored. The

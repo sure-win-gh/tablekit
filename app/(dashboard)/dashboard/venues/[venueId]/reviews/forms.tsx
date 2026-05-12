@@ -51,6 +51,9 @@ type Review = {
   externalUrl: string | null;
   comment: string | null;
   response: string | null;
+  // Phase 5 — null until the AI classifier runs (fire-and-forget on
+  // submit). Rendered as a small badge alongside the star rating.
+  sentiment: "positive" | "neutral" | "negative" | null;
 };
 
 export function ReviewRow({ venueId, review }: { venueId: string; review: Review }) {
@@ -75,8 +78,9 @@ export function ReviewRow({ venueId, review }: { venueId: string; review: Review
     <li className="rounded-card border-hairline flex flex-col gap-3 border bg-white p-4">
       <header className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <p className="text-ink font-medium">
+          <p className="text-ink flex items-center gap-2 font-medium">
             <Stars n={review.rating} /> {review.guestFirstName}
+            {review.sentiment ? <SentimentBadge sentiment={review.sentiment} /> : null}
           </p>
           <p className="text-ash text-xs">
             {review.submittedAt.toLocaleDateString(undefined, {
@@ -227,6 +231,25 @@ function Stars({ n }: { n: number }) {
     <span aria-label={`${n} star${n === 1 ? "" : "s"}`} className="text-coral">
       {"★".repeat(n)}
       <span className="text-stone">{"★".repeat(5 - n)}</span>
+    </span>
+  );
+}
+
+function SentimentBadge({ sentiment }: { sentiment: "positive" | "neutral" | "negative" }) {
+  const tone =
+    sentiment === "positive"
+      ? "bg-emerald-50 text-emerald-700"
+      : sentiment === "negative"
+        ? "bg-rose-50 text-rose-700"
+        : "bg-cloud text-ash";
+  const label =
+    sentiment === "positive" ? "POSITIVE" : sentiment === "negative" ? "NEGATIVE" : "NEUTRAL";
+  return (
+    <span
+      title="AI-classified sentiment"
+      className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold tracking-wider uppercase ${tone}`}
+    >
+      {label}
     </span>
   );
 }

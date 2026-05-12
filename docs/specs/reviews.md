@@ -1,6 +1,6 @@
 # Spec: Reviews & reputation management
 
-**Status:** draft (Phase 1, 2, 3a, 3b, 3c, 6, 7a — shipped; Phase 4 + 5 deferred; Phase 7b cut)
+**Status:** shipped (Phase 1, 2, 3a, 3b, 3c, 5a, 6, 7a; Phase 4 + 5b deferred; Phase 7b cut — see footer)
 **Depends on:** `bookings.md`, `messaging.md`
 
 ## What we're building
@@ -91,6 +91,18 @@ Operators turn the showcase on per venue via `venue.settings.showcaseEnabled` (d
 
 Originally planned as a "venues nearby" card on the dashboard sourced from Google Places Nearby Search + Place Details. **Cut** before implementation: low operator value (vanity metric, not actionable), brings a paid Google API surface (Nearby Search ≈ $32/1k requests) that doesn't recoup the cost in user experience. Reconsider only if a specific operator request makes the case for it.
 
+## Phase 5a — AI sentiment classification (shipped)
+
+Every internal review gets a sentiment label (`positive` | `neutral` | `negative`) on submission. Powered by Claude Haiku 4.5 on AWS Bedrock `eu-west-1` — same model, same residency posture as the AI enquiry handler. Structured-output classification via [`SentimentSchema`](../../lib/reviews/sentiment.ts) so the model can only emit one of the three labels regardless of what the comment says (prompt-injection defence).
+
+Schema changes (migration 0037): `reviews.sentiment text NULL` + `reviews.sentiment_classified_at timestamptz NULL` + CHECK constrained to the three-label enum + partial index `reviews_sentiment_picker_idx` on rows where sentiment is NULL and a comment exists (future cron-backfill seam).
+
+Hook: [`app/(widget)/review/actions.ts`](../../app/(widget)/review/actions.ts) calls `classifyReviewSentimentInBackground(id)` as a fire-and-forget alongside the existing escalation alert — never blocks the guest's thank-you redirect. Comments under 12 chars skip the LLM entirely (nothing meaningful to classify from "good" or "👍").
+
+Display: the operator dashboard list ([`/dashboard/venues/[venueId]/reviews`](../../app/(dashboard)/dashboard/venues/[venueId]/reviews/page.tsx)) renders a small POSITIVE / NEUTRAL / NEGATIVE badge alongside each star rating. Rows where the classifier hasn't run (yet, or because comment was too short / absent) render without a badge — no badge ≠ "neutral", it means "unclassified".
+
+Phase 5b (AI-drafted reply suggestions) is the natural follow-up — same Bedrock posture, distinct UI surface, separate PR.
+
 ## Phase 6 — Escalation alerts + recovery offers (shipped)
 
 When a review with `rating <= venue.settings.escalationThreshold` lands (internal submit or external sync), `lib/reviews/escalation.ts` claims the alert atomically (conditional UPDATE on `escalation_alert_at`), decrypts the comment to a 280-char snippet, and sends an operator alert via `lib/email/send.ts` directly. Recipient comes from `venue.settings.escalationEmail` with a fallback to the org owner's email. Audit `review.escalated`.
@@ -109,8 +121,8 @@ Manual "Sync now" button on the reviews page reuses `syncGoogleReviewsForVenue` 
 
 ## Out of scope (next phases)
 
-- TripAdvisor / Facebook ingestion (Phase 4).
-- AI sentiment + reply drafting.
+- TripAdvisor / Facebook ingestion (Phase 4 — deferred).
+- AI-drafted reply suggestions (Phase 5b — deferred; Phase 5a sentiment classification shipped — see body above).
 - Negative-review escalation alerts.
 - Public review showcase widget.
 - SMS channel for review requests.
