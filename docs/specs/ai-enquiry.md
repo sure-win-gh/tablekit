@@ -73,8 +73,8 @@ Replies go from the venue's verified domain when one is registered + verified, o
 
 Setup UI lives at `/dashboard/venues/[venueId]/settings` — owner adds a domain, sees the DKIM/SPF/DMARC records Resend issued, pastes them into DNS, clicks "Verify now", and watches the status badge flip. Backed by `venue_sending_domains` (migration 0036, RLS-tested) and the Resend wrapper at [`lib/email/sending-domains.ts`](../../lib/email/sending-domains.ts).
 
-## Deferred
+## Verification polling
 
-### Cron-based verification polling
+A daily sweep at `/api/cron/sending-domain-verify` (`50 4 * * *`) re-checks any `venue_sending_domains` row still in `pending` / `not_started` / `temporary_failure` and younger than 14 days, calling Resend's verify endpoint per row. Newly-verified rows get `verifiedAt` stamped + an `enquiry.sending_domain.verified` audit entry tagged `source: "cron"`. The 14-day cap stops the cron from hammering dead rows; the manual "Verify now" button on the settings page still works for older rows and for the impatient case.
 
-Operators currently click "Verify now" to re-check a pending domain. An optional daily sweep (small cron route) would re-check any non-verified rows so an operator who pastes DNS records and walks away gets verified the next morning without revisiting the dashboard. Cheap to add when warranted — the manual path is sufficient for launch.
+Capped at 100 rows per run so a backlog doesn't fan out a Resend-API burst. Per-row errors are sanitised + swallowed (the wrapper already strips PII-shaped messages, but defence in depth) so a single bad row doesn't block the rest of the sweep.

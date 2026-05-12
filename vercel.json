@@ -28,6 +28,10 @@
     {
       "path": "/api/cron/api-request-log-retention",
       "schedule": "45 4 * * *"
+    },
+    {
+      "path": "/api/cron/sending-domain-verify",
+      "schedule": "50 4 * * *"
     }
   ]
 }
