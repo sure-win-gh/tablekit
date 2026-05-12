@@ -81,6 +81,7 @@ export default async function ReviewsPage({
         source: reviews.source,
         externalUrl: reviews.externalUrl,
         reviewerDisplayName: reviews.reviewerDisplayName,
+        sentiment: reviews.sentiment,
         // leftJoin so externally-sourced reviews (NULL guest_id) still
         // appear; row component falls back to reviewerDisplayName when
         // guestFirstName is null.
@@ -130,6 +131,7 @@ export default async function ReviewsPage({
       response: r.responseCipher
         ? await decryptPii(orgId, r.responseCipher as Ciphertext).catch(() => "[decrypt failed]")
         : null,
+      sentiment: (r.sentiment ?? null) as "positive" | "neutral" | "negative" | null,
     })),
   );
 

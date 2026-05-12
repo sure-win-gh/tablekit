@@ -649,6 +649,14 @@ export const reviews = pgTable(
     // "not consented"; only consented rows are eligible for the
     // booking-widget showcase. Per-review (one consent ≠ blanket).
     showcaseConsentAt: timestamp("showcase_consent_at", { withTimezone: true }),
+    // Phase 5 — AI sentiment classification. Three-bucket label
+    // ('positive' | 'neutral' | 'negative') populated by a fire-and-
+    // forget Bedrock call after insert. NULL = not classified yet
+    // (either still pending, or the review had no comment + we
+    // declined to classify from rating alone). CHECK constrained in
+    // the migration.
+    sentiment: text("sentiment"),
+    sentimentClassifiedAt: timestamp("sentiment_classified_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
