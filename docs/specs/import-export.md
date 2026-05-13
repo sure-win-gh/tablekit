@@ -1,6 +1,6 @@
 # Spec: Import from competitors, export anytime
 
-**Status:** draft (MVP has export; import is early-Plus)
+**Status:** shipped (full-backup zip + signed-URL job + rejected-rows download deferred — see footer)
 **Depends on:** `guests.md`, `bookings.md`
 
 ## What we're building
@@ -34,12 +34,12 @@ Not launch: live API imports from these platforms (terms often prohibit, and fil
 
 ### Acceptance criteria (import)
 
-- [ ] CSVs up to 50k rows import within 5 minutes.
-- [ ] Dedupe runs during import, not as a separate step.
-- [ ] Imported guests have `imported_from` + `imported_at` metadata for provenance.
-- [ ] Marketing consent flags always null on import.
-- [ ] Rejected rows (missing required fields, malformed email) exported to a downloadable report.
-- [ ] Job is resumable — crash mid-import doesn't double-insert.
+- [ ] CSVs up to 50k rows import within 5 minutes. Manual launch-readiness check — not codified in CI.
+- [x] Dedupe runs during import, not as a separate step. Two passes: [`lib/import/dedupe.ts`](../../lib/import/dedupe.ts) (within-file, latest wins) + [`lib/import/runner/dedupe-existing.ts`](../../lib/import/runner/dedupe-existing.ts) (cross-org against `guests.email_hash`).
+- [x] Imported guests have `imported_from` + `imported_at` metadata for provenance. `guests.importedFrom` text + `guests.importedAt` timestamptz columns ([`lib/db/schema.ts`](../../lib/db/schema.ts)).
+- [x] Marketing consent flags always null on import. Enforced in [`lib/import/runner/writer.ts`](../../lib/import/runner/writer.ts) regardless of column-map content — the spec rule that "consent never imports as granted" is encoded as `marketingConsentAt: null` at write time.
+- [~] Rejected rows exported to a downloadable report. Count surfaced on the job detail page; the schema reserves `import_jobs.rejected_rows_url` for a signed download URL, but the runner doesn't yet populate it and no UI link surfaces the file. Deferred to a follow-up.
+- [x] Job is resumable — crash mid-import doesn't double-insert. The runner writes a sentinel row per source row before the actual insert (`writer.ts`) so a crash leaves an honest count and a re-run is a no-op rather than a duplicate.
 
 ## Export (MVP)
 
@@ -55,8 +55,22 @@ Available from day one on every tier. This is the promise.
 
 ### Acceptance criteria (export)
 
-- [ ] Available from dashboard Settings → Data.
-- [ ] Full backup export runs as a background job; link emailed when ready.
-- [ ] Encrypted PII columns are **decrypted in the export** (the owning org has the right to see their own data).
-- [ ] Exports logged in `audit_log`.
-- [ ] Export URL signed, single-use, expires after 24h.
+- [x] Available from dashboard Settings → Data. Routes under [`app/(dashboard)/dashboard/data/export/[entity]/`](../../app/(dashboard)/dashboard/data/export/[entity]/route.ts) — bookings + guests inline downloads.
+- [ ] Full backup export runs as a background job; link emailed when ready. **Deferred.** The export route's own header comment ("zip lands in PR2 with the job table + signed URLs") documents the split — PR1 shipped the inline path; the zip+job path waits for the first operator to ask.
+- [x] Encrypted PII columns decrypted in the export. The route calls `decryptPii(orgId, …)` before serialising — the owning org sees its own data in plaintext, matching gdpr.md's "operator is data controller" posture.
+- [x] Exports logged in `audit_log`. Action `data.exported` written from [`app/(dashboard)/dashboard/data/export/[entity]/route.ts`](../../app/(dashboard)/dashboard/data/export/[entity]/route.ts).
+- [ ] Export URL signed, single-use, expires after 24h. **Deferred** alongside the background-job path — only inline streaming today, so signing isn't needed yet.
+
+## Deferred
+
+### Rejected-rows download for completed imports
+
+`import_jobs.rejected_rows_url` is in the schema but unpopulated. The runner builds the rejected set + counts it, but doesn't yet write a CSV to storage + stamp the signed URL. Job detail page should expose a "Download rejected rows" link when the count is non-zero. Small follow-up — bundle it with the next operator-asked import polish.
+
+### Full-backup zip + background-job export pipeline
+
+Inline streaming (bookings + guests) is the v1. The full-backup spec calls for a zipped bundle of everything (bookings + guests + messages + payments + schema doc) generated as a background job, with an emailed signed URL that expires after 24h. Substantial — needs an `export_jobs` table, a worker, Supabase Storage write, signed-URL minting. Pull when an operator asks for "give me everything in one file".
+
+### 50k-in-5min performance check
+
+Manual launch-readiness benchmark. Run against a representative CSV with a fresh org; capture wall-clock + rejected count. Not codified in CI — would need a long-running perf harness.
