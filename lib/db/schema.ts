@@ -1062,10 +1062,20 @@ export const importJobs = pgTable(
     // Short failure reason for operator display. Never plaintext PII —
     // sanitised at the boundary before persisting.
     error: text("error"),
-    // Signed, single-use download URL for the rejected-rows report.
-    // Populated when the job reaches `completed` if any rows were
-    // rejected. Null otherwise.
+    // DEPRECATED — was reserved for a Supabase-Storage-hosted CSV
+    // path with a signed URL. The shipped path is `rejectedRowsCipher`
+    // below, served on-demand from /api/imports/[jobId]/rejected.csv.
+    // Kept (always NULL) until a follow-up migration drops the column
+    // — forward-only-migrations policy says deprecate-then-drop across
+    // two releases.
     rejectedRowsUrl: text("rejected_rows_url"),
+    // Encrypted CSV of rows that failed validation or dedupe. Built
+    // by the runner on completion when pipeline.rejected is non-empty;
+    // streamed back by /api/imports/[jobId]/rejected.csv on demand.
+    // Same envelope-encryption posture as sourceCsvCipher — the rows
+    // contain operator-uploaded plaintext PII (guest email/phone/
+    // name) and need column-level encryption per gdpr.md §Encryption.
+    rejectedRowsCipher: text("rejected_rows_cipher"),
     // Operator-uploaded CSV — envelope-encrypted under the org's DEK
     // before insert (see lib/security/crypto.ts:encryptPii). The CSV
     // contains plaintext guest email/name/phone, so column-level

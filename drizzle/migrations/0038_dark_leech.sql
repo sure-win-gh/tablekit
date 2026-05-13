@@ -1,0 +1,28 @@
+-- =============================================================================
+-- 0038: import_jobs.rejected_rows_cipher — operator-downloadable
+--       report of rows that failed validation / dedupe
+-- =============================================================================
+--
+-- Adds one column to `import_jobs`:
+--   • rejected_rows_cipher text NULL — envelope-encrypted CSV
+--
+-- The runner builds a CSV of pipeline.rejected[] on job completion
+-- (when any rows were rejected) and stamps the ciphertext here.
+-- /api/imports/[jobId]/rejected.csv decrypts + streams on demand,
+-- auth-gated to org members of the owning organisation.
+--
+-- Same encryption posture as `source_csv_cipher`: rejected rows
+-- preserve the operator-uploaded plaintext (guest email / phone /
+-- name) so column-level encryption is required per gdpr.md
+-- §Encryption.
+--
+-- The existing `rejected_rows_url` column is now dead; it was reserved
+-- for a Supabase-Storage-hosted path that we never built. Per the
+-- forward-only-migrations playbook we deprecate-then-drop: this
+-- migration marks the column deprecated (no functional change); a
+-- future migration removes it once we've confirmed nothing reads it.
+--
+-- Forward-only, additive.
+-- =============================================================================
+
+ALTER TABLE "import_jobs" ADD COLUMN "rejected_rows_cipher" text;
