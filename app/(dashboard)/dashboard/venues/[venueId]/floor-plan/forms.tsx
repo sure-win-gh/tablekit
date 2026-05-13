@@ -4,9 +4,9 @@ import { useActionState, useState } from "react";
 
 import {
   createArea,
-  createTable,
   deleteArea,
   deleteTable,
+  seatWalkIn,
   updateArea,
   updateTable,
 } from "./actions";
@@ -153,34 +153,6 @@ export function AreaHeader({ areaId, name }: { areaId: string; name: string }) {
 // Tables
 // ---------------------------------------------------------------------------
 
-export function NewTableForm({ areaId }: { areaId: string }) {
-  const [state, action, pending] = useActionState(createTable, idle);
-  return (
-    <form
-      action={action}
-      className="border-hairline flex flex-wrap items-end gap-2 rounded-md border border-dashed px-3 py-2 text-sm"
-    >
-      <input type="hidden" name="area_id" value={areaId} />
-      <NumField label="label" name="label" type="text" defaultValue="" required maxLength={30} />
-      <NumField label="min" name="min_cover" type="number" defaultValue="2" min={1} max={40} />
-      <NumField label="max" name="max_cover" type="number" defaultValue="4" min={1} max={40} />
-      <ShapeField />
-      <NumField label="x" name="x" type="number" defaultValue="0" min={0} max={100} />
-      <NumField label="y" name="y" type="number" defaultValue="0" min={0} max={100} />
-      <NumField label="w" name="w" type="number" defaultValue="2" min={1} max={40} />
-      <NumField label="h" name="h" type="number" defaultValue="2" min={1} max={40} />
-      <button
-        type="submit"
-        disabled={pending}
-        className="border-hairline text-ink hover:bg-cloud rounded-md border bg-white px-3 py-2 text-sm font-medium transition disabled:opacity-50"
-      >
-        {pending ? "Adding…" : "Add table"}
-      </button>
-      <FormMessage state={state} />
-    </form>
-  );
-}
-
 export function TableRow({
   tableId,
   label,
@@ -204,7 +176,7 @@ export function TableRow({
       <form action={updateAction} className="flex flex-wrap items-end gap-2">
         <input type="hidden" name="table_id" value={tableId} />
         <NumField
-          label="label"
+          label="Label"
           name="label"
           type="text"
           defaultValue={label}
@@ -212,7 +184,7 @@ export function TableRow({
           maxLength={30}
         />
         <NumField
-          label="min"
+          label="Min seats"
           name="min_cover"
           type="number"
           defaultValue={String(minCover)}
@@ -220,7 +192,7 @@ export function TableRow({
           max={40}
         />
         <NumField
-          label="max"
+          label="Max seats"
           name="max_cover"
           type="number"
           defaultValue={String(maxCover)}
@@ -228,24 +200,10 @@ export function TableRow({
           max={40}
         />
         <ShapeField defaultValue={shape === "circle" ? "circle" : "rect"} />
+        <input type="hidden" name="x" defaultValue={String(position.x)} />
+        <input type="hidden" name="y" defaultValue={String(position.y)} />
         <NumField
-          label="x"
-          name="x"
-          type="number"
-          defaultValue={String(position.x)}
-          min={0}
-          max={100}
-        />
-        <NumField
-          label="y"
-          name="y"
-          type="number"
-          defaultValue={String(position.y)}
-          min={0}
-          max={100}
-        />
-        <NumField
-          label="w"
+          label="Width"
           name="w"
           type="number"
           defaultValue={String(position.w)}
@@ -253,7 +211,7 @@ export function TableRow({
           max={40}
         />
         <NumField
-          label="h"
+          label="Height"
           name="h"
           type="number"
           defaultValue={String(position.h)}
@@ -316,7 +274,7 @@ function NumField({
         {...(min !== undefined ? { min } : {})}
         {...(max !== undefined ? { max } : {})}
         {...(maxLength !== undefined ? { maxLength } : {})}
-        className={`border-hairline text-ink rounded-md border px-2 py-1 text-sm outline-none focus:border-neutral-900 ${type === "number" ? "w-16" : "w-24"}`}
+        className={`border-hairline text-ink rounded-md border px-2 py-1 text-sm outline-none focus:border-neutral-900 ${type === "number" ? "w-20" : "w-28"}`}
       />
     </label>
   );
@@ -325,15 +283,62 @@ function NumField({
 function ShapeField({ defaultValue = "rect" }: { defaultValue?: string }) {
   return (
     <label className="text-ash flex flex-col gap-0.5 text-xs">
-      <span>shape</span>
+      <span>Shape</span>
       <select
         name="shape"
         defaultValue={defaultValue}
         className="border-hairline text-ink rounded-md border px-2 py-1 text-sm outline-none focus:border-neutral-900"
       >
-        <option value="rect">rect</option>
-        <option value="circle">circle</option>
+        <option value="rect">Rectangle</option>
+        <option value="circle">Circle</option>
       </select>
     </label>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Walk-in
+// ---------------------------------------------------------------------------
+
+export function WalkInForm({
+  venueId,
+  tableId,
+  fullFormHref,
+}: {
+  venueId: string;
+  tableId: string;
+  fullFormHref: string;
+}) {
+  const [state, action, pending] = useActionState(seatWalkIn, idle);
+  return (
+    <div className="flex flex-col gap-2">
+      <form action={action} className="flex items-end gap-2 text-sm">
+        <input type="hidden" name="venue_id" value={venueId} />
+        <input type="hidden" name="table_id" value={tableId} />
+        <label className="text-ash flex flex-col gap-0.5 text-xs">
+          <span>Party size</span>
+          <input
+            name="party_size"
+            type="number"
+            min={1}
+            max={20}
+            defaultValue={2}
+            required
+            className="border-hairline text-ink w-20 rounded-md border px-2 py-1 text-sm outline-none focus:border-neutral-900"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={pending}
+          className="border-hairline text-ink hover:bg-cloud rounded-md border bg-white px-3 py-2 text-sm font-medium transition disabled:opacity-50"
+        >
+          {pending ? "Seating…" : "Seat walk-in"}
+        </button>
+      </form>
+      <FormMessage state={state} />
+      <a href={fullFormHref} className="text-coral text-xs hover:underline">
+        Or open the full booking form →
+      </a>
+    </div>
   );
 }

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { hasRole } from "@/lib/auth/role-level";
 import { requireRole } from "@/lib/auth/require-role";
+import { deriveFloorState, type FloorTableState } from "@/lib/bookings/floor-state";
 import { formatVenueTime, todayInZone, venueLocalDayRange } from "@/lib/bookings/time";
 import { withUser } from "@/lib/db/client";
 import {
@@ -132,6 +133,7 @@ export default async function FloorPlanPage({ params }: { params: Promise<{ venu
       serviceName: b.serviceName,
       startWall: formatVenueTime(b.startAt, { timezone: venueTimezone }),
       endWall: formatVenueTime(b.endAt, { timezone: venueTimezone }),
+      endAt: b.endAt,
       notes: b.notes,
       otherTableLabels,
     };
@@ -174,6 +176,20 @@ export default async function FloorPlanPage({ params }: { params: Promise<{ venu
     position: t.position as { x: number; y: number; w: number; h: number },
   }));
 
+  // Derive the per-table colour state on the server so the client gets
+  // a single map and TableShape doesn't have to recompute. Reads `now`
+  // once — the auto-refresh on the canvas re-fetches every 30s.
+  const floorStateByTableId: Record<string, FloorTableState> = {};
+  for (const t of tableRows) {
+    const active = activeByTableId[t.id] ?? null;
+    const upcoming = Boolean(upcomingByTableId[t.id]);
+    floorStateByTableId[t.id] = deriveFloorState(
+      active ? { status: active.status, endAt: active.endAt } : null,
+      upcoming,
+      now,
+    );
+  }
+
   return (
     <section className="flex flex-col gap-4">
       <header className="flex items-center justify-between gap-3">
@@ -195,6 +211,7 @@ export default async function FloorPlanPage({ params }: { params: Promise<{ venu
         tables={canvasTables}
         activeByTableId={activeByTableId}
         upcomingByTableId={upcomingByTableId}
+        floorStateByTableId={floorStateByTableId}
       />
 
       <AutoRefresh />

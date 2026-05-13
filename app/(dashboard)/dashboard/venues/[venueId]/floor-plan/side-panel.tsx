@@ -7,7 +7,7 @@ import { IconButton } from "@/components/ui";
 import type { BookingStatus } from "@/lib/bookings/state";
 import { STATUS_FILL } from "@/lib/bookings/status-style";
 
-import { TableRow } from "./forms";
+import { TableRow, WalkInForm } from "./forms";
 import type { TableShapeData } from "./table-shape";
 
 export type ActiveBookingDetail = {
@@ -18,6 +18,7 @@ export type ActiveBookingDetail = {
   serviceName: string;
   startWall: string; // pre-formatted in venue tz
   endWall: string;
+  endAt: Date; // raw UTC; needed by the floor-plan to derive "overdue"
   notes: string | null;
   otherTableLabels: string[]; // multi-table bookings
 };
@@ -54,6 +55,7 @@ export function SidePanel({ venueId, date, table, booking, upcoming, editMode, o
           <div className="text-sm">
             <p className="text-ash mb-2 text-xs tracking-wide uppercase">Edit table</p>
             <TableRow
+              key={`${table.id}-${table.position.x}-${table.position.y}-${table.position.w}-${table.position.h}`}
               tableId={table.id}
               label={table.label}
               minCover={table.minCover}
@@ -62,8 +64,8 @@ export function SidePanel({ venueId, date, table, booking, upcoming, editMode, o
               position={table.position}
             />
             <p className="text-ash mt-3 text-xs">
-              Drag the table on the canvas to reposition it. Save here to change label, covers, or
-              shape.
+              Drag the table to move it, or drag the coral handles on its edges and corners to
+              resize. Save here to change label, seats, or shape.
             </p>
           </div>
         ) : booking ? (
@@ -81,7 +83,14 @@ export function SidePanel({ venueId, date, table, booking, upcoming, editMode, o
             heading="Next on table (within 30 min)"
           />
         ) : (
-          <p className="text-ash text-sm">Empty for the rest of service.</p>
+          <div className="flex flex-col gap-3">
+            <p className="text-ash text-xs tracking-wide uppercase">Seat a walk-in</p>
+            <WalkInForm
+              venueId={venueId}
+              tableId={table.id}
+              fullFormHref={`/dashboard/venues/${venueId}/bookings/new`}
+            />
+          </div>
         )}
       </div>
     </aside>
