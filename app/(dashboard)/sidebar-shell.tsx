@@ -5,6 +5,7 @@ import {
   CalendarDays,
   CalendarRange,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
@@ -17,12 +18,15 @@ import {
   Lock,
   LogOut,
   Menu,
+  MessageSquare,
   Settings,
+  Shield,
   ShieldCheck,
   Star,
   TableProperties,
   Users,
   UtensilsCrossed,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -42,6 +46,8 @@ import { cn } from "@/components/ui";
 
 const COLLAPSE_KEY = "tablekit:sidebar-collapsed";
 const DRAWER_KEY = "tablekit:sidebar-drawer";
+// Per-group expand/collapse persistence. Suffix is the group's own key.
+const GROUP_KEY_PREFIX = "tablekit:nav-group:";
 
 export type SidebarData = {
   user: { name: string; email: string };
@@ -65,11 +71,23 @@ export type SidebarData = {
 };
 
 type Item = {
+  kind: "item";
   href: string;
   label: string;
   icon: LucideIcon;
   show?: boolean | undefined;
 };
+
+type Group = {
+  kind: "group";
+  // localStorage key suffix — open/closed state persists across sessions.
+  groupKey: string;
+  label: string;
+  icon: LucideIcon;
+  items: Item[];
+};
+
+type NavEntry = Item | Group;
 
 export function SidebarShell({
   data,
@@ -86,59 +104,132 @@ export function SidebarShell({
 
   const venueId = matchVenueId(pathname);
 
-  // Org-section items. Overview only when there's >1 venue (single-
-  // venue orgs auto-redirect from /dashboard, so /overview would
-  // bounce back). Cross-venue Guests is Plus + group-CRM-on +
-  // multi-venue (single-venue orgs use the per-venue link below).
-  const orgItems: Item[] = [
+  // Org-section entries. Day-to-day links sit at the top; the
+  // compliance/data plumbing collapses into Admin so the rail isn't
+  // dominated by configure-once items.
+  const orgEntries: NavEntry[] = [
     {
+      kind: "item",
       href: "/dashboard/overview",
       label: "Overview",
       icon: LayoutDashboard,
       show: data.org.multiVenue,
     },
-    { href: "/dashboard/organisation", label: "Organisation", icon: Building2 },
+    { kind: "item", href: "/dashboard/organisation", label: "Organisation", icon: Building2 },
     {
+      kind: "item",
       href: "/dashboard/guests",
       label: "Guests",
       icon: Users,
       show: data.org.crmEnabled && data.org.groupCrmEnabled && data.org.multiVenue,
     },
-    { href: "/dashboard/data", label: "Data", icon: Database },
-    { href: "/dashboard/privacy-requests", label: "Privacy requests", icon: ShieldCheck },
-    { href: "/dashboard/settings/security", label: "Security", icon: Lock },
+    {
+      kind: "group",
+      groupKey: "org-admin",
+      label: "Admin",
+      icon: Shield,
+      items: [
+        { kind: "item", href: "/dashboard/data", label: "Data", icon: Database },
+        {
+          kind: "item",
+          href: "/dashboard/privacy-requests",
+          label: "Privacy requests",
+          icon: ShieldCheck,
+        },
+        { kind: "item", href: "/dashboard/settings/security", label: "Security", icon: Lock },
+      ],
+    },
   ];
 
-  // Venue-section items, only rendered while inside a venue route.
-  // Per-venue Guests appears for Plus orgs regardless of venue count
-  // (single-venue Plus orgs land here for their CRM).
-  const venueItems: Item[] = venueId
+  // Venue-section entries, only rendered inside a venue route. Daily-
+  // ops links (Bookings → Reports) stay flat; Communications and Setup
+  // collapse to keep the rail short.
+  const venueEntries: NavEntry[] = venueId
     ? [
-        { href: `/dashboard/venues/${venueId}/bookings`, label: "Bookings", icon: CalendarDays },
-        { href: `/dashboard/venues/${venueId}/timeline`, label: "Timeline", icon: Clock },
-        { href: `/dashboard/venues/${venueId}/waitlist`, label: "Waitlist", icon: Hourglass },
         {
+          kind: "item",
+          href: `/dashboard/venues/${venueId}/bookings`,
+          label: "Bookings",
+          icon: CalendarDays,
+        },
+        {
+          kind: "item",
+          href: `/dashboard/venues/${venueId}/timeline`,
+          label: "Timeline",
+          icon: Clock,
+        },
+        {
+          kind: "item",
+          href: `/dashboard/venues/${venueId}/floor-plan`,
+          label: "Floor plan",
+          icon: TableProperties,
+        },
+        {
+          kind: "item",
+          href: `/dashboard/venues/${venueId}/waitlist`,
+          label: "Waitlist",
+          icon: Hourglass,
+        },
+        {
+          kind: "item",
           href: `/dashboard/venues/${venueId}/guests`,
           label: "Guests",
           icon: Users,
           show: data.org.crmEnabled,
         },
         {
-          href: `/dashboard/venues/${venueId}/floor-plan`,
-          label: "Floor plan",
-          icon: TableProperties,
+          kind: "item",
+          href: `/dashboard/venues/${venueId}/reports`,
+          label: "Reports",
+          icon: CalendarRange,
         },
-        { href: `/dashboard/venues/${venueId}/services`, label: "Services", icon: UtensilsCrossed },
         {
-          href: `/dashboard/venues/${venueId}/enquiries`,
-          label: "Enquiries",
-          icon: Inbox,
-          show: data.org.aiEnquiryEnabled,
+          kind: "group",
+          groupKey: "venue-comms",
+          label: "Communications",
+          icon: MessageSquare,
+          items: [
+            {
+              kind: "item",
+              href: `/dashboard/venues/${venueId}/enquiries`,
+              label: "Enquiries",
+              icon: Inbox,
+              show: data.org.aiEnquiryEnabled,
+            },
+            {
+              kind: "item",
+              href: `/dashboard/venues/${venueId}/reviews`,
+              label: "Reviews",
+              icon: Star,
+            },
+          ],
         },
-        { href: `/dashboard/venues/${venueId}/deposits`, label: "Deposits", icon: CreditCard },
-        { href: `/dashboard/venues/${venueId}/reports`, label: "Reports", icon: CalendarRange },
-        { href: `/dashboard/venues/${venueId}/reviews`, label: "Reviews", icon: Star },
-        { href: `/dashboard/venues/${venueId}/settings`, label: "Settings", icon: Settings },
+        {
+          kind: "group",
+          groupKey: "venue-setup",
+          label: "Setup",
+          icon: Wrench,
+          items: [
+            {
+              kind: "item",
+              href: `/dashboard/venues/${venueId}/services`,
+              label: "Services",
+              icon: UtensilsCrossed,
+            },
+            {
+              kind: "item",
+              href: `/dashboard/venues/${venueId}/deposits`,
+              label: "Deposits",
+              icon: CreditCard,
+            },
+            {
+              kind: "item",
+              href: `/dashboard/venues/${venueId}/settings`,
+              label: "Settings",
+              icon: Settings,
+            },
+          ],
+        },
       ]
     : [];
 
@@ -229,14 +320,14 @@ export function SidebarShell({
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-2">
           <Section
             label="Organisation"
-            items={orgItems.filter((i) => i.show !== false)}
+            entries={filterEntries(orgEntries)}
             pathname={pathname}
             collapsed={collapsed}
           />
           {venueId ? (
             <Section
               label="Venue"
-              items={venueItems.filter((i) => i.show !== false)}
+              entries={filterEntries(venueEntries)}
               pathname={pathname}
               collapsed={collapsed}
             />
@@ -279,16 +370,16 @@ export function SidebarShell({
 
 function Section({
   label,
-  items,
+  entries,
   pathname,
   collapsed,
 }: {
   label: string;
-  items: Item[];
+  entries: NavEntry[];
   pathname: string;
   collapsed: boolean;
 }) {
-  if (items.length === 0) return null;
+  if (entries.length === 0) return null;
   return (
     <div className="flex flex-col gap-0.5">
       {!collapsed ? (
@@ -296,16 +387,88 @@ function Section({
           {label}
         </p>
       ) : null}
-      {items.map((it) => (
-        <NavLink
-          key={it.href}
-          item={it}
-          active={pathname.startsWith(it.href)}
-          collapsed={collapsed}
-        />
-      ))}
+      {entries.map((entry) =>
+        entry.kind === "item" ? (
+          <NavLink
+            key={entry.href}
+            item={entry}
+            active={pathname.startsWith(entry.href)}
+            collapsed={collapsed}
+          />
+        ) : collapsed ? (
+          // Collapsed (icon-only) rail has no room for group headers.
+          // Inline the children so the icons stay reachable.
+          <div key={entry.groupKey} className="contents">
+            {entry.items.map((it) => (
+              <NavLink
+                key={it.href}
+                item={it}
+                active={pathname.startsWith(it.href)}
+                collapsed={collapsed}
+              />
+            ))}
+          </div>
+        ) : (
+          <CollapsibleGroup key={entry.groupKey} group={entry} pathname={pathname} />
+        ),
+      )}
     </div>
   );
+}
+
+function CollapsibleGroup({ group, pathname }: { group: Group; pathname: string }) {
+  const Icon = group.icon;
+  const groupKey = `${GROUP_KEY_PREFIX}${group.groupKey}`;
+  const stored = useFlagStore(groupKey);
+  // Auto-expand when the active route lives inside the group, so the
+  // user always sees their current spot without having to remember to
+  // open the disclosure.
+  const containsActive = group.items.some((it) => pathname.startsWith(it.href));
+  const open = stored || containsActive;
+  return (
+    <div className="flex flex-col gap-0.5">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => toggleFlag(groupKey)}
+        className="rounded-input text-charcoal hover:bg-cloud hover:text-ink flex w-full items-center gap-2.5 px-2 py-1.5 text-sm transition"
+      >
+        <Icon className="h-4 w-4 shrink-0" aria-hidden />
+        <span className="flex-1 truncate text-left">{group.label}</span>
+        <ChevronDown
+          className={cn("h-3.5 w-3.5 shrink-0 transition-transform", !open && "-rotate-90")}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <div className="ml-3 flex flex-col gap-0.5 border-l border-neutral-200 pl-2">
+          {group.items.map((it) => (
+            <NavLink
+              key={it.href}
+              item={it}
+              active={pathname.startsWith(it.href)}
+              collapsed={false}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// Drop entries the user shouldn't see (plan-gated, multi-venue-gated)
+// and groups whose every child got filtered out.
+function filterEntries(entries: NavEntry[]): NavEntry[] {
+  const out: NavEntry[] = [];
+  for (const e of entries) {
+    if (e.kind === "item") {
+      if (e.show !== false) out.push(e);
+    } else {
+      const items = e.items.filter((i) => i.show !== false);
+      if (items.length > 0) out.push({ ...e, items });
+    }
+  }
+  return out;
 }
 
 function NavLink({ item, active, collapsed }: { item: Item; active: boolean; collapsed: boolean }) {
@@ -424,15 +587,23 @@ function subscribe(key: string) {
   };
 }
 
-const collapseSub = subscribe(COLLAPSE_KEY);
-const drawerSub = subscribe(DRAWER_KEY);
+// Cache subscribers by key so each useSyncExternalStore call gets a
+// stable reference (re-subscribing on every render would thrash).
+const subCache = new Map<string, (notify: () => void) => () => void>();
+function getSub(key: string) {
+  let s = subCache.get(key);
+  if (!s) {
+    s = subscribe(key);
+    subCache.set(key, s);
+  }
+  return s;
+}
 
 function useFlagStore(key: string): boolean {
-  const sub = key === COLLAPSE_KEY ? collapseSub : drawerSub;
   return useSyncExternalStore(
-    sub,
+    getSub(key),
     () => readFlag(key),
-    // Server snapshot — sidebar starts expanded + drawer closed.
+    // Server snapshot — sidebar starts expanded + drawer + groups closed.
     () => false,
   );
 }
