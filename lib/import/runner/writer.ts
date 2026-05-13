@@ -30,6 +30,7 @@ import {
 } from "@/lib/security/crypto";
 import { adminDb } from "@/lib/server/admin/db";
 
+import { buildRejectedRowsCsv } from "../rejected-csv";
 import type { ColumnMap, GuestCandidate, ImportSource } from "../types";
 
 import { runPipeline } from "./pipeline";
@@ -179,6 +180,18 @@ export async function processImportJob(jobId: string): Promise<ProcessResult> {
         .where(eq(importJobs.id, jobId));
     }
 
+    // If any rows were rejected, build + encrypt the rejected-rows CSV
+    // so the operator can download it from the job detail page. The
+    // CSV inherits the same encryption posture as sourceCsvCipher
+    // (operator-uploaded plaintext PII).
+    const rejectedRowsCipher: string | null =
+      pipeline.rejected.length > 0
+        ? await encryptPii(
+            job.organisationId,
+            buildRejectedRowsCsv(pipeline.rejected) as Plaintext,
+          )
+        : null;
+
     await db
       .update(importJobs)
       .set({
@@ -191,6 +204,7 @@ export async function processImportJob(jobId: string): Promise<ProcessResult> {
         // success per gdpr.md.
         sourceCsvCipher: null,
         sourceSizeBytes: null,
+        rejectedRowsCipher,
       })
       .where(eq(importJobs.id, jobId));
 

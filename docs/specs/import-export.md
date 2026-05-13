@@ -1,6 +1,6 @@
 # Spec: Import from competitors, export anytime
 
-**Status:** shipped (full-backup zip + signed-URL job + rejected-rows download deferred — see footer)
+**Status:** shipped (full-backup zip + signed-URL job deferred — see footer)
 **Depends on:** `guests.md`, `bookings.md`
 
 ## What we're building
@@ -38,7 +38,7 @@ Not launch: live API imports from these platforms (terms often prohibit, and fil
 - [x] Dedupe runs during import, not as a separate step. Two passes: [`lib/import/dedupe.ts`](../../lib/import/dedupe.ts) (within-file, latest wins) + [`lib/import/runner/dedupe-existing.ts`](../../lib/import/runner/dedupe-existing.ts) (cross-org against `guests.email_hash`).
 - [x] Imported guests have `imported_from` + `imported_at` metadata for provenance. `guests.importedFrom` text + `guests.importedAt` timestamptz columns ([`lib/db/schema.ts`](../../lib/db/schema.ts)).
 - [x] Marketing consent flags always null on import. Enforced in [`lib/import/runner/writer.ts`](../../lib/import/runner/writer.ts) regardless of column-map content — the spec rule that "consent never imports as granted" is encoded as `marketingConsentAt: null` at write time.
-- [~] Rejected rows exported to a downloadable report. Count surfaced on the job detail page; the schema reserves `import_jobs.rejected_rows_url` for a signed download URL, but the runner doesn't yet populate it and no UI link surfaces the file. Deferred to a follow-up.
+- [x] Rejected rows exported to a downloadable report. Runner stamps an envelope-encrypted CSV into `import_jobs.rejected_rows_cipher` ([`lib/import/rejected-csv.ts`](../../lib/import/rejected-csv.ts) builds the RFC 4180 + UTF-8 BOM + formula-injection-guarded CSV); operator clicks "Download rejected rows" on the job detail page → [`/api/imports/[jobId]/rejected.csv`](../../app/api/imports/[jobId]/rejected.csv/route.ts) decrypts + streams + audits.
 - [x] Job is resumable — crash mid-import doesn't double-insert. The runner writes a sentinel row per source row before the actual insert (`writer.ts`) so a crash leaves an honest count and a re-run is a no-op rather than a duplicate.
 
 ## Export (MVP)
@@ -62,10 +62,6 @@ Available from day one on every tier. This is the promise.
 - [ ] Export URL signed, single-use, expires after 24h. **Deferred** alongside the background-job path — only inline streaming today, so signing isn't needed yet.
 
 ## Deferred
-
-### Rejected-rows download for completed imports
-
-`import_jobs.rejected_rows_url` is in the schema but unpopulated. The runner builds the rejected set + counts it, but doesn't yet write a CSV to storage + stamp the signed URL. Job detail page should expose a "Download rejected rows" link when the count is non-zero. Small follow-up — bundle it with the next operator-asked import polish.
 
 ### Full-backup zip + background-job export pipeline
 

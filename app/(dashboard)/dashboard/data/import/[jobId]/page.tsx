@@ -175,9 +175,20 @@ function PreviewSection({
 }
 
 function SummarySection({ job }: { job: typeof importJobs.$inferSelect }) {
+  const hasRejected = job.rowCountRejected > 0 && job.rejectedRowsCipher !== null;
   return (
     <section className="mt-6">
-      <h2 className="text-ink text-base font-semibold">Summary</h2>
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-ink text-base font-semibold">Summary</h2>
+        {hasRejected ? (
+          <a
+            href={`/api/imports/${job.id}/rejected.csv`}
+            className="rounded-pill border-hairline text-ink hover:border-ink inline-flex items-center gap-1.5 border bg-white px-3 py-1 text-xs font-semibold transition"
+          >
+            Download rejected rows
+          </a>
+        ) : null}
+      </div>
       <dl className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Stat label="Imported" value={job.rowCountImported} />
         <Stat label="Rejected" value={job.rowCountRejected} />
