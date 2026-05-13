@@ -30,11 +30,7 @@ export function buildRejectedRowsCsv(rejected: ReadonlyArray<RejectedRow>): stri
   const lines: string[] = [headers.map(escapeCell).join(",")];
   for (const r of rejected) {
     const errorsCell = r.errors.map(formatError).join("; ");
-    const row = [
-      String(r.rowNumber),
-      errorsCell,
-      ...[...headerSet].map((h) => r.raw[h] ?? ""),
-    ];
+    const row = [String(r.rowNumber), errorsCell, ...[...headerSet].map((h) => r.raw[h] ?? "")];
     lines.push(row.map(escapeCell).join(","));
   }
 

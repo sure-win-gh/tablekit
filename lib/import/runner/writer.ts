@@ -186,10 +186,7 @@ export async function processImportJob(jobId: string): Promise<ProcessResult> {
     // (operator-uploaded plaintext PII).
     const rejectedRowsCipher: string | null =
       pipeline.rejected.length > 0
-        ? await encryptPii(
-            job.organisationId,
-            buildRejectedRowsCsv(pipeline.rejected) as Plaintext,
-          )
+        ? await encryptPii(job.organisationId, buildRejectedRowsCsv(pipeline.rejected) as Plaintext)
         : null;
 
     await db
