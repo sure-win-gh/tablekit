@@ -125,7 +125,11 @@ export type AuditAction =
   | "invite.accepted"
   | "role.changed"
   | "mfa.enrolled"
-  | "mfa.disabled";
+  | "mfa.disabled"
+  // outreach pre-populated accounts
+  | "outreach.claimable_created"
+  | "outreach.claimed"
+  | "outreach.purged";
 
 export type AuditTargetType =
   | "user"
