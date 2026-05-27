@@ -70,10 +70,24 @@ export type MfaGateDecision =
   | { kind: "enrol"; factorId: null }
   | { kind: "challenge"; factorId: string };
 
+export type MfaGateOptions = {
+  // Org was created via the outreach pre-populated-accounts flow
+  // (organisations.outreach_source IS NOT NULL). For these orgs we
+  // skip the TOTP wall entirely — the prospect's first-login friction
+  // matters more than enforcing 2FA on a freshly-claimed account.
+  // The operator can still enrol from /dashboard/settings/security.
+  outreachOrigin?: boolean;
+};
+
 // Decide what to render given a role + MFA state. Pure — no I/O.
 // Centralised here so the layout, server actions, and any future
 // API key-bypass paths agree on the rule.
-export function decideMfaGate(role: OrgRole, mfa: MfaState): MfaGateDecision {
+export function decideMfaGate(
+  role: OrgRole,
+  mfa: MfaState,
+  opts: MfaGateOptions = {},
+): MfaGateDecision {
+  if (opts.outreachOrigin) return { kind: "pass" };
   if (!isMfaRequired(role)) return { kind: "pass" };
   if (mfa.currentLevel === "aal2") return { kind: "pass" };
   if (mfa.hasVerifiedFactor && mfa.factorId) {

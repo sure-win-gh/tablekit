@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { getActiveOrg } from "@/lib/auth/active-org";
 import { decideMfaGate, getMfaState } from "@/lib/auth/mfa";
 import { withUser } from "@/lib/db/client";
-import { memberships } from "@/lib/db/schema";
+import { memberships, organisations } from "@/lib/db/schema";
 import { supabaseServer } from "@/lib/db/supabase-server";
 
 import { MfaWall } from "./mfa-wall";
@@ -32,8 +32,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
     if (orgId) {
       const member = await withUser(async (db) => {
         const [row] = await db
-          .select({ role: memberships.role })
+          .select({
+            role: memberships.role,
+            // Outreach-origin orgs bypass the TOTP wall on first
+            // claim. organisations.outreach_source is NULL for orgs
+            // created via normal /signup. RLS lets the caller see
+            // their own org row through the existing membership-scope
+            // policy.
+            outreachSource: organisations.outreachSource,
+          })
           .from(memberships)
+          .innerJoin(organisations, eq(organisations.id, memberships.organisationId))
           .where(and(eq(memberships.userId, user.id), eq(memberships.organisationId, orgId)))
           .limit(1);
         return row;
@@ -42,7 +51,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
       if (member) {
         const mfa = await getMfaState();
         if (mfa) {
-          const decision = decideMfaGate(member.role, mfa);
+          const decision = decideMfaGate(member.role, mfa, {
+            outreachOrigin: member.outreachSource !== null,
+          });
           if (decision.kind === "enrol") {
             return <MfaWall mode="enrol" />;
           }
