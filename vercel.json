@@ -32,6 +32,10 @@
     {
       "path": "/api/cron/sending-domain-verify",
       "schedule": "50 4 * * *"
+    },
+    {
+      "path": "/api/cron/purge-unclaimed-outreach",
+      "schedule": "55 4 * * *"
     }
   ]
 }
