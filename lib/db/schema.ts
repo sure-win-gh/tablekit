@@ -75,8 +75,22 @@ export const organisations = pgTable("organisations", {
   // org-scoped; the flag controls UI surfaces (group-wide guests
   // list, "also visited at" hints) rather than the data model.
   groupCrmEnabled: boolean("group_crm_enabled").notNull().default(false),
+  // Outreach pre-populated accounts: NULL until the prospect claims via
+  // the magic link in their outreach email; set to the claim timestamp
+  // on success. Normal signups backfill to created_at in the migration
+  // so the purge cron doesn't sweep them. See lib/outreach/.
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  // Provenance tag for outreach-created orgs, e.g. `"places:ChIJ..."`.
+  // NULL for normal signups.
+  outreachSource: text("outreach_source"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  // Partial index for the daily purge cron — scans only unclaimed
+  // outreach orgs rather than the full table.
+  index("organisations_unclaimed_idx")
+    .on(t.createdAt)
+    .where(sql`${t.claimedAt} is null`),
+]);
 
 export const users = pgTable("users", {
   // References auth.users(id); FK added in the migration because
@@ -142,6 +156,47 @@ export const orgInvitations = pgTable(
     index("org_invitations_org_created_idx").on(t.organisationId, t.createdAt.desc()),
     index("org_invitations_email_idx").on(t.email),
   ],
+);
+
+// Outreach claim tokens. Distinct from org_invitations — this isn't an
+// invite to join an existing team, it's a one-shot link that hands the
+// whole org over to its first owner. Founder creates the pre-populated
+// org via the internal /admin/outreach tool, mints a token here, emails
+// the prospect; the prospect's first claim becomes the org's owner and
+// flips organisations.claimed_at. Unclaimed orgs auto-purge after 30
+// days via a Vercel cron — the TTL here matches that window.
+//
+// RLS posture: deny-all to authenticated and anon. The internal admin
+// UI (super-admin gated) and the public claim flow both go through
+// adminDb(). No tenant-scope column; this table is platform-level.
+export const outreachClaims = pgTable(
+  "outreach_claims",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .unique()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    // SHA-256 hash of the random token; plaintext lives in the emailed
+    // URL only. Mirrors the org_invitations posture.
+    tokenHash: text("token_hash").notNull().unique(),
+    prospectEmail: citext("prospect_email").notNull(),
+    prospectName: text("prospect_name"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    claimedByUserId: uuid("claimed_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    // Founder (or future delegated platform admin) who minted the link.
+    // Nullable + ON DELETE SET NULL so a GDPR-driven user erasure
+    // doesn't cascade-delete the claim row (audit-trail preservation
+    // wins over attribution completeness).
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("outreach_claims_created_at_idx").on(t.createdAt.desc())],
 );
 
 // Append-only log of security-relevant events. Per gdpr.md retention
