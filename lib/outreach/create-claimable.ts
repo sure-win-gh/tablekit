@@ -36,6 +36,7 @@ import {
   generateClaimToken,
 } from "@/lib/outreach/claim-token";
 import { buildSeedPayload } from "@/lib/outreach/build-from-places";
+import { seedSampleBookings } from "@/lib/outreach/seed-bookings";
 
 export type CreateClaimableInput = {
   place: PlaceDetails;
@@ -139,6 +140,17 @@ export async function createClaimableAccount(
 
     return { organisationId: org.id, venueId: venueRow.id };
   });
+
+  // Sample bookings live in a separate transaction by design: they
+  // need encrypted guest rows (which lazily provision the org's DEK),
+  // and a seed-bookings failure shouldn't roll back the claimable
+  // account itself — the prospect still gets a working dashboard,
+  // just with an emptier diary. Log and continue.
+  try {
+    await seedSampleBookings({ organisationId, venueId, now });
+  } catch (err) {
+    console.error("createClaimableAccount: seedSampleBookings failed", err);
+  }
 
   // Audit outside the txn so a logging failure doesn't roll back the
   // creation. Swallow + report rather than re-throw: the org is already
