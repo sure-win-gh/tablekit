@@ -37,10 +37,7 @@ export type ClaimState =
 //   2. Insert memberships(role=owner) for the new user.
 //   3. Flip organisations.claimed_at + outreach_claims.claimed_at.
 // (2) and (3) happen atomically inside acceptClaim().
-export async function claimAccount(
-  _prev: ClaimState,
-  formData: FormData,
-): Promise<ClaimState> {
+export async function claimAccount(_prev: ClaimState, formData: FormData): Promise<ClaimState> {
   const parsed = ClaimSchema.safeParse({
     token: formData.get("token"),
     password: formData.get("password"),

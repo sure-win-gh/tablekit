@@ -55,42 +55,46 @@ const citext = customType<{ data: string }>({
 
 export const orgRole = pgEnum("org_role", ["owner", "manager", "host"]);
 
-export const organisations = pgTable("organisations", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  slug: citext("slug").notNull().unique(),
-  plan: text("plan").notNull().default("free"),
-  stripeCustomerId: text("stripe_customer_id"),
-  // Envelope encryption state. `wrappedDek` is this org's DEK sealed
-  // with the master key (AES-256-GCM, `iv || tag || ciphertext` = 60
-  // bytes). Nullable so organisations predating the crypto phase don't
-  // fail the migration; `lib/security/crypto.ts` provisions lazily on
-  // first encrypt/decrypt. `dekVersion` is forward-looking for key
-  // rotation — only `1` exists today.
-  wrappedDek: bytea("wrapped_dek"),
-  dekVersion: integer("dek_version").notNull().default(1),
-  // Plus-tier opt-in for cross-venue guest visibility. Default off so
-  // existing single-venue orgs don't surprise-aggregate. Toggled by
-  // owners on /dashboard/organisation. Storage on guests is already
-  // org-scoped; the flag controls UI surfaces (group-wide guests
-  // list, "also visited at" hints) rather than the data model.
-  groupCrmEnabled: boolean("group_crm_enabled").notNull().default(false),
-  // Outreach pre-populated accounts: NULL until the prospect claims via
-  // the magic link in their outreach email; set to the claim timestamp
-  // on success. Normal signups backfill to created_at in the migration
-  // so the purge cron doesn't sweep them. See lib/outreach/.
-  claimedAt: timestamp("claimed_at", { withTimezone: true }),
-  // Provenance tag for outreach-created orgs, e.g. `"places:ChIJ..."`.
-  // NULL for normal signups.
-  outreachSource: text("outreach_source"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [
-  // Partial index for the daily purge cron — scans only unclaimed
-  // outreach orgs rather than the full table.
-  index("organisations_unclaimed_idx")
-    .on(t.createdAt)
-    .where(sql`${t.claimedAt} is null`),
-]);
+export const organisations = pgTable(
+  "organisations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    slug: citext("slug").notNull().unique(),
+    plan: text("plan").notNull().default("free"),
+    stripeCustomerId: text("stripe_customer_id"),
+    // Envelope encryption state. `wrappedDek` is this org's DEK sealed
+    // with the master key (AES-256-GCM, `iv || tag || ciphertext` = 60
+    // bytes). Nullable so organisations predating the crypto phase don't
+    // fail the migration; `lib/security/crypto.ts` provisions lazily on
+    // first encrypt/decrypt. `dekVersion` is forward-looking for key
+    // rotation — only `1` exists today.
+    wrappedDek: bytea("wrapped_dek"),
+    dekVersion: integer("dek_version").notNull().default(1),
+    // Plus-tier opt-in for cross-venue guest visibility. Default off so
+    // existing single-venue orgs don't surprise-aggregate. Toggled by
+    // owners on /dashboard/organisation. Storage on guests is already
+    // org-scoped; the flag controls UI surfaces (group-wide guests
+    // list, "also visited at" hints) rather than the data model.
+    groupCrmEnabled: boolean("group_crm_enabled").notNull().default(false),
+    // Outreach pre-populated accounts: NULL until the prospect claims via
+    // the magic link in their outreach email; set to the claim timestamp
+    // on success. Normal signups backfill to created_at in the migration
+    // so the purge cron doesn't sweep them. See lib/outreach/.
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    // Provenance tag for outreach-created orgs, e.g. `"places:ChIJ..."`.
+    // NULL for normal signups.
+    outreachSource: text("outreach_source"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Partial index for the daily purge cron — scans only unclaimed
+    // outreach orgs rather than the full table.
+    index("organisations_unclaimed_idx")
+      .on(t.createdAt)
+      .where(sql`${t.claimedAt} is null`),
+  ],
+);
 
 export const users = pgTable("users", {
   // References auth.users(id); FK added in the migration because

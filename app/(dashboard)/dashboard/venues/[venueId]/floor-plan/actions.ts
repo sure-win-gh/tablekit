@@ -9,13 +9,7 @@ import { findSlots } from "@/lib/bookings/availability";
 import { createBooking } from "@/lib/bookings/create";
 import { todayInZone, venueLocalDayRange } from "@/lib/bookings/time";
 import { transitionBooking } from "@/lib/bookings/transition";
-import {
-  areas,
-  bookingTables,
-  services,
-  venueTables,
-  venues,
-} from "@/lib/db/schema";
+import { areas, bookingTables, services, venueTables, venues } from "@/lib/db/schema";
 import { adminDb } from "@/lib/server/admin/db";
 
 import type { ActionState } from "./types";
@@ -370,10 +364,7 @@ const WalkInSchema = z.object({
   partySize: z.coerce.number().int().min(1).max(20),
 });
 
-export async function seatWalkIn(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
+export async function seatWalkIn(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const parsed = WalkInSchema.safeParse({
     venueId: formData.get("venue_id"),
     tableId: formData.get("table_id"),

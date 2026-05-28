@@ -74,7 +74,10 @@ export default async function AdminOutreachPage({
           Search
         </button>
         {q ? (
-          <Link href="/admin/outreach" className="text-ash text-xs underline-offset-2 hover:underline">
+          <Link
+            href="/admin/outreach"
+            className="text-ash text-xs underline-offset-2 hover:underline"
+          >
             Clear
           </Link>
         ) : null}
@@ -94,8 +97,8 @@ export default async function AdminOutreachPage({
         <Card padding="lg">
           <CardHeader>
             <CardTitle>
-              {search.places.length}{" "}
-              {search.places.length === 1 ? "result" : "results"} matching “{q}”
+              {search.places.length} {search.places.length === 1 ? "result" : "results"} matching “
+              {q}”
             </CardTitle>
           </CardHeader>
           <CardBody>

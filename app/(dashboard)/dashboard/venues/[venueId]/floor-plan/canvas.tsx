@@ -347,12 +347,7 @@ export function FloorPlanCanvas({
           </div>
         ) : null}
         {editMode && activeAreaId ? (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleAddTable}
-            disabled={createPending}
-          >
+          <Button variant="secondary" size="sm" onClick={handleAddTable} disabled={createPending}>
             <PlusIcon className="h-3.5 w-3.5" aria-hidden />
             {createPending ? "Adding…" : "Add table"}
           </Button>

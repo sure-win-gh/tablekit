@@ -19,10 +19,26 @@ export type FloorStateStyle = {
 
 export const FLOOR_STATE_STYLE: Record<FloorTableState, FloorStateStyle> = {
   empty: { fillClass: "fill-white", strokeClass: "stroke-hairline", textClass: "fill-ink" },
-  soon: { fillClass: "fill-amber-100", strokeClass: "stroke-amber-400", textClass: "fill-amber-900" },
-  confirmed: { fillClass: "fill-blue-100", strokeClass: "stroke-blue-400", textClass: "fill-blue-900" },
-  seated: { fillClass: "fill-emerald-100", strokeClass: "stroke-emerald-500", textClass: "fill-emerald-900" },
-  overdue: { fillClass: "fill-rose-100", strokeClass: "stroke-rose-500", textClass: "fill-rose-900" },
+  soon: {
+    fillClass: "fill-amber-100",
+    strokeClass: "stroke-amber-400",
+    textClass: "fill-amber-900",
+  },
+  confirmed: {
+    fillClass: "fill-blue-100",
+    strokeClass: "stroke-blue-400",
+    textClass: "fill-blue-900",
+  },
+  seated: {
+    fillClass: "fill-emerald-100",
+    strokeClass: "stroke-emerald-500",
+    textClass: "fill-emerald-900",
+  },
+  overdue: {
+    fillClass: "fill-rose-100",
+    strokeClass: "stroke-rose-500",
+    textClass: "fill-rose-900",
+  },
 };
 
 export const FLOOR_STATE_LABEL: Record<FloorTableState, string> = {
