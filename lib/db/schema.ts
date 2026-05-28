@@ -523,6 +523,9 @@ export const bookings = pgTable(
     index("bookings_venue_start_idx").on(t.venueId, t.startAt),
     index("bookings_org_idx").on(t.organisationId),
     index("bookings_guest_idx").on(t.guestId),
+    // Lead-time + creation-bucketed analytics filter on created_at, which
+    // the (venue_id, start_at) index doesn't cover.
+    index("bookings_venue_created_idx").on(t.venueId, t.createdAt),
   ],
 );
 
