@@ -48,8 +48,9 @@ export async function getChannelPerformanceReport(
         sql<number>`coalesce(sum(${leadDays}) filter (where ${bookings.status} <> 'cancelled'), 0)::int`.as(
           "leadSum",
         ),
-      leadCount:
-        sql<number>`count(*) filter (where ${bookings.status} <> 'cancelled')::int`.as("leadCount"),
+      leadCount: sql<number>`count(*) filter (where ${bookings.status} <> 'cancelled')::int`.as(
+        "leadCount",
+      ),
     })
     .from(bookings)
     .where(

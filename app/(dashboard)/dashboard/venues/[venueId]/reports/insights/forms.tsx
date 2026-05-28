@@ -129,8 +129,7 @@ function DeltaBadge({ metric }: { metric: CompareMetric }) {
     direction === "neutral" || sign === 0
       ? null
       : (direction === "up-good" && sign > 0) || (direction === "down-good" && sign < 0);
-  const tone =
-    good === null ? "text-ash" : good ? "text-emerald-600" : "text-rose-600";
+  const tone = good === null ? "text-ash" : good ? "text-emerald-600" : "text-rose-600";
   return <span className={cn("text-xs font-semibold tabular-nums", tone)}>{text}</span>;
 }
 
@@ -145,7 +144,7 @@ export function ComparisonBand({
     <Card>
       <CardBody>
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-ash text-xs font-semibold uppercase tracking-wide">
+          <span className="text-ash text-xs font-semibold tracking-wide uppercase">
             vs previous period
           </span>
           {partial ? (
@@ -326,7 +325,7 @@ export function NoShowTrendCard({
     >
       <div className="mb-3">
         <div
-          className="border-hairline inline-flex overflow-hidden rounded-pill border bg-white text-xs"
+          className="border-hairline rounded-pill inline-flex overflow-hidden border bg-white text-xs"
           role="tablist"
           aria-label="Roll-up granularity"
         >
