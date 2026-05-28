@@ -168,10 +168,7 @@ describe("buildSeedPayload", () => {
     formattedAddress: "6 Southwark St, London SE1 1TQ",
     internationalPhoneNumber: "+44 20 7407 0000",
     websiteUri: "https://padella.co",
-    regularOpeningPeriods: [
-      period(1, "12:00", 1, "15:00"),
-      period(1, "18:00", 1, "22:00"),
-    ],
+    regularOpeningPeriods: [period(1, "12:00", 1, "15:00"), period(1, "18:00", 1, "22:00")],
     types: ["restaurant", "food", "point_of_interest"],
     location: { lat: 51.5055, lng: -0.0908 },
   };

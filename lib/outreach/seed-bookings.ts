@@ -185,7 +185,8 @@ export function planSampleBookings(input: {
       if (latestStartMin <= openMin) continue;
 
       // Snap start to 15-minute grid for natural-looking slots.
-      const startMin = openMin + pickInt(random, 0, Math.floor((latestStartMin - openMin) / 15)) * 15;
+      const startMin =
+        openMin + pickInt(random, 0, Math.floor((latestStartMin - openMin) / 15)) * 15;
       const start = new Date(
         Date.UTC(
           dayDate.getUTCFullYear(),
@@ -200,9 +201,7 @@ export function planSampleBookings(input: {
       const table = pickOne(random, input.tables);
       const occKey = `${table.id}:${dayOffset}`;
       const existing = occupancy.get(occKey) ?? [];
-      const conflict = existing.some(
-        ([s, e]) => start.getTime() < e && end.getTime() > s,
-      );
+      const conflict = existing.some(([s, e]) => start.getTime() < e && end.getTime() > s);
       if (conflict) continue;
       existing.push([start.getTime(), end.getTime()]);
       occupancy.set(occKey, existing);

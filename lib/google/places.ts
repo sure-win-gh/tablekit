@@ -154,7 +154,9 @@ export async function searchPlaces(query: string): Promise<SearchResult> {
   // PII (a venue name from a search the founder ran is not PII).
   const dropped = raw.length - places.length;
   if (dropped > 0) {
-    console.warn(`places:searchText dropped ${dropped} malformed entr${dropped === 1 ? "y" : "ies"}`);
+    console.warn(
+      `places:searchText dropped ${dropped} malformed entr${dropped === 1 ? "y" : "ies"}`,
+    );
   }
 
   return { ok: true, places };

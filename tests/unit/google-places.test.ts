@@ -103,9 +103,7 @@ describe("searchPlaces", () => {
   });
 
   it("surfaces non-2xx with the wire status + body", async () => {
-    vi.spyOn(global, "fetch").mockResolvedValue(
-      new Response("API key invalid", { status: 403 }),
-    );
+    vi.spyOn(global, "fetch").mockResolvedValue(new Response("API key invalid", { status: 403 }));
     const { searchPlaces } = await import("@/lib/google/places");
     const r = await searchPlaces("padella");
     expect(r).toEqual({ ok: false, status: 403, error: "API key invalid" });

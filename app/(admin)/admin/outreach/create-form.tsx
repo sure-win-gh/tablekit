@@ -12,13 +12,7 @@ type CopyState = "idle" | "copied" | "failed";
 
 // Mounted once per search result. The placeId is fixed by the parent;
 // the founder fills in the prospect's contact details.
-export function CreateClaimForm({
-  placeId,
-  placeName,
-}: {
-  placeId: string;
-  placeName: string;
-}) {
+export function CreateClaimForm({ placeId, placeName }: { placeId: string; placeName: string }) {
   const [state, formAction, pending] = useActionState(createOutreachClaim, initial);
   const [copy, setCopy] = useState<CopyState>("idle");
   const fieldErrors = state.status === "error" ? state.fieldErrors : undefined;
@@ -29,8 +23,8 @@ export function CreateClaimForm({
         <p className="text-ink text-sm font-semibold">Claimable account created for {placeName}</p>
         <p className="text-ash text-xs">
           Send this URL to {state.prospectEmail}. It expires{" "}
-          {new Date(state.expiresAt).toLocaleDateString("en-GB")}. The link is shown once —
-          closing this page loses it.
+          {new Date(state.expiresAt).toLocaleDateString("en-GB")}. The link is shown once — closing
+          this page loses it.
         </p>
         <div className="flex items-center gap-2">
           <Input readOnly value={state.claimUrl} className="font-mono text-xs" />

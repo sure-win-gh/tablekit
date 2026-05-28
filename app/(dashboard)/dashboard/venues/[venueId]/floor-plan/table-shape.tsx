@@ -216,16 +216,8 @@ export function TableShape({
 
   // Render coords. During drag/resize, follow the live (un-snapped)
   // values for a fluid feel; outside both, use the persisted position.
-  const px = drag
-    ? drag.anchor.x + drag.dx
-    : resize
-      ? resize.current.x
-      : table.position.x;
-  const py = drag
-    ? drag.anchor.y + drag.dy
-    : resize
-      ? resize.current.y
-      : table.position.y;
+  const px = drag ? drag.anchor.x + drag.dx : resize ? resize.current.x : table.position.x;
+  const py = drag ? drag.anchor.y + drag.dy : resize ? resize.current.y : table.position.y;
   const w = resize ? resize.current.w : table.position.w;
   const h = resize ? resize.current.h : table.position.h;
 
@@ -331,7 +323,7 @@ export function TableShape({
               height={handleSize}
               rx={0.06}
               ry={0.06}
-              className={`fill-white stroke-coral ${p.cursor}`}
+              className={`stroke-coral fill-white ${p.cursor}`}
               strokeWidth={0.06}
               onPointerDown={onResizePointerDown(p.dir)}
               onPointerMove={onResizePointerMove}

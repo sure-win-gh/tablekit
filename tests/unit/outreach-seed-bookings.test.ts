@@ -27,12 +27,20 @@ const MONDAY = new Date(Date.UTC(2026, 4, 25, 9, 0, 0));
 const RESTAURANT_SERVICES: ServiceInput[] = [
   {
     id: "svc-lunch",
-    schedule: { days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"], start: "12:00", end: "15:00" },
+    schedule: {
+      days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+      start: "12:00",
+      end: "15:00",
+    },
     turnMinutes: 90,
   },
   {
     id: "svc-dinner",
-    schedule: { days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"], start: "18:00", end: "22:00" },
+    schedule: {
+      days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+      start: "18:00",
+      end: "22:00",
+    },
     turnMinutes: 90,
   },
 ];
@@ -46,12 +54,10 @@ const SIX_TABLES: TableInput[] = Array.from({ length: 6 }, (_, i) => ({
 
 describe("planSampleBookings", () => {
   it("returns an empty plan when there are no services or no tables", () => {
-    expect(
-      planSampleBookings({ services: [], tables: SIX_TABLES, now: MONDAY }),
-    ).toEqual([]);
-    expect(
-      planSampleBookings({ services: RESTAURANT_SERVICES, tables: [], now: MONDAY }),
-    ).toEqual([]);
+    expect(planSampleBookings({ services: [], tables: SIX_TABLES, now: MONDAY })).toEqual([]);
+    expect(planSampleBookings({ services: RESTAURANT_SERVICES, tables: [], now: MONDAY })).toEqual(
+      [],
+    );
   });
 
   it("produces ~15 bookings across the next 7 days with a deterministic seed", () => {

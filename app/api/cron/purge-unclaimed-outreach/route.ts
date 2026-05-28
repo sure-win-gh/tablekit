@@ -23,8 +23,6 @@ export async function GET(req: NextRequest) {
   }
 
   const result = await purgeUnclaimedOutreach();
-  console.log(
-    `purge-unclaimed-outreach: deleted ${result.deleted} (cutoff ${result.cutoff})`,
-  );
+  console.log(`purge-unclaimed-outreach: deleted ${result.deleted} (cutoff ${result.cutoff})`);
   return NextResponse.json({ ok: true, ...result });
 }

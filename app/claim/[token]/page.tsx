@@ -25,8 +25,8 @@ export default async function ClaimPage({ params }: { params: Promise<{ token: s
     return (
       <Shell title="Link no longer valid">
         <p className="text-ash text-sm">
-          This claim link has expired, already been used, or doesn&apos;t exist. If you were expecting
-          to claim a venue, reply to the email and we&apos;ll resend a fresh link.
+          This claim link has expired, already been used, or doesn&apos;t exist. If you were
+          expecting to claim a venue, reply to the email and we&apos;ll resend a fresh link.
         </p>
         <Link
           href="/"
@@ -47,8 +47,8 @@ export default async function ClaimPage({ params }: { params: Promise<{ token: s
     return (
       <Shell title="Sign out to continue">
         <p className="text-ash text-sm">
-          This claim link is for <strong>{claim.prospectEmail}</strong>. You&apos;re currently signed in
-          as <strong>{user.email}</strong>. Sign out and reopen the link to continue.
+          This claim link is for <strong>{claim.prospectEmail}</strong>. You&apos;re currently
+          signed in as <strong>{user.email}</strong>. Sign out and reopen the link to continue.
         </p>
       </Shell>
     );
