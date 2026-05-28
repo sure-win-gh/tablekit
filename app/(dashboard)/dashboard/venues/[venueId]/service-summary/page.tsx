@@ -1,13 +1,15 @@
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 
-import { Card, CardBody } from "@/components/ui";
+import { Badge, Card, CardBody } from "@/components/ui";
 import { requirePlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { formatVenueTime, todayInZone } from "@/lib/bookings/time";
 import { withUser } from "@/lib/db/client";
 import { venues } from "@/lib/db/schema";
 import { getHeatmap } from "@/lib/services/heatmap";
+import { getServiceSuggestions } from "@/lib/services/suggestions/context";
+import type { Suggestion } from "@/lib/services/suggestions/types";
 import { getServiceSummary, type ServiceSummaryRow } from "@/lib/services/summary";
 
 import { HeatmapCalendar, ServiceSummaryDateNav } from "./forms";
@@ -43,10 +45,12 @@ export default async function ServiceSummaryPage({
   const date = dateParam && DATE_RE.test(dateParam) ? dateParam : today;
   const monthFirst = `${date.slice(0, 7)}-01`;
 
-  const { rows, heatmap } = await withUser(async (db) => ({
-    rows: await getServiceSummary(db, venueId, date, venue.timezone),
-    heatmap: await getHeatmap(db, venueId, monthFirst, venue.timezone),
-  }));
+  const { rows, suggestions, heatmap } = await withUser(async (db) => {
+    const rows = await getServiceSummary(db, venueId, date, venue.timezone);
+    const suggestions = await getServiceSuggestions(db, venueId, date, venue.timezone, rows);
+    const heatmap = await getHeatmap(db, venueId, monthFirst, venue.timezone);
+    return { rows, suggestions, heatmap };
+  });
 
   return (
     <section className="flex flex-col gap-6">
@@ -80,7 +84,12 @@ export default async function ServiceSummaryPage({
       ) : (
         <div className="flex flex-col gap-3">
           {rows.map((r) => (
-            <ServiceCard key={r.serviceId} row={r} timezone={venue.timezone} />
+            <ServiceCard
+              key={r.serviceId}
+              row={r}
+              timezone={venue.timezone}
+              suggestion={suggestions.get(r.serviceId)}
+            />
           ))}
         </div>
       )}
@@ -94,7 +103,22 @@ function utilisationTone(u: number): string {
   return "bg-emerald-500";
 }
 
-function ServiceCard({ row, timezone }: { row: ServiceSummaryRow; timezone: string }) {
+const SUGGESTION_TONE: Record<string, "danger" | "warning" | "info"> = {
+  "oversold-risk": "danger",
+  "no-show-cluster": "warning",
+  "underbooked-72h": "info",
+  "walk-in-headroom": "info",
+};
+
+function ServiceCard({
+  row,
+  timezone,
+  suggestion,
+}: {
+  row: ServiceSummaryRow;
+  timezone: string;
+  suggestion?: Suggestion | undefined;
+}) {
   const pct = Math.round(row.utilisation * 100);
   return (
     <Card>
@@ -121,6 +145,12 @@ function ServiceCard({ row, timezone }: { row: ServiceSummaryRow; timezone: stri
             {row.bookedCovers}/{row.capacity} · {pct}%
           </span>
         </div>
+
+        {suggestion ? (
+          <Badge tone={SUGGESTION_TONE[suggestion.rule] ?? "neutral"} className="mt-2">
+            {suggestion.message}
+          </Badge>
+        ) : null}
       </CardBody>
     </Card>
   );

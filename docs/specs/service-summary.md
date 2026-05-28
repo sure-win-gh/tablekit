@@ -1,6 +1,6 @@
 # Spec: Service summary
 
-**Status:** in progress — PR1 (`service_capacity_overrides` + RLS + edit field) + PR2 (Plus-gated per-day summary panel: capacity/booked/utilisation/open-slots + day-nav + sidebar) shipped; calendar heatmap (PR3), suggestion engine (PR4) to come.
+**Status:** shipped — Plus-gated `/service-summary`: capacity-override table (PR1), per-day panel with capacity/booked/utilisation/open-slots (PR2), month/week calendar heatmap (PR3), four-rule suggestion engine (PR4).
 **Depends on:** `bookings.md`, `venues.md`
 
 ## What we're building
@@ -53,9 +53,9 @@ Rules live in `lib/services/suggestions/{rule}.ts`, each a pure `(serviceContext
 - [x] Service summary panel scoped to `organisation_id` via RLS — `getServiceSummary` filters every read by `venueId` inside `withUser`; isolation proven by the `getServiceSummary` cases in [tests/integration/rls-services.test.ts](../../tests/integration/rls-services.test.ts) (user A querying venue B → no rows).
 - [x] Utilisation matches "covers / capacity" exactly. `resolveCapacity` (override ?? summed table max_cover) unit-tested in [tests/unit/service-capacity.test.ts](../../tests/unit/service-capacity.test.ts); the booked/capacity maths verified end-to-end in the integration test (Main 8/40=0.2 via override, Brunch 5/10=0.5 via room fallback, cancelled excluded).
 - [x] Calendar heatmap loads a month in a single aggregate query. [`lib/services/heatmap.ts`](../../lib/services/heatmap.ts) `getHeatmap` runs one GROUP-BY-day covers query (on `bookings_venue_start_idx`) + computes per-day capacity in TS from the services' schedules — no per-day query. Layout maths (Monday-start grid, leading/trailing pads, leap-Feb, week bucketing, heat thresholds) unit-tested in [tests/unit/heatmap-grid.test.ts](../../tests/unit/heatmap-grid.test.ts). The <400ms figure is informal (same posture as `reporting.md`), not codified in CI.
-- [ ] Suggestion rules each have a unit test for trigger + no-trigger cases, and a `serviceContext` builder fixture.
+- [x] Suggestion rules each have trigger + no-trigger unit tests with a `ServiceContext` builder fixture, plus a runner priority/first-wins test — [tests/unit/service-suggestions.test.ts](../../tests/unit/service-suggestions.test.ts). Four pure rules in [lib/services/suggestions/](../../lib/services/suggestions/); [run.ts](../../lib/services/suggestions/run.ts) returns the first hit (priority: oversold → no-show-cluster → underbooked → walk-in). Historical context (weekday walk-in share; per-service prior-no-show count) assembled in [context.ts](../../lib/services/suggestions/context.ts), never stored.
 - [x] `service_capacity_overrides` ships with RLS + migration + a tiny dashboard form on the service edit page (no override = falls back to summed table capacity). Migration `0041_green_penance.sql` (table + `enforce_*_org_id` trigger + member-read policy); the "Capacity cap" field on [services/forms.tsx](../../app/(dashboard)/dashboard/venues/[venueId]/services/forms.tsx) upserts/deletes via [services/actions.ts](../../app/(dashboard)/dashboard/venues/[venueId]/services/actions.ts) (blank = override deleted). RLS isolation + trigger proven by [tests/integration/rls-services.test.ts](../../tests/integration/rls-services.test.ts).
-- [ ] Clicking a heatmap cell deep-links to `/reports/service-summary?date=YYYY-MM-DD` and the panel renders without an additional click.
+- [x] Clicking a heatmap cell deep-links to the day and the panel re-renders without an extra click. Cells are `<Link href="…/service-summary?date=YYYY-MM-DD">`; the RSC reads `?date=` and re-fetches the panel + heatmap for that day. (Shipped at `/dashboard/venues/[venueId]/service-summary`, not the draft's `/reports/service-summary` — it's a top-level venue surface with its own sidebar entry, sibling to Reports/Insights.)
 
 ## Surfaces
 

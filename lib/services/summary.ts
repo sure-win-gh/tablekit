@@ -37,6 +37,7 @@ export type ServiceSummaryRow = {
   bookingsCount: number;
   utilisation: number; // 0..1; 0 when capacity is 0
   openSlots: number;
+  turnMinutes: number;
   windowStart: Date; // UTC
   windowEnd: Date; // UTC
 };
@@ -148,6 +149,7 @@ export async function getServiceSummary(
         bookingsCount: booked?.bookingsCount ?? 0,
         utilisation: capacity === 0 ? 0 : bookedCovers / capacity,
         openSlots: openByService.get(s.id) ?? 0,
+        turnMinutes: s.turnMinutes,
         windowStart: zonedWallToUtc(date, sched.start, timezone),
         windowEnd: zonedWallToUtc(date, sched.end, timezone),
       };
