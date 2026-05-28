@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   Star,
   TableProperties,
+  TrendingUp,
   Users,
   UtensilsCrossed,
   Wrench,
@@ -60,6 +61,7 @@ export type SidebarData = {
     // doesn't need to know the plan ladder.
     crmEnabled: boolean;
     aiEnquiryEnabled: boolean;
+    insightsEnabled: boolean;
     groupCrmEnabled: boolean;
     multiVenue: boolean;
   };
@@ -182,6 +184,13 @@ export function SidebarShell({
           href: `/dashboard/venues/${venueId}/reports`,
           label: "Reports",
           icon: CalendarRange,
+        },
+        {
+          kind: "item",
+          href: `/dashboard/venues/${venueId}/reports/insights`,
+          label: "Insights",
+          icon: TrendingUp,
+          show: data.org.insightsEnabled,
         },
         {
           kind: "group",

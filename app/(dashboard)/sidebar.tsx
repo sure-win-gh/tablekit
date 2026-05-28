@@ -81,6 +81,11 @@ export async function Sidebar() {
       // AI as a Premium add-on) doesn't require touching every CRM
       // consumer.
       aiEnquiryEnabled: hasPlan(toPlan(data.org.plan), "plus"),
+      // Booking Insights surface is Plus-only — extends MVP reports
+      // with lead-time, no-show trend, channel performance, and period
+      // comparison. Kept distinct from crmEnabled so a future split is
+      // a one-line change.
+      insightsEnabled: hasPlan(toPlan(data.org.plan), "plus"),
       groupCrmEnabled: data.org.groupCrmEnabled,
       multiVenue: data.venues.length >= 2,
     },

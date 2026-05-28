@@ -281,6 +281,13 @@
       "when": 1779885983731,
       "tag": "0039_ancient_jackal",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1779913907014,
+      "tag": "0040_lazy_overlord",
+      "breakpoints": true
     }
   ]
 }
