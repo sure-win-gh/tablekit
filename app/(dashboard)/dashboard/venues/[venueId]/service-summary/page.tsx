@@ -7,9 +7,10 @@ import { requireRole } from "@/lib/auth/require-role";
 import { formatVenueTime, todayInZone } from "@/lib/bookings/time";
 import { withUser } from "@/lib/db/client";
 import { venues } from "@/lib/db/schema";
+import { getHeatmap } from "@/lib/services/heatmap";
 import { getServiceSummary, type ServiceSummaryRow } from "@/lib/services/summary";
 
-import { ServiceSummaryDateNav } from "./forms";
+import { HeatmapCalendar, ServiceSummaryDateNav } from "./forms";
 
 export const metadata = { title: "Service summary · TableKit" };
 
@@ -40,8 +41,12 @@ export default async function ServiceSummaryPage({
 
   const today = todayInZone(venue.timezone);
   const date = dateParam && DATE_RE.test(dateParam) ? dateParam : today;
+  const monthFirst = `${date.slice(0, 7)}-01`;
 
-  const rows = await withUser((db) => getServiceSummary(db, venueId, date, venue.timezone));
+  const { rows, heatmap } = await withUser(async (db) => ({
+    rows: await getServiceSummary(db, venueId, date, venue.timezone),
+    heatmap: await getHeatmap(db, venueId, monthFirst, venue.timezone),
+  }));
 
   return (
     <section className="flex flex-col gap-6">
@@ -54,6 +59,17 @@ export default async function ServiceSummaryPage({
         </div>
         <ServiceSummaryDateNav venueId={venueId} date={date} today={today} />
       </div>
+
+      <Card>
+        <CardBody>
+          <HeatmapCalendar
+            venueId={venueId}
+            selectedDate={date}
+            monthFirst={monthFirst}
+            days={heatmap}
+          />
+        </CardBody>
+      </Card>
 
       {rows.length === 0 ? (
         <Card>
