@@ -36,6 +36,7 @@ type ServiceFields = {
   start: string;
   end: string;
   turnMinutes: number;
+  capacityOverride?: number | undefined;
 };
 
 function ServiceFieldset({ fields }: { fields: ServiceFields }) {
@@ -108,6 +109,20 @@ function ServiceFieldset({ fields }: { fields: ServiceFields }) {
           className="border-hairline w-20 rounded-md border px-2 py-1 text-sm outline-none focus:border-neutral-900"
         />
       </label>
+
+      <label className="flex flex-col gap-0.5">
+        <span className="text-ash text-xs">Capacity cap</span>
+        <input
+          name="capacity_override"
+          type="number"
+          defaultValue={fields.capacityOverride != null ? String(fields.capacityOverride) : ""}
+          min={1}
+          max={999}
+          placeholder="auto"
+          title="Optional. Caps this service below the floor-plan capacity. Leave blank to use the summed table capacity."
+          className="border-hairline w-20 rounded-md border px-2 py-1 text-sm outline-none focus:border-neutral-900"
+        />
+      </label>
     </div>
   );
 }
@@ -151,6 +166,7 @@ export function ServiceRow({
   start,
   end,
   turnMinutes,
+  capacityOverride,
 }: {
   serviceId: string;
 } & ServiceFields) {
@@ -161,7 +177,7 @@ export function ServiceRow({
     <div className="border-hairline flex flex-col gap-2 border-t py-3">
       <form action={updateAction} className="flex flex-wrap items-end gap-3">
         <input type="hidden" name="service_id" value={serviceId} />
-        <ServiceFieldset fields={{ name, days, start, end, turnMinutes }} />
+        <ServiceFieldset fields={{ name, days, start, end, turnMinutes, capacityOverride }} />
         <button
           type="submit"
           disabled={updatePending}

@@ -1,6 +1,6 @@
 # Spec: Service summary
 
-**Status:** drafting
+**Status:** in progress — PR1 (`service_capacity_overrides` table + RLS + service-edit override field) shipped; per-day panel (PR2), calendar heatmap (PR3), suggestion engine (PR4) to come.
 **Depends on:** `bookings.md`, `venues.md`
 
 ## What we're building
@@ -54,7 +54,7 @@ Rules live in `lib/services/suggestions/{rule}.ts`, each a pure `(serviceContext
 - [ ] Utilisation matches "covers / capacity" exactly — unit-tested against a fixture with known table-mix and party sizes.
 - [ ] Calendar heatmap loads a 31-day month in under 400ms at 10k bookings/venue (single aggregate query).
 - [ ] Suggestion rules each have a unit test for trigger + no-trigger cases, and a `serviceContext` builder fixture.
-- [ ] `service_capacity_overrides` ships with RLS + migration + a tiny dashboard form on the service edit page (no override = falls back to summed table capacity).
+- [x] `service_capacity_overrides` ships with RLS + migration + a tiny dashboard form on the service edit page (no override = falls back to summed table capacity). Migration `0041_green_penance.sql` (table + `enforce_*_org_id` trigger + member-read policy); the "Capacity cap" field on [services/forms.tsx](../../app/(dashboard)/dashboard/venues/[venueId]/services/forms.tsx) upserts/deletes via [services/actions.ts](../../app/(dashboard)/dashboard/venues/[venueId]/services/actions.ts) (blank = override deleted). RLS isolation + trigger proven by [tests/integration/rls-services.test.ts](../../tests/integration/rls-services.test.ts).
 - [ ] Clicking a heatmap cell deep-links to `/reports/service-summary?date=YYYY-MM-DD` and the panel renders without an additional click.
 
 ## Surfaces
