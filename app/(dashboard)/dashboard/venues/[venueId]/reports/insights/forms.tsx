@@ -36,16 +36,19 @@ export function DateRangeNav({
   venueId,
   fromDate,
   toDate,
+  compare,
 }: {
   venueId: string;
   fromDate: string;
   toDate: string;
+  compare: boolean;
 }) {
   const router = useRouter();
-  const setRange = (next: { from?: string; to?: string }) => {
+  const push = (next: { from?: string; to?: string; compare?: boolean }) => {
     const f = next.from ?? fromDate;
     const t = next.to ?? toDate;
-    router.push(`/dashboard/venues/${venueId}/reports/insights?from=${f}&to=${t}`);
+    const c = next.compare ?? compare;
+    router.push(`/dashboard/venues/${venueId}/reports/insights?from=${f}&to=${t}&compare=${c}`);
   };
   return (
     <div className="flex items-center gap-2 text-xs">
@@ -54,7 +57,7 @@ export function DateRangeNav({
         <Input
           type="date"
           value={fromDate}
-          onChange={(e) => setRange({ from: e.target.value })}
+          onChange={(e) => push({ from: e.target.value })}
           size="sm"
           className="w-auto"
         />
@@ -64,12 +67,108 @@ export function DateRangeNav({
         <Input
           type="date"
           value={toDate}
-          onChange={(e) => setRange({ to: e.target.value })}
+          onChange={(e) => push({ to: e.target.value })}
           size="sm"
           className="w-auto"
         />
       </label>
+      <button
+        type="button"
+        aria-pressed={compare}
+        onClick={() => push({ compare: !compare })}
+        className={cn(
+          "rounded-pill border px-3 py-1 font-semibold transition",
+          compare
+            ? "border-ink bg-ink text-white"
+            : "border-hairline text-ash hover:border-ink bg-white",
+        )}
+      >
+        Compare
+      </button>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Comparison band — headline metrics vs the previous equal-length window.
+// Only rendered when the operator toggles Compare on (the page fetches the
+// previous-period rows server-side).
+// ---------------------------------------------------------------------------
+export type CompareMetric = {
+  label: string;
+  current: number;
+  previous: number;
+  format: "count" | "pct";
+  // Which direction is "good" — drives the delta colour. Same-day share is
+  // business-dependent, so it stays neutral.
+  direction: "up-good" | "down-good" | "neutral";
+};
+
+function formatMetric(value: number, format: CompareMetric["format"]): string {
+  return format === "pct" ? pct(value) : String(Math.round(value));
+}
+
+function DeltaBadge({ metric }: { metric: CompareMetric }) {
+  const { current, previous, format, direction } = metric;
+  let text: string;
+  let sign: number;
+  if (format === "pct") {
+    // Percentage-point change reads more honestly than "% change of a %".
+    const pp = (current - previous) * 100;
+    sign = Math.sign(pp);
+    text = `${pp >= 0 ? "+" : ""}${pp.toFixed(1)}pp`;
+  } else if (previous === 0) {
+    sign = current > 0 ? 1 : 0;
+    text = current > 0 ? "new" : "—";
+  } else {
+    const change = ((current - previous) / previous) * 100;
+    sign = Math.sign(change);
+    text = `${change >= 0 ? "+" : ""}${change.toFixed(0)}%`;
+  }
+  const good =
+    direction === "neutral" || sign === 0
+      ? null
+      : (direction === "up-good" && sign > 0) || (direction === "down-good" && sign < 0);
+  const tone =
+    good === null ? "text-ash" : good ? "text-emerald-600" : "text-rose-600";
+  return <span className={cn("text-xs font-semibold tabular-nums", tone)}>{text}</span>;
+}
+
+export function ComparisonBand({
+  metrics,
+  partial,
+}: {
+  metrics: CompareMetric[];
+  partial: boolean;
+}) {
+  return (
+    <Card>
+      <CardBody>
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-ash text-xs font-semibold uppercase tracking-wide">
+            vs previous period
+          </span>
+          {partial ? (
+            <span className="text-ash text-[11px]">
+              current period is to date — last day still in progress
+            </span>
+          ) : null}
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {metrics.map((m) => (
+            <div key={m.label} className="rounded-card border-hairline border bg-white px-3 py-2">
+              <div className="text-ash text-xs">{m.label}</div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-ink text-lg font-bold tracking-tight tabular-nums">
+                  {formatMetric(m.current, m.format)}
+                </span>
+                <DeltaBadge metric={m} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardBody>
+    </Card>
   );
 }
 

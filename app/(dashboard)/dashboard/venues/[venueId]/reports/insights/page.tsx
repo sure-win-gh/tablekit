@@ -8,14 +8,27 @@ import { withUser } from "@/lib/db/client";
 import { venues } from "@/lib/db/schema";
 import { parseFilter } from "@/lib/reports/filter";
 import { getChannelPerformanceReport } from "@/lib/reports/insights/channel-performance";
+import {
+  overallNoShowRate,
+  previousEquivalentBounds,
+  sameDayShare,
+  totalBookings,
+} from "@/lib/reports/insights/compare";
 import { getLeadTimeReport } from "@/lib/reports/insights/lead-time";
 import { getNoShowTrendReport } from "@/lib/reports/insights/no-show-trend";
 
-import { ChannelPerformanceCard, DateRangeNav, LeadTimeCard, NoShowTrendCard } from "./forms";
+import {
+  type CompareMetric,
+  ChannelPerformanceCard,
+  ComparisonBand,
+  DateRangeNav,
+  LeadTimeCard,
+  NoShowTrendCard,
+} from "./forms";
 
 export const metadata = { title: "Insights · TableKit" };
 
-type SearchParams = { from?: string; to?: string };
+type SearchParams = { from?: string; to?: string; compare?: string };
 
 export default async function InsightsPage({
   params,
@@ -28,7 +41,8 @@ export default async function InsightsPage({
   await requirePlan(orgId, "plus");
 
   const { venueId } = await params;
-  const { from: fromParam, to: toParam } = await searchParams;
+  const { from: fromParam, to: toParam, compare: compareParam } = await searchParams;
+  const compare = compareParam === "true";
 
   const venue = await withUser(async (db) => {
     const rows = await db
@@ -48,7 +62,7 @@ export default async function InsightsPage({
   if (!parsed.ok) {
     return (
       <section className="flex flex-col gap-4">
-        <DateRangeNav venueId={venueId} fromDate={fromDate} toDate={toDate} />
+        <DateRangeNav venueId={venueId} fromDate={fromDate} toDate={toDate} compare={compare} />
         <p className="rounded-card border-rose/30 bg-rose/5 text-rose border p-4 text-sm">
           Invalid date range — pick a from/to where from ≤ to and both are YYYY-MM-DD.
         </p>
@@ -65,6 +79,40 @@ export default async function InsightsPage({
     channels: await getChannelPerformanceReport(db, venueId, bounds),
   }));
 
+  // Compare overlay: re-run only the two queries that feed the headline
+  // band against the previous equal-length window. Channel performance
+  // isn't part of the band, so it's skipped.
+  const comparison = compare ? previousEquivalentBounds(bounds) : null;
+  const compareMetrics: CompareMetric[] | null = comparison
+    ? await withUser(async (db): Promise<CompareMetric[]> => {
+        const prevLeadTime = await getLeadTimeReport(db, venueId, comparison.bounds);
+        const prevNoShow = await getNoShowTrendReport(db, venueId, comparison.bounds);
+        return [
+          {
+            label: "Bookings",
+            current: totalBookings(leadTime),
+            previous: totalBookings(prevLeadTime),
+            format: "count",
+            direction: "up-good",
+          },
+          {
+            label: "No-show rate",
+            current: overallNoShowRate(noShowTrend),
+            previous: overallNoShowRate(prevNoShow),
+            format: "pct",
+            direction: "down-good",
+          },
+          {
+            label: "Same-day share",
+            current: sameDayShare(leadTime),
+            previous: sameDayShare(prevLeadTime),
+            format: "pct",
+            direction: "neutral",
+          },
+        ];
+      })
+    : null;
+
   const exportBase = `/dashboard/venues/${venueId}/reports/insights/export`;
   const queryString = `?from=${fromDate}&to=${toDate}`;
 
@@ -78,8 +126,12 @@ export default async function InsightsPage({
             winning. Times are in this venue&apos;s local zone.
           </p>
         </div>
-        <DateRangeNav venueId={venueId} fromDate={fromDate} toDate={toDate} />
+        <DateRangeNav venueId={venueId} fromDate={fromDate} toDate={toDate} compare={compare} />
       </div>
+
+      {compareMetrics && comparison ? (
+        <ComparisonBand metrics={compareMetrics} partial={comparison.partial} />
+      ) : null}
 
       <LeadTimeCard rows={leadTime} downloadHref={`${exportBase}/lead-time${queryString}`} />
       <NoShowTrendCard
