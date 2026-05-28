@@ -13,7 +13,9 @@ import { Pool } from "pg";
 import { createClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import type { BookingStatus } from "@/lib/bookings/state";
 import * as schema from "@/lib/db/schema";
+import { getServiceSummary } from "@/lib/services/summary";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -44,11 +46,16 @@ type Ctx = {
   userBId: string;
   orgAId: string;
   orgBId: string;
+  venueAId: string;
+  venueBId: string;
   serviceAId: string;
   serviceBId: string;
   overrideAId: string;
 };
 let ctx: Ctx;
+
+// All services run every day, so any date works for the summary test.
+const SUMMARY_DATE = "2026-06-15";
 
 beforeAll(async () => {
   const mkUser = async (email: string) => {
@@ -110,11 +117,57 @@ beforeAll(async () => {
     .insert(schema.serviceCapacityOverrides)
     .values({ organisationId: orgB.id, serviceId: serviceBId, capacity: 60 });
 
+  // Summary fixture on venue A: an area + two tables (room capacity 4+6=10),
+  // a second service "Brunch" with NO override (so it falls back to room
+  // capacity), and bookings on SUMMARY_DATE. Service "Main" keeps its
+  // override of 40.
+  const [areaA] = await db
+    .insert(schema.areas)
+    .values({ organisationId: orgA.id, venueId: venueAId, name: "Inside" })
+    .returning({ id: schema.areas.id });
+  await db.insert(schema.venueTables).values([
+    { organisationId: orgA.id, venueId: venueAId, areaId: areaA!.id, label: "T1", minCover: 1, maxCover: 4, position: { x: 0, y: 0 } },
+    { organisationId: orgA.id, venueId: venueAId, areaId: areaA!.id, label: "T2", minCover: 1, maxCover: 6, position: { x: 1, y: 0 } },
+  ]);
+  const [serviceA2] = await db
+    .insert(schema.services)
+    .values({ organisationId: orgA.id, venueId: venueAId, name: "Brunch", schedule, turnMinutes: 90 })
+    .returning({ id: schema.services.id });
+  const [guestA] = await db
+    .insert(schema.guests)
+    .values({
+      organisationId: orgA.id,
+      firstName: "G",
+      lastNameCipher: "c",
+      emailCipher: "c",
+      emailHash: `svc_hash_${run}`,
+    })
+    .returning({ id: schema.guests.id });
+  // 13:00 BST = 12:00 UTC, inside the 12:00–22:00 window.
+  const mkSummaryBooking = (serviceId: string, party: number, status: BookingStatus) =>
+    db.insert(schema.bookings).values({
+      organisationId: orgA.id,
+      venueId: venueAId,
+      serviceId,
+      areaId: areaA!.id,
+      guestId: guestA!.id,
+      partySize: party,
+      startAt: new Date(`${SUMMARY_DATE}T12:00:00Z`),
+      endAt: new Date(`${SUMMARY_DATE}T13:30:00Z`),
+      status,
+      source: "host",
+    });
+  await mkSummaryBooking(serviceAId, 8, "confirmed"); // Main: 8 / 40
+  await mkSummaryBooking(serviceA2!.id, 5, "confirmed"); // Brunch: 5 / 10
+  await mkSummaryBooking(serviceA2!.id, 3, "cancelled"); // excluded from booked
+
   ctx = {
     userAId,
     userBId,
     orgAId: orgA.id,
     orgBId: orgB.id,
+    venueAId,
+    venueBId,
     serviceAId,
     serviceBId,
     overrideAId: overrideA!.id,
@@ -160,6 +213,35 @@ describe("service_capacity_overrides — RLS", () => {
         .select({ id: schema.serviceCapacityOverrides.id })
         .from(schema.serviceCapacityOverrides)
         .where(eq(schema.serviceCapacityOverrides.serviceId, ctx.serviceBId)),
+    );
+    expect(rows).toEqual([]);
+  });
+});
+
+describe("getServiceSummary", () => {
+  it("computes capacity (override + room fallback), booked covers, and utilisation", async () => {
+    const rows = await asUser(ctx.userAId, (tx) =>
+      getServiceSummary(tx, ctx.venueAId, SUMMARY_DATE, TZ),
+    );
+    const byName = new Map(rows.map((r) => [r.serviceName, r]));
+
+    // Main: capacity from the override (40), 8 booked covers → 0.2.
+    const main = byName.get("Main");
+    expect(main?.capacity).toBe(40);
+    expect(main?.bookedCovers).toBe(8);
+    expect(main?.utilisation).toBeCloseTo(0.2, 5);
+
+    // Brunch: no override → room capacity (4 + 6 = 10); 5 booked (the
+    // cancelled party of 3 is excluded) → 0.5.
+    const brunch = byName.get("Brunch");
+    expect(brunch?.capacity).toBe(10);
+    expect(brunch?.bookedCovers).toBe(5);
+    expect(brunch?.utilisation).toBeCloseTo(0.5, 5);
+  });
+
+  it("user A querying venue B sees nothing — RLS isolation", async () => {
+    const rows = await asUser(ctx.userAId, (tx) =>
+      getServiceSummary(tx, ctx.venueBId, SUMMARY_DATE, TZ),
     );
     expect(rows).toEqual([]);
   });

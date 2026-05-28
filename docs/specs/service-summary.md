@@ -1,6 +1,6 @@
 # Spec: Service summary
 
-**Status:** in progress — PR1 (`service_capacity_overrides` table + RLS + service-edit override field) shipped; per-day panel (PR2), calendar heatmap (PR3), suggestion engine (PR4) to come.
+**Status:** in progress — PR1 (`service_capacity_overrides` + RLS + edit field) + PR2 (Plus-gated per-day summary panel: capacity/booked/utilisation/open-slots + day-nav + sidebar) shipped; calendar heatmap (PR3), suggestion engine (PR4) to come.
 **Depends on:** `bookings.md`, `venues.md`
 
 ## What we're building
@@ -50,8 +50,8 @@ Rules live in `lib/services/suggestions/{rule}.ts`, each a pure `(serviceContext
 
 ## Acceptance criteria
 
-- [ ] Service summary panel scoped to `organisation_id` via RLS — covered by `tests/integration/rls-services.test.ts`.
-- [ ] Utilisation matches "covers / capacity" exactly — unit-tested against a fixture with known table-mix and party sizes.
+- [x] Service summary panel scoped to `organisation_id` via RLS — `getServiceSummary` filters every read by `venueId` inside `withUser`; isolation proven by the `getServiceSummary` cases in [tests/integration/rls-services.test.ts](../../tests/integration/rls-services.test.ts) (user A querying venue B → no rows).
+- [x] Utilisation matches "covers / capacity" exactly. `resolveCapacity` (override ?? summed table max_cover) unit-tested in [tests/unit/service-capacity.test.ts](../../tests/unit/service-capacity.test.ts); the booked/capacity maths verified end-to-end in the integration test (Main 8/40=0.2 via override, Brunch 5/10=0.5 via room fallback, cancelled excluded).
 - [ ] Calendar heatmap loads a 31-day month in under 400ms at 10k bookings/venue (single aggregate query).
 - [ ] Suggestion rules each have a unit test for trigger + no-trigger cases, and a `serviceContext` builder fixture.
 - [x] `service_capacity_overrides` ships with RLS + migration + a tiny dashboard form on the service edit page (no override = falls back to summed table capacity). Migration `0041_green_penance.sql` (table + `enforce_*_org_id` trigger + member-read policy); the "Capacity cap" field on [services/forms.tsx](../../app/(dashboard)/dashboard/venues/[venueId]/services/forms.tsx) upserts/deletes via [services/actions.ts](../../app/(dashboard)/dashboard/venues/[venueId]/services/actions.ts) (blank = override deleted). RLS isolation + trigger proven by [tests/integration/rls-services.test.ts](../../tests/integration/rls-services.test.ts).
