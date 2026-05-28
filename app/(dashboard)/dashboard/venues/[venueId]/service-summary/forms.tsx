@@ -34,7 +34,12 @@ export function ServiceSummaryDateNav({
       <IconButton aria-label="Previous day" size="sm" onClick={() => shift(-1)}>
         <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
       </IconButton>
-      <Button variant="secondary" size="sm" onClick={() => setDate(today)} disabled={date === today}>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => setDate(today)}
+        disabled={date === today}
+      >
         Today
       </Button>
       <Input
@@ -84,9 +89,9 @@ export function HeatmapCalendar({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="text-ash text-xs font-semibold uppercase tracking-wide">Utilisation</span>
+        <span className="text-ash text-xs font-semibold tracking-wide uppercase">Utilisation</span>
         <div
-          className="border-hairline inline-flex overflow-hidden rounded-pill border bg-white text-xs"
+          className="border-hairline rounded-pill inline-flex overflow-hidden border bg-white text-xs"
           role="tablist"
           aria-label="Calendar view"
         >

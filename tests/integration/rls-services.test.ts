@@ -93,7 +93,11 @@ beforeAll(async () => {
       .returning({ id: schema.venues.id });
     return v!.id;
   };
-  const schedule = { days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"], start: "12:00", end: "22:00" };
+  const schedule = {
+    days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+    start: "12:00",
+    end: "22:00",
+  };
   const mkService = async (orgId: string, venueId: string) => {
     const [s] = await db
       .insert(schema.services)
@@ -126,12 +130,34 @@ beforeAll(async () => {
     .values({ organisationId: orgA.id, venueId: venueAId, name: "Inside" })
     .returning({ id: schema.areas.id });
   await db.insert(schema.venueTables).values([
-    { organisationId: orgA.id, venueId: venueAId, areaId: areaA!.id, label: "T1", minCover: 1, maxCover: 4, position: { x: 0, y: 0 } },
-    { organisationId: orgA.id, venueId: venueAId, areaId: areaA!.id, label: "T2", minCover: 1, maxCover: 6, position: { x: 1, y: 0 } },
+    {
+      organisationId: orgA.id,
+      venueId: venueAId,
+      areaId: areaA!.id,
+      label: "T1",
+      minCover: 1,
+      maxCover: 4,
+      position: { x: 0, y: 0 },
+    },
+    {
+      organisationId: orgA.id,
+      venueId: venueAId,
+      areaId: areaA!.id,
+      label: "T2",
+      minCover: 1,
+      maxCover: 6,
+      position: { x: 1, y: 0 },
+    },
   ]);
   const [serviceA2] = await db
     .insert(schema.services)
-    .values({ organisationId: orgA.id, venueId: venueAId, name: "Brunch", schedule, turnMinutes: 90 })
+    .values({
+      organisationId: orgA.id,
+      venueId: venueAId,
+      name: "Brunch",
+      schedule,
+      turnMinutes: 90,
+    })
     .returning({ id: schema.services.id });
   const [guestA] = await db
     .insert(schema.guests)

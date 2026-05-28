@@ -26,9 +26,7 @@ function ctx(overrides: Partial<ServiceContext> = {}): ServiceContext {
 
 describe("underbooked-72h", () => {
   it("fires when quiet (<30%) and starting within 72h", () => {
-    const s = underbooked72h(
-      ctx({ utilisation: 0.2, startsAt: new Date("2026-05-29T18:00:00Z") }),
-    );
+    const s = underbooked72h(ctx({ utilisation: 0.2, startsAt: new Date("2026-05-29T18:00:00Z") }));
     expect(s?.rule).toBe("underbooked-72h");
   });
 
@@ -57,7 +55,9 @@ describe("oversold-risk", () => {
   });
 
   it("does not fire when there is comfortable slack (>= 30)", () => {
-    expect(oversoldRisk(ctx({ utilisation: 0.97, windowMinutes: 240, turnMinutes: 90 }))).toBeNull();
+    expect(
+      oversoldRisk(ctx({ utilisation: 0.97, windowMinutes: 240, turnMinutes: 90 })),
+    ).toBeNull();
   });
 
   it("does not fire below 95%", () => {
@@ -101,9 +101,7 @@ describe("runSuggestions — priority / first-wins", () => {
   });
 
   it("falls through to a lower-priority rule when higher ones don't fire", () => {
-    const s = runSuggestions(
-      ctx({ utilisation: 0.2, startsAt: new Date("2026-05-29T18:00:00Z") }),
-    );
+    const s = runSuggestions(ctx({ utilisation: 0.2, startsAt: new Date("2026-05-29T18:00:00Z") }));
     expect(s?.rule).toBe("underbooked-72h");
   });
 

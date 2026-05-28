@@ -40,9 +40,10 @@ export async function getServiceSuggestions(
   // Walk-in share for this weekday over the recent past (venue-level).
   const [shareRow] = await db
     .select({
-      walkin: sql<number>`coalesce(sum(${bookings.partySize}) filter (where ${bookings.source} = 'walk-in'), 0)::int`.as(
-        "walkin",
-      ),
+      walkin:
+        sql<number>`coalesce(sum(${bookings.partySize}) filter (where ${bookings.source} = 'walk-in'), 0)::int`.as(
+          "walkin",
+        ),
       total: sql<number>`coalesce(sum(${bookings.partySize}), 0)::int`.as("total"),
     })
     .from(bookings)
@@ -55,8 +56,7 @@ export async function getServiceSuggestions(
         sql`extract(dow from (${bookings.startAt} AT TIME ZONE ${timezone}))::int = ${targetDow}`,
       ),
     );
-  const walkInWeekdayShare =
-    shareRow && shareRow.total > 0 ? shareRow.walkin / shareRow.total : 0;
+  const walkInWeekdayShare = shareRow && shareRow.total > 0 ? shareRow.walkin / shareRow.total : 0;
 
   // Per-service count of today's non-cancelled bookings whose guest has a
   // prior no-show.

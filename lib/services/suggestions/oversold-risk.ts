@@ -8,7 +8,10 @@ export const oversoldRisk: Rule = (ctx) => {
   if (ctx.turnMinutes <= 0) return null;
   const slackMinutes = ctx.windowMinutes % ctx.turnMinutes;
   if (ctx.utilisation >= 0.95 && slackMinutes < 30) {
-    return { rule: "oversold-risk", message: "Near capacity with tight turns — review or extend the window." };
+    return {
+      rule: "oversold-risk",
+      message: "Near capacity with tight turns — review or extend the window.",
+    };
   }
   return null;
 };

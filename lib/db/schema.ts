@@ -391,9 +391,7 @@ export const serviceCapacityOverrides = pgTable(
     capacity: integer("capacity").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    index("service_capacity_overrides_org_idx").on(t.organisationId),
-  ],
+  (t) => [index("service_capacity_overrides_org_idx").on(t.organisationId)],
 );
 
 // =============================================================================
