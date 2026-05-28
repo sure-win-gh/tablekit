@@ -1,6 +1,6 @@
 # Spec: Booking insights
 
-**Status:** in progress — lead-time histogram shipped (PR1); no-show evolution, channel performance, and period comparison still to come.
+**Status:** in progress — lead-time histogram (PR1) + no-show evolution + channel performance (PR2) shipped; period comparison (PR3) still to come.
 **Depends on:** `reporting.md`, `bookings.md`
 
 ## What we're building
@@ -34,8 +34,8 @@ Existing `reporting.md` deferred week/month/year rollups; Insights is where they
 
 - [x] Insights scoped to `organisation_id` via RLS — covered by [`tests/integration/rls-insights.test.ts`](../../tests/integration/rls-insights.test.ts) (mirrors the `rls-reports.test.ts` two-tenant pattern). Will extend with no-show-trend + channel-performance cases in PR2.
 - [x] Lead-time histogram correctly buckets by venue-local day (a 23:30 booking created at 00:30 the same operator-day is "same-day", not "1d"). Proven by the "midnight-edge" fixture in `rls-insights.test.ts` — start_at 23:30 BST + created_at 00:30 BST both project to the same venue date, so the row lands in `same-day` rather than `1d`. The SQL idiom is in [`lib/reports/insights/lead-time.ts`](../../lib/reports/insights/lead-time.ts): `(start_at AT TIME ZONE tz)::date - (created_at AT TIME ZONE tz)::date`.
-- [ ] No-show evolution chart renders weekly/monthly/yearly without re-query (single query, client-side aggregation across periods within the bounds). **PR2.**
-- [ ] Channel performance table shows zero rows for absent sources rather than hiding them (so "no widget bookings yet" is visible as a row, not a gap). **PR2.**
+- [x] No-show evolution chart renders weekly/monthly/yearly without re-query. [`lib/reports/insights/no-show-trend.ts`](../../lib/reports/insights/no-show-trend.ts) returns daily rows; `NoShowTrendCard` in `forms.tsx` rolls them up to the picked granularity in the browser (`useMemo` over a local `useState`), so toggling never hits the server. With-deposit cohort overlaid as a second, null-breaking line.
+- [x] Channel performance table shows zero rows for absent sources rather than hiding them. [`lib/reports/insights/channel-performance.ts`](../../lib/reports/insights/channel-performance.ts) maps over the closed `BOOKING_SOURCES` list, zero-filling channels the query didn't return; proven by the channel-performance case in `rls-insights.test.ts`. Deposit-capture column hidden when every channel's rate is null.
 - [ ] Period comparison handles partial periods honestly — "this month" vs "last month" labels the delta as *month-to-date* when today < end of month. **PR3.**
 - [x] CSV export for the shipped insight (UTF-8 BOM + CRLF, reusing [`lib/reports/csv.ts`](../../lib/reports/csv.ts)). Route at `app/(dashboard)/dashboard/venues/[venueId]/reports/insights/export/[insight]/route.ts`; switch grows with each insight in PR2.
 - [ ] Each insight loads in under 500ms at 10k bookings per venue. Informally confirmed — lead-time is a single GROUP BY against the new `bookings_venue_created_idx`. Re-check formally as PR2/PR3 land.

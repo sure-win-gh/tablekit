@@ -20,7 +20,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { BookingStatus } from "@/lib/bookings/state";
 import * as schema from "@/lib/db/schema";
 import { parseFilter } from "@/lib/reports/filter";
+import { getChannelPerformanceReport } from "@/lib/reports/insights/channel-performance";
 import { getLeadTimeReport } from "@/lib/reports/insights/lead-time";
+import { getNoShowTrendReport } from "@/lib/reports/insights/no-show-trend";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -248,6 +250,46 @@ beforeAll(async () => {
     source: "widget",
   });
 
+  // A no_show booking with a deposit + a no_show_capture — exercises the
+  // with-deposit cohort in no-show-trend and the deposit-capture column in
+  // channel-performance. Same-day lead time (created 10:00, starts 19:00).
+  const [noShowB] = await db
+    .insert(schema.bookings)
+    .values({
+      organisationId: orgA.id,
+      venueId: venueAId,
+      serviceId: serviceAId,
+      areaId: areaAId,
+      guestId: guestAId,
+      partySize: 2,
+      startAt: baseStart,
+      endAt: baseEnd,
+      createdAt: atBst(DAY_LOCAL, 10),
+      status: "no_show",
+      source: "host",
+    })
+    .returning({ id: schema.bookings.id });
+  await db.insert(schema.payments).values([
+    {
+      organisationId: orgA.id,
+      bookingId: noShowB!.id,
+      kind: "deposit",
+      stripeIntentId: `pi_ins_dep_${run}`,
+      amountMinor: 2000,
+      currency: "GBP",
+      status: "succeeded",
+    },
+    {
+      organisationId: orgA.id,
+      bookingId: noShowB!.id,
+      kind: "no_show_capture",
+      stripeIntentId: `pi_ins_ns_${run}`,
+      amountMinor: 2000,
+      currency: "GBP",
+      status: "succeeded",
+    },
+  ]);
+
   await mkBooking({
     orgId: orgB.id,
     venueId: venueBId,
@@ -310,11 +352,12 @@ describe("insights — lead time", () => {
     ]);
 
     const byBucket = new Map(rows.map((r) => [r.bucket, r]));
-    // Same-day: the 09:00→19:00 booking + the 00:30→23:30 midnight-edge one.
-    // The midnight-edge case is the smoking gun — if the SQL used UTC dates
-    // it'd land in "1d" (created_at UTC date = 2026-05-10, start_at UTC
-    // date = 2026-05-11), but in BST both project to 2026-05-11.
-    expect(byBucket.get("same-day")?.bookings).toBe(2);
+    // Same-day: the 09:00→19:00 booking, the 00:30→23:30 midnight-edge one,
+    // and the 10:00→19:00 no_show. The midnight-edge case is the smoking gun
+    // — if the SQL used UTC dates it'd land in "1d" (created_at UTC date =
+    // 2026-05-10, start_at UTC date = 2026-05-11), but in BST both project
+    // to 2026-05-11.
+    expect(byBucket.get("same-day")?.bookings).toBe(3);
     expect(byBucket.get("1d")?.bookings).toBe(1);
     expect(byBucket.get("2-3d")?.bookings).toBe(1);
     // 5-day-out booking is cancelled → must not appear.
@@ -326,5 +369,70 @@ describe("insights — lead time", () => {
     const rows = await asUser(ctx.userAId, (tx) => getLeadTimeReport(tx, ctx.venueBId, bounds));
     // Zero-filled rows always returned; every bucket must be empty.
     expect(rows.every((r) => r.bookings === 0 && r.covers === 0)).toBe(true);
+  });
+});
+
+describe("insights — no-show trend", () => {
+  it("returns daily eligible/no-show counts with the with-deposit cohort", async () => {
+    const bounds = filter();
+    const rows = await asUser(ctx.userAId, (tx) => getNoShowTrendReport(tx, ctx.venueAId, bounds));
+    // All venue-A bookings fall on DAY_LOCAL → one row.
+    expect(rows.length).toBe(1);
+    const [day] = rows;
+    // Eligible (confirmed/seated/finished/no_show): 3 confirmed + 1 finished
+    // + 1 no_show = 5. The cancelled one is excluded.
+    expect(day?.eligible).toBe(5);
+    expect(day?.noShows).toBe(1);
+    // Only the no_show has a succeeded deposit, and it no-showed.
+    expect(day?.withDepositEligible).toBe(1);
+    expect(day?.withDepositNoShows).toBe(1);
+  });
+
+  it("user A querying venue B sees no rows — RLS isolation", async () => {
+    const bounds = filter();
+    const rows = await asUser(ctx.userAId, (tx) => getNoShowTrendReport(tx, ctx.venueBId, bounds));
+    expect(rows).toEqual([]);
+  });
+});
+
+describe("insights — channel performance", () => {
+  it("computes per-source metrics and zero-fills absent channels", async () => {
+    const bounds = filter();
+    const rows = await asUser(ctx.userAId, (tx) =>
+      getChannelPerformanceReport(tx, ctx.venueAId, bounds),
+    );
+    // Always one row per known source, in canonical order.
+    expect(rows.map((r) => r.source)).toEqual(["host", "widget", "walk-in", "rwg", "api"]);
+    const bySource = new Map(rows.map((r) => [r.source, r]));
+
+    // host: 1d confirmed + 2-3d finished + same-day no_show = 3 bookings,
+    // 1 no-show of 3 eligible, no cancellations. The no_show had a deposit
+    // and a capture → capture rate 1.0.
+    const host = bySource.get("host");
+    expect(host?.bookings).toBe(3);
+    expect(host?.noShowRate).toBeCloseTo(1 / 3, 5);
+    expect(host?.cancellationRate).toBeCloseTo(0, 5);
+    expect(host?.depositCaptureRate).toBeCloseTo(1, 5);
+
+    // widget: 2 confirmed + 1 cancelled = 3 bookings, 0 no-shows, 1/3
+    // cancelled, no deposits → capture rate null.
+    const widget = bySource.get("widget");
+    expect(widget?.bookings).toBe(3);
+    expect(widget?.noShowRate).toBeCloseTo(0, 5);
+    expect(widget?.cancellationRate).toBeCloseTo(1 / 3, 5);
+    expect(widget?.depositCaptureRate).toBeNull();
+
+    // Channels with no bookings are present as explicit zero rows.
+    expect(bySource.get("walk-in")?.bookings).toBe(0);
+    expect(bySource.get("api")?.bookings).toBe(0);
+  });
+
+  it("user A querying venue B sees only zero rows — RLS isolation", async () => {
+    const bounds = filter();
+    const rows = await asUser(ctx.userAId, (tx) =>
+      getChannelPerformanceReport(tx, ctx.venueBId, bounds),
+    );
+    expect(rows.length).toBe(5);
+    expect(rows.every((r) => r.bookings === 0 && r.depositCaptureRate === null)).toBe(true);
   });
 });

@@ -7,9 +7,11 @@ import { todayInZone } from "@/lib/bookings/time";
 import { withUser } from "@/lib/db/client";
 import { venues } from "@/lib/db/schema";
 import { parseFilter } from "@/lib/reports/filter";
+import { getChannelPerformanceReport } from "@/lib/reports/insights/channel-performance";
 import { getLeadTimeReport } from "@/lib/reports/insights/lead-time";
+import { getNoShowTrendReport } from "@/lib/reports/insights/no-show-trend";
 
-import { DateRangeNav, LeadTimeCard } from "./forms";
+import { ChannelPerformanceCard, DateRangeNav, LeadTimeCard, NoShowTrendCard } from "./forms";
 
 export const metadata = { title: "Insights · TableKit" };
 
@@ -55,7 +57,13 @@ export default async function InsightsPage({
   }
 
   const { bounds } = parsed;
-  const leadTime = await withUser((db) => getLeadTimeReport(db, venueId, bounds));
+  // Serial inside a single transaction — one pg client per tx, same as the
+  // MVP reports page.
+  const { leadTime, noShowTrend, channels } = await withUser(async (db) => ({
+    leadTime: await getLeadTimeReport(db, venueId, bounds),
+    noShowTrend: await getNoShowTrendReport(db, venueId, bounds),
+    channels: await getChannelPerformanceReport(db, venueId, bounds),
+  }));
 
   const exportBase = `/dashboard/venues/${venueId}/reports/insights/export`;
   const queryString = `?from=${fromDate}&to=${toDate}`;
@@ -66,13 +74,22 @@ export default async function InsightsPage({
         <div>
           <h2 className="text-ink text-xl font-bold tracking-tight">Insights</h2>
           <p className="text-ash mt-0.5 text-sm">
-            How far in advance diners book. Times are in this venue&apos;s local zone.
+            How far in advance diners book, how no-shows are trending, and which channels are
+            winning. Times are in this venue&apos;s local zone.
           </p>
         </div>
         <DateRangeNav venueId={venueId} fromDate={fromDate} toDate={toDate} />
       </div>
 
       <LeadTimeCard rows={leadTime} downloadHref={`${exportBase}/lead-time${queryString}`} />
+      <NoShowTrendCard
+        rows={noShowTrend}
+        downloadHref={`${exportBase}/no-show-trend${queryString}`}
+      />
+      <ChannelPerformanceCard
+        rows={channels}
+        downloadHref={`${exportBase}/channel-performance${queryString}`}
+      />
     </section>
   );
 }

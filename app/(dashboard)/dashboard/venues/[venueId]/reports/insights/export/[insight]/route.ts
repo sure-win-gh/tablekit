@@ -18,12 +18,14 @@ import { withUser } from "@/lib/db/client";
 import { venues } from "@/lib/db/schema";
 import { toCsv } from "@/lib/reports/csv";
 import { parseFilter } from "@/lib/reports/filter";
+import { getChannelPerformanceReport } from "@/lib/reports/insights/channel-performance";
 import { getLeadTimeReport } from "@/lib/reports/insights/lead-time";
+import { getNoShowTrendReport } from "@/lib/reports/insights/no-show-trend";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const INSIGHTS = ["lead-time"] as const;
+const INSIGHTS = ["lead-time", "no-show-trend", "channel-performance"] as const;
 type InsightName = (typeof INSIGHTS)[number];
 
 export async function GET(
@@ -90,6 +92,33 @@ async function renderCsv(
         { header: "bucket", value: (r) => r.bucket },
         { header: "bookings", value: (r) => r.bookings },
         { header: "covers", value: (r) => r.covers },
+      ]);
+    }
+    case "no-show-trend": {
+      // Export the canonical daily rows — the operator re-aggregates to
+      // week/month/year in their spreadsheet, matching the in-UI rollup.
+      const rows = await withUser((db) => getNoShowTrendReport(db, venueId, bounds));
+      return toCsv(rows, [
+        { header: "day", value: (r) => r.day },
+        { header: "eligible", value: (r) => r.eligible },
+        { header: "no_shows", value: (r) => r.noShows },
+        { header: "with_deposit_eligible", value: (r) => r.withDepositEligible },
+        { header: "with_deposit_no_shows", value: (r) => r.withDepositNoShows },
+      ]);
+    }
+    case "channel-performance": {
+      const rows = await withUser((db) => getChannelPerformanceReport(db, venueId, bounds));
+      return toCsv(rows, [
+        { header: "source", value: (r) => r.source },
+        { header: "bookings", value: (r) => r.bookings },
+        { header: "no_show_rate", value: (r) => r.noShowRate.toFixed(4) },
+        { header: "cancellation_rate", value: (r) => r.cancellationRate.toFixed(4) },
+        { header: "avg_party_size", value: (r) => r.avgPartySize.toFixed(2) },
+        { header: "avg_lead_time_days", value: (r) => r.avgLeadTimeDays.toFixed(2) },
+        {
+          header: "deposit_capture_rate",
+          value: (r) => (r.depositCaptureRate == null ? "" : r.depositCaptureRate.toFixed(4)),
+        },
       ]);
     }
   }
