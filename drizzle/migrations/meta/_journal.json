@@ -288,6 +288,13 @@
       "when": 1779913907014,
       "tag": "0040_lazy_overlord",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1779979786133,
+      "tag": "0041_green_penance",
+      "breakpoints": true
     }
   ]
 }

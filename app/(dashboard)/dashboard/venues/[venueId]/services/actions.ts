@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { requireRole } from "@/lib/auth/require-role";
-import { services, venues } from "@/lib/db/schema";
+import { serviceCapacityOverrides, services, venues } from "@/lib/db/schema";
 import { adminDb } from "@/lib/server/admin/db";
 
 // ---------------------------------------------------------------------------
@@ -49,6 +49,13 @@ const ServiceBody = z
     start: z.string().regex(TIME_RE, "Use HH:MM"),
     end: z.string().regex(TIME_RE, "Use HH:MM"),
     turnMinutes: z.coerce.number().int().min(15).max(480),
+    // Optional per-service capacity cap. Empty input → undefined (no
+    // override → fall back to summed table capacity). Number() of "" is 0,
+    // so the empty string is mapped to undefined before coercion.
+    capacityOverride: z.preprocess(
+      (v) => (v === "" || v == null ? undefined : v),
+      z.coerce.number().int().min(1).max(999).optional(),
+    ),
   })
   .refine((d) => d.start < d.end, {
     message: "End must be later than start.",
@@ -63,7 +70,28 @@ function readBody(formData: FormData) {
     start: formData.get("start"),
     end: formData.get("end"),
     turnMinutes: formData.get("turn_minutes"),
+    capacityOverride: formData.get("capacity_override"),
   };
+}
+
+// Upsert the override when a capacity is given; delete it when cleared, so
+// an empty field reverts the service to summed-table capacity. org_id is
+// set by the enforce_*_org_id trigger regardless of the value passed.
+async function applyCapacityOverride(
+  orgId: string,
+  serviceId: string,
+  capacity: number | undefined,
+): Promise<void> {
+  if (capacity === undefined) {
+    await adminDb()
+      .delete(serviceCapacityOverrides)
+      .where(eq(serviceCapacityOverrides.serviceId, serviceId));
+    return;
+  }
+  await adminDb()
+    .insert(serviceCapacityOverrides)
+    .values({ organisationId: orgId, serviceId, capacity })
+    .onConflictDoUpdate({ target: serviceCapacityOverrides.serviceId, set: { capacity } });
 }
 
 // ---------------------------------------------------------------------------
@@ -87,7 +115,7 @@ export async function createService(_prev: ActionState, formData: FormData): Pro
   const { orgId } = await requireRole("manager");
   await assertVenueInOrg(parsed.data.venueId, orgId);
 
-  await adminDb()
+  const [inserted] = await adminDb()
     .insert(services)
     .values({
       organisationId: orgId, // overwritten by enforce_services_org_id trigger
@@ -99,7 +127,11 @@ export async function createService(_prev: ActionState, formData: FormData): Pro
         end: parsed.data.end,
       },
       turnMinutes: parsed.data.turnMinutes,
-    });
+    })
+    .returning({ id: services.id });
+  if (inserted) {
+    await applyCapacityOverride(orgId, inserted.id, parsed.data.capacityOverride);
+  }
 
   revalidatePath(`/dashboard/venues/${parsed.data.venueId}/services`);
   return { status: "saved" };
@@ -138,6 +170,8 @@ export async function updateService(_prev: ActionState, formData: FormData): Pro
       turnMinutes: parsed.data.turnMinutes,
     })
     .where(and(eq(services.id, parsed.data.serviceId), eq(services.organisationId, orgId)));
+
+  await applyCapacityOverride(orgId, parsed.data.serviceId, parsed.data.capacityOverride);
 
   revalidatePath(`/dashboard/venues/${venueId}/services`);
   return { status: "saved" };

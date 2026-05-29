@@ -2,7 +2,7 @@ import { asc, eq } from "drizzle-orm";
 
 import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
-import { services } from "@/lib/db/schema";
+import { serviceCapacityOverrides, services } from "@/lib/db/schema";
 
 import { NewServiceForm, ServiceRow } from "./forms";
 
@@ -29,8 +29,10 @@ export default async function ServicesPage({ params }: { params: Promise<{ venue
         name: services.name,
         schedule: services.schedule,
         turnMinutes: services.turnMinutes,
+        capacityOverride: serviceCapacityOverrides.capacity,
       })
       .from(services)
+      .leftJoin(serviceCapacityOverrides, eq(serviceCapacityOverrides.serviceId, services.id))
       .where(eq(services.venueId, venueId))
       .orderBy(asc(services.name));
   });
@@ -55,6 +57,7 @@ export default async function ServicesPage({ params }: { params: Promise<{ venue
                 start={sched.start ?? "18:00"}
                 end={sched.end ?? "22:00"}
                 turnMinutes={s.turnMinutes}
+                capacityOverride={s.capacityOverride ?? undefined}
               />
             );
           })

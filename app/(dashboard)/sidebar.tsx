@@ -86,6 +86,9 @@ export async function Sidebar() {
       // comparison. Kept distinct from crmEnabled so a future split is
       // a one-line change.
       insightsEnabled: hasPlan(toPlan(data.org.plan), "plus"),
+      // Service Summary (capacity panel + heatmap + suggestions) is
+      // Plus-only — the operator-maturity capacity-planning surface.
+      serviceSummaryEnabled: hasPlan(toPlan(data.org.plan), "plus"),
       groupCrmEnabled: data.org.groupCrmEnabled,
       multiVenue: data.venues.length >= 2,
     },

@@ -12,6 +12,7 @@ import {
   Clock,
   CreditCard,
   Database,
+  Gauge,
   Hourglass,
   Inbox,
   LayoutDashboard,
@@ -62,6 +63,7 @@ export type SidebarData = {
     crmEnabled: boolean;
     aiEnquiryEnabled: boolean;
     insightsEnabled: boolean;
+    serviceSummaryEnabled: boolean;
     groupCrmEnabled: boolean;
     multiVenue: boolean;
   };
@@ -191,6 +193,13 @@ export function SidebarShell({
           label: "Insights",
           icon: TrendingUp,
           show: data.org.insightsEnabled,
+        },
+        {
+          kind: "item",
+          href: `/dashboard/venues/${venueId}/service-summary`,
+          label: "Service summary",
+          icon: Gauge,
+          show: data.org.serviceSummaryEnabled,
         },
         {
           kind: "group",

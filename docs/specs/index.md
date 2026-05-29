@@ -31,7 +31,7 @@ This folder holds the source of truth for every feature. Claude should read the 
 |13 | [`import-export.md`](import-export.md) | shipped — inline CSV+JSON export (bookings + guests, audit-logged, decrypted-at-export) + competitor-format import (OpenTable / ResDiary / SevenRooms) with mapping wizard, two-pass dedupe, crash-resumable runner, marketing-consent always nulled, downloadable rejected-rows report per job. Full-backup zip + signed-URL job deferred. |
 |14 | [`public-api.md`](public-api.md)     | shipped — Bearer-auth REST API at `api.tablekit.uk/v1` (bookings + read-extras + idempotency) + webhook subscriptions/deliveries/replay + 90d request log + OpenAPI 3.1 + Stoplight docs at `/docs/api`. |
 |15 | [`booking-insights.md`](booking-insights.md) | shipped — Plus-tier `/reports/insights`: lead-time histogram + no-show evolution (client-side day/week/month/year rollup, with-deposit overlay) + per-channel performance table + previous-equal-window comparison band, all CSV-exportable. New `bookings_venue_created_idx`. Extends `reporting.md`. |
-|16 | [`service-summary.md`](service-summary.md)   | drafting — per-day capacity-vs-bookings panel + month/week calendar heatmap + small rules-based service-management suggestion engine. |
+|16 | [`service-summary.md`](service-summary.md)   | shipped — Plus-tier `/service-summary`: per-service capacity overrides + per-day capacity-vs-bookings panel (utilisation + open slots) + month/week calendar heatmap + four-rule suggestion engine. New `service_capacity_overrides` table. |
 
 ## Internal tools
 

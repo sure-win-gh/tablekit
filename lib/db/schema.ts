@@ -371,6 +371,29 @@ export const services = pgTable(
   ],
 );
 
+// Per-service capacity override. Absent row = capacity falls back to the
+// summed max_cover of the venue's tables. Present row = the service runs a
+// smaller room than the floor plan implies (e.g. brunch with half the
+// floor closed). One override per service (unique service_id) so the edit
+// form can upsert. organisation_id is denormalised from the parent service
+// by the enforce_service_capacity_overrides_org_id trigger.
+export const serviceCapacityOverrides = pgTable(
+  "service_capacity_overrides",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    serviceId: uuid("service_id")
+      .notNull()
+      .unique()
+      .references(() => services.id, { onDelete: "cascade" }),
+    capacity: integer("capacity").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("service_capacity_overrides_org_idx").on(t.organisationId)],
+);
+
 // =============================================================================
 // Guests
 // =============================================================================
