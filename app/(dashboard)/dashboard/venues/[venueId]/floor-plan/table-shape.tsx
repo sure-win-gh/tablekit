@@ -305,13 +305,23 @@ export function TableShape({
       )}
       <text
         x={cx}
-        y={cy}
+        y={cy - Math.min(w, h) * 0.1}
         textAnchor="middle"
         dominantBaseline="central"
         className={`${style.textClass} pointer-events-none select-none`}
-        style={{ fontSize: Math.min(w, h) * 0.4, fontWeight: 600 }}
+        style={{ fontSize: Math.min(w, h) * 0.35, fontWeight: 600 }}
       >
         {table.label}
+      </text>
+      <text
+        x={cx}
+        y={cy + Math.min(w, h) * 0.28}
+        textAnchor="middle"
+        dominantBaseline="central"
+        className={`${style.textClass} pointer-events-none opacity-70 select-none`}
+        style={{ fontSize: Math.min(w, h) * 0.2, fontWeight: 500 }}
+      >
+        {table.minCover}–{table.maxCover}
       </text>
       {showHandles
         ? handles.map((p) => (
