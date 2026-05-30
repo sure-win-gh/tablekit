@@ -101,6 +101,8 @@ beforeAll(async () => {
       emailCipher: await encryptPii(org.id, guestEmail),
       emailHash: hashForLookup(guestEmail, "email"),
       phoneCipher: await encryptPii(org.id, "+447700900000"),
+      tags: ["VIP", "allergy:nuts"],
+      notesCipher: await encryptPii(org.id, "Severe nut allergy."),
     })
     .returning({ id: schema.guests.id });
   if (!guest) throw new Error("guest insert returned no row");
@@ -121,6 +123,8 @@ beforeAll(async () => {
       endAt: sql`now() - interval '7 days' + interval '90 minutes'`,
       status: "finished",
       source: "host",
+      highChairs: 2,
+      dietaryNotesCipher: await encryptPii(org.id, "Wheelchair access + gluten free."),
     })
     .returning({ id: schema.bookings.id });
   if (!booking) throw new Error("booking insert returned no row");
@@ -207,23 +211,42 @@ describe("runErasureScrub", () => {
     // Guest row stripped. last_name_cipher + email_cipher are NOT
     // NULL columns; the scrub overwrites them with the encryption of
     // the empty string (no PII). phone_cipher is nullable so it goes
-    // to NULL outright.
+    // to NULL outright. tags + notes_cipher (sticky allergy /
+    // accessibility data) are reset too — both are special-category
+    // under UK GDPR Art. 9.
     const [guestAfter] = await db
       .select({
         firstName: schema.guests.firstName,
         lastNameCipher: schema.guests.lastNameCipher,
         emailCipher: schema.guests.emailCipher,
         phoneCipher: schema.guests.phoneCipher,
+        tags: schema.guests.tags,
+        notesCipher: schema.guests.notesCipher,
         erasedAt: schema.guests.erasedAt,
       })
       .from(schema.guests)
       .where(eq(schema.guests.id, ctx.guestId));
     expect(guestAfter?.firstName).toBe("Erased");
     expect(guestAfter?.phoneCipher).toBeNull();
+    expect(guestAfter?.tags).toEqual([]);
+    expect(guestAfter?.notesCipher).toBeNull();
     expect(guestAfter?.erasedAt).not.toBeNull();
     // Both NOT NULL ciphers must decrypt to empty string.
     expect(await decryptPii(ctx.orgId, guestAfter!.lastNameCipher as Ciphertext)).toBe("");
     expect(await decryptPii(ctx.orgId, guestAfter!.emailCipher as Ciphertext)).toBe("");
+
+    // Per-visit dietary notes on this guest's bookings nulled too.
+    // The booking row itself stays (7-year accounting retention).
+    const [bookingAfter] = await db
+      .select({
+        dietaryNotesCipher: schema.bookings.dietaryNotesCipher,
+        highChairs: schema.bookings.highChairs,
+      })
+      .from(schema.bookings)
+      .where(eq(schema.bookings.id, ctx.bookingId));
+    expect(bookingAfter?.dietaryNotesCipher).toBeNull();
+    // highChairs is a non-PII int; row retained, count preserved.
+    expect(bookingAfter?.highChairs).toBe(2);
 
     // Internal review scrubbed — both consistency-check pairs nulled
     // together so the CHECK constraints pass.

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 
+import { GuestBadges } from "@/components/bookings/guest-badges";
 import { Button, Field, Input, Textarea, cn } from "@/components/ui";
 import type { BookingDetailPayload, VenueTableForDetail } from "@/lib/bookings/detail";
 import { nextActions, type BookingStatus } from "@/lib/bookings/state";
@@ -116,6 +117,8 @@ function BookingDetailDialogBody({ venueId, date, booking, allVenueTables, onClo
   const [cancelReason, setCancelReason] = useState("");
   const [draftPartySize, setDraftPartySize] = useState(booking.partySize);
   const [draftNotes, setDraftNotes] = useState(booking.notes ?? "");
+  const [draftHighChairs, setDraftHighChairs] = useState(booking.highChairs);
+  const [draftDietaryNotes, setDraftDietaryNotes] = useState(booking.dietaryNotes ?? "");
   const [reassignTo, setReassignTo] = useState("");
 
   const editable =
@@ -193,7 +196,9 @@ function BookingDetailDialogBody({ venueId, date, booking, allVenueTables, onClo
   function onSaveDetails() {
     const notesChanged = draftNotes !== (booking.notes ?? "");
     const partyChanged = draftPartySize !== booking.partySize;
-    if (!notesChanged && !partyChanged) {
+    const highChairsChanged = draftHighChairs !== booking.highChairs;
+    const dietaryNotesChanged = draftDietaryNotes !== (booking.dietaryNotes ?? "");
+    if (!notesChanged && !partyChanged && !highChairsChanged && !dietaryNotesChanged) {
       setMode("view");
       return;
     }
@@ -204,6 +209,10 @@ function BookingDetailDialogBody({ venueId, date, booking, allVenueTables, onClo
         bookingId: booking.id,
         ...(notesChanged ? { notes: draftNotes.trim() === "" ? null : draftNotes } : {}),
         ...(partyChanged ? { partySize: draftPartySize } : {}),
+        ...(highChairsChanged ? { highChairs: draftHighChairs } : {}),
+        ...(dietaryNotesChanged
+          ? { dietaryNotes: draftDietaryNotes.trim() === "" ? null : draftDietaryNotes }
+          : {}),
       });
       if (!r.ok) {
         setError(r.message ?? "Couldn't save.");
@@ -257,7 +266,7 @@ function BookingDetailDialogBody({ venueId, date, booking, allVenueTables, onClo
   return (
     <>
       <header className="border-hairline flex items-start justify-between gap-2 border-b px-5 py-4">
-        <div>
+        <div className="min-w-0 flex-1">
           <h3 className="text-ink text-base font-bold tracking-tight">
             <Link href={`/dashboard/guests/${booking.guestId}`} className="hover:underline">
               {booking.guestFirstName}
@@ -266,6 +275,15 @@ function BookingDetailDialogBody({ venueId, date, booking, allVenueTables, onClo
           <p className="text-ash mt-0.5 text-xs">
             {booking.wallStart}–{booking.wallEnd} · {booking.tableLabel} · {booking.serviceName}
           </p>
+          <GuestBadges
+            guestTags={booking.guestTags}
+            guestNotes={booking.guestNotes}
+            dietaryNotes={booking.dietaryNotes}
+            highChairs={booking.highChairs}
+            priorVisits={booking.priorVisits}
+            density="full"
+            className="mt-2"
+          />
         </div>
         <button
           type="button"
@@ -305,8 +323,25 @@ function BookingDetailDialogBody({ venueId, date, booking, allVenueTables, onClo
           </div>
         </DetailRow>
         <DetailRow label="Party size">
-          <span className="font-mono tabular-nums">{booking.partySize}</span>
+          <span className="font-mono tabular-nums">
+            {booking.partySize}
+            {booking.highChairs > 0 ? (
+              <span className="text-ash ml-1 text-xs">
+                · {booking.highChairs} highchair{booking.highChairs > 1 ? "s" : ""}
+              </span>
+            ) : null}
+          </span>
         </DetailRow>
+        {booking.guestNotes ? (
+          <DetailRow label="Allergy / dietary (sticky)">
+            <span className="whitespace-pre-line">{booking.guestNotes}</span>
+          </DetailRow>
+        ) : null}
+        {booking.dietaryNotes ? (
+          <DetailRow label="Dietary notes (this visit)">
+            <span className="whitespace-pre-line">{booking.dietaryNotes}</span>
+          </DetailRow>
+        ) : null}
         {booking.notes ? (
           <DetailRow label="Notes">
             <span className="whitespace-pre-line">{booking.notes}</span>
@@ -394,18 +429,48 @@ function BookingDetailDialogBody({ venueId, date, booking, allVenueTables, onClo
 
         {mode === "edit-details" ? (
           <div className="rounded-card border-hairline bg-cloud mt-2 flex flex-col gap-3 border p-3">
-            <Field label="Party size" htmlFor="bdm-party">
-              <Input
-                id="bdm-party"
-                type="number"
-                min={1}
-                max={20}
-                value={draftPartySize}
-                onChange={(e) =>
-                  setDraftPartySize(Math.max(1, Math.min(20, Number(e.target.value) || 1)))
-                }
-                size="sm"
-                className="w-24"
+            <div className="flex items-end gap-3">
+              <Field label="Party size" htmlFor="bdm-party">
+                <Input
+                  id="bdm-party"
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={draftPartySize}
+                  onChange={(e) =>
+                    setDraftPartySize(Math.max(1, Math.min(20, Number(e.target.value) || 1)))
+                  }
+                  size="sm"
+                  className="w-24"
+                />
+              </Field>
+              <Field label="Highchairs" htmlFor="bdm-highchairs" optional>
+                <Input
+                  id="bdm-highchairs"
+                  type="number"
+                  min={0}
+                  max={20}
+                  value={draftHighChairs}
+                  onChange={(e) =>
+                    setDraftHighChairs(Math.max(0, Math.min(20, Number(e.target.value) || 0)))
+                  }
+                  size="sm"
+                  className="w-24"
+                />
+              </Field>
+            </div>
+            <Field
+              label="Dietary notes (this visit)"
+              htmlFor="bdm-dietary"
+              hint="Allergies + dietary needs specific to this booking. Stored encrypted."
+              optional
+            >
+              <Textarea
+                id="bdm-dietary"
+                value={draftDietaryNotes}
+                onChange={(e) => setDraftDietaryNotes(e.target.value)}
+                rows={2}
+                maxLength={500}
               />
             </Field>
             <Field label="Notes" htmlFor="bdm-notes" optional>
@@ -535,6 +600,8 @@ function BookingDetailDialogBody({ venueId, date, booking, allVenueTables, onClo
                 setMode("view");
                 setDraftPartySize(booking.partySize);
                 setDraftNotes(booking.notes ?? "");
+                setDraftHighChairs(booking.highChairs);
+                setDraftDietaryNotes(booking.dietaryNotes ?? "");
                 setError(null);
               }}
               disabled={pending}
@@ -582,6 +649,8 @@ function BookingDetailDialogBody({ venueId, date, booking, allVenueTables, onClo
                   setMode("edit-details");
                   setDraftPartySize(booking.partySize);
                   setDraftNotes(booking.notes ?? "");
+                  setDraftHighChairs(booking.highChairs);
+                  setDraftDietaryNotes(booking.dietaryNotes ?? "");
                   setError(null);
                 }}
               >

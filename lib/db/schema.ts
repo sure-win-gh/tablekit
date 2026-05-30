@@ -451,6 +451,20 @@ export const guests = pgTable(
     marketingConsentAt: timestamp("marketing_consent_at", { withTimezone: true }),
     marketingConsentEmailAt: timestamp("marketing_consent_email_at", { withTimezone: true }),
     marketingConsentSmsAt: timestamp("marketing_consent_sms_at", { withTimezone: true }),
+    // Operator-curated short labels for at-a-glance recognition on the
+    // floor (VIP, allergy:nuts, loud-party, ...). Plaintext per
+    // docs/specs/guests.md — operator-controlled, not guest PII. Length
+    // + content validation lives in lib/guests/profile-schema.ts so
+    // operators can't paste an email here.
+    tags: text("tags")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    // Sticky guest-level notes: severe allergies, accessibility needs,
+    // preferences that persist across visits. Special-category data
+    // under UK GDPR Art. 9 — envelope-encrypted via lib/security/crypto.
+    // Per-visit dietary notes live on bookings.dietary_notes_cipher.
+    notesCipher: text("notes_cipher"),
     erasedAt: timestamp("erased_at", { withTimezone: true }),
     // Provenance for imported guests. Populated by the import job;
     // null for guests created via the booking flow or the dashboard.
@@ -534,6 +548,13 @@ export const bookings = pgTable(
     // Plumbed for the payments phase; always null today.
     depositIntentId: text("deposit_intent_id"),
     notes: text("notes"),
+    // Per-visit covers requiring a high chair. Not PII; defaults to 0
+    // so existing rows + new walk-ins don't need to think about it.
+    highChairs: integer("high_chairs").notNull().default(0),
+    // Per-visit dietary / allergy notes added at booking or by the
+    // host on arrival. Special-category data under UK GDPR Art. 9 —
+    // envelope-encrypted via lib/security/crypto.
+    dietaryNotesCipher: text("dietary_notes_cipher"),
     bookedByUserId: uuid("booked_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),

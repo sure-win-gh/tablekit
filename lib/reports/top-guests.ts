@@ -13,14 +13,13 @@ import "server-only";
 import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import { REALISED_STATUSES } from "@/lib/bookings/realised";
 import { bookings, guests } from "@/lib/db/schema";
 import type * as schema from "@/lib/db/schema";
 
 import type { Bounds, TopGuestRow } from "./types";
 
 type Db = NodePgDatabase<typeof schema>;
-
-const REALISED = ["confirmed", "seated", "finished"] as const;
 
 export async function getTopGuestsReport(
   db: Db,
@@ -46,7 +45,7 @@ export async function getTopGuestsReport(
         eq(bookings.venueId, venueId),
         gte(bookings.startAt, bounds.startUtc),
         lt(bookings.startAt, bounds.endUtc),
-        inArray(bookings.status, [...REALISED]),
+        inArray(bookings.status, [...REALISED_STATUSES]),
       ),
     )
     .groupBy(guests.id, guests.firstName)

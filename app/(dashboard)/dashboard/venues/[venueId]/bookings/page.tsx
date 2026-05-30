@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import { Button } from "@/components/ui";
 import { requireRole } from "@/lib/auth/require-role";
+import { enrichBookingsForDisplay } from "@/lib/bookings/enriched-detail";
 import { classifySearchInput, parseStatusFilter } from "@/lib/bookings/list-filters";
 import {
   formatVenueDateLong,
@@ -45,7 +46,7 @@ export default async function BookingsPage({
   params: Promise<{ venueId: string }>;
   searchParams: Promise<SearchParams>;
 }) {
-  await requireRole("host");
+  const auth = await requireRole("host");
   const { venueId } = await params;
   const { date: dateParam, q: rawQuery, status: rawStatus } = await searchParams;
   const search = classifySearchInput(rawQuery);
@@ -113,6 +114,10 @@ export default async function BookingsPage({
         serviceName: services.name,
         guestId: bookings.guestId,
         guestFirstName: guests.firstName,
+        guestTags: guests.tags,
+        guestNotesCipher: guests.notesCipher,
+        highChairs: bookings.highChairs,
+        dietaryNotesCipher: bookings.dietaryNotesCipher,
       })
       .from(bookings)
       .innerJoin(services, eq(services.id, bookings.serviceId))
@@ -127,6 +132,24 @@ export default async function BookingsPage({
       )
       .orderBy(asc(bookings.startAt));
   });
+
+  // Decrypt + count prior visits in one pass so each BookingRow can
+  // render the seating-moment badges without N+1 queries.
+  const enrichmentMap = await withUser(async (db) =>
+    enrichBookingsForDisplay(
+      db,
+      auth.orgId,
+      rows.map((r) => ({
+        id: r.id,
+        guestId: r.guestId,
+        startAt: r.startAt,
+        guestNotesCipher: r.guestNotesCipher,
+        dietaryNotesCipher: r.dietaryNotesCipher,
+        guestTags: r.guestTags,
+        highChairs: r.highChairs,
+      })),
+    ),
+  );
 
   // Single query for all the payment-shape signals the row needs:
   //   * refundable        — has a succeeded deposit
@@ -273,6 +296,13 @@ export default async function BookingsPage({
                   const durationMinutes = Math.round(
                     (b.endAt.getTime() - b.startAt.getTime()) / 60000,
                   );
+                  const enrichment = enrichmentMap.get(b.id) ?? {
+                    guestTags: b.guestTags,
+                    guestNotes: null,
+                    dietaryNotes: null,
+                    highChairs: b.highChairs,
+                    priorVisits: 0,
+                  };
                   return (
                     <BookingRow
                       key={b.id}
@@ -296,6 +326,7 @@ export default async function BookingsPage({
                       assignedTables={assignedTables}
                       moveTargets={moveTargets}
                       allVenueTables={allVenueTables}
+                      enrichment={enrichment}
                     />
                   );
                 })}

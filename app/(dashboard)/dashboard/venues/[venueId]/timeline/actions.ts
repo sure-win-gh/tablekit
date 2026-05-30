@@ -121,6 +121,10 @@ const UpdateDetailsArgs = z.object({
   // null clears, string sets, undefined leaves alone.
   notes: z.union([z.string(), z.null()]).optional(),
   partySize: z.number().int().min(1).max(20).optional(),
+  highChairs: z.number().int().min(0).max(20).optional(),
+  // Article 9 special-category text — encrypted inside the domain
+  // helper. null clears the cipher column.
+  dietaryNotes: z.union([z.string().max(500), z.null()]).optional(),
 });
 
 export type UpdateDetailsState =
@@ -145,6 +149,8 @@ export async function updateDetailsFromTimeline(raw: unknown): Promise<UpdateDet
     bookingId: parsed.data.bookingId,
     ...(parsed.data.notes !== undefined ? { notes: parsed.data.notes } : {}),
     ...(parsed.data.partySize !== undefined ? { partySize: parsed.data.partySize } : {}),
+    ...(parsed.data.highChairs !== undefined ? { highChairs: parsed.data.highChairs } : {}),
+    ...(parsed.data.dietaryNotes !== undefined ? { dietaryNotes: parsed.data.dietaryNotes } : {}),
   });
   if (!r.ok) {
     if (r.reason === "invalid-input") {
@@ -155,6 +161,7 @@ export async function updateDetailsFromTimeline(raw: unknown): Promise<UpdateDet
 
   revalidatePath(`/dashboard/venues/${parsed.data.venueId}/timeline`);
   revalidatePath(`/dashboard/venues/${parsed.data.venueId}/bookings`);
+  revalidatePath(`/dashboard/venues/${parsed.data.venueId}/floor-plan`);
   return { ok: true };
 }
 

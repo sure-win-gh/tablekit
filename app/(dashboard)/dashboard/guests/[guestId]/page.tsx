@@ -9,7 +9,7 @@ import { withUser } from "@/lib/db/client";
 import { bookings, guests, services, venues } from "@/lib/db/schema";
 import { decryptPii, type Ciphertext } from "@/lib/security/crypto";
 
-import { ConsentToggles, EditContactCard, EraseGuestButton } from "./forms";
+import { ConsentToggles, EditContactCard, EditProfileCard, EraseGuestButton } from "./forms";
 
 export const metadata = { title: "Guest · TableKit" };
 export const dynamic = "force-dynamic";
@@ -40,6 +40,8 @@ export default async function GuestProfilePage({
         lastNameCipher: guests.lastNameCipher,
         emailCipher: guests.emailCipher,
         phoneCipher: guests.phoneCipher,
+        tags: guests.tags,
+        notesCipher: guests.notesCipher,
         marketingConsentEmailAt: guests.marketingConsentEmailAt,
         marketingConsentSmsAt: guests.marketingConsentSmsAt,
         marketingConsentAt: guests.marketingConsentAt,
@@ -86,6 +88,9 @@ export default async function GuestProfilePage({
   const email = await decryptPii(auth.orgId, guest.emailCipher as Ciphertext);
   const phone = guest.phoneCipher
     ? await decryptPii(auth.orgId, guest.phoneCipher as Ciphertext)
+    : "";
+  const stickyNotes = guest.notesCipher
+    ? await decryptPii(auth.orgId, guest.notesCipher as Ciphertext)
     : "";
 
   // Per-channel consent: prefer the new column. The legacy column
@@ -146,6 +151,14 @@ export default async function GuestProfilePage({
           erased={Boolean(guest.erasedAt)}
           emailConsentAt={emailConsentAt ? emailConsentAt.toISOString() : null}
           smsConsentAt={smsConsentAt ? smsConsentAt.toISOString() : null}
+        />
+
+        <EditProfileCard
+          guestId={guest.id}
+          canEdit={canEdit}
+          erased={Boolean(guest.erasedAt)}
+          tags={guest.tags}
+          stickyNotes={stickyNotes}
         />
       </section>
 

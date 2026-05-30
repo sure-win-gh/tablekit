@@ -7,6 +7,8 @@
 
 A minimal guest CRM: profiles, visit history, tags, allergy/preference notes, marketing consent.
 
+The seating-moment enrichment (badges + dietary / highchair fields on each booking) layers on top — see `docs/specs/bookings.md` "Per-visit guest requirements".
+
 ## Important
 
 The operator (venue) is the **data controller** for guest data. We are the **data processor**. This shapes everything below. Read `docs/playbooks/gdpr.md` before starting.
@@ -53,6 +55,7 @@ create index on guests (organisation_id, phone_hash);
 - [x] Erasure via dashboard button + `audit_log`. The privacy-requests dashboard creates a DSAR row of type `erase`; [`lib/dsar/scrub.ts`](../../lib/dsar/scrub.ts) nulls + re-encrypts placeholder PII inside one transaction and writes `dsar.scrubbed` / `guest.erased` audit entries.
 - [x] Erasure SLA: 30 days. [`lib/dsar/create.ts`](../../lib/dsar/create.ts) — `SLA_DAYS = 30`; `due_at` stamped at row creation; sweep cron at `/api/cron/dsar-scrub` drives bulk scrubs; dashboard kicks an inline scrub so an operator's flow doesn't wait for the cron.
 - [x] Guest data org-scoped + group-CRM opt-in. RLS verified by [`tests/integration/rls-guests.test.ts`](../../tests/integration/rls-guests.test.ts) and the per-venue variant [`rls-guests-per-venue.test.ts`](../../tests/integration/rls-guests-per-venue.test.ts). Cross-venue aggregation is gated on `organisations.group_crm_enabled` (Plus-tier owner toggle).
+- [x] Tags (`guests.tags text[]`) + sticky notes (`guests.notes_cipher`) editable on the guest profile page. Tags are operator-curated plaintext labels (validated to block emails + phone-like digit runs in [`lib/guests/profile-validation.ts`](../../lib/guests/profile-validation.ts)). Sticky notes are envelope-encrypted under the org DEK — special-category data under UK GDPR Art. 9 (see `docs/playbooks/gdpr.md`). The seating-moment surfaces (bookings list, booking detail dialog, floor-plan side panel, timeline detail) all render the tags + notes via the shared `GuestBadges` component.
 
 ## Out of scope
 

@@ -6,7 +6,9 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/require-role";
 import { createDsarRequest } from "@/lib/dsar/create";
 import { setMarketingConsent, type MarketingChannel } from "@/lib/guests/marketing-consent";
+import { parseAndValidateTags } from "@/lib/guests/profile-validation";
 import { updateGuestContact } from "@/lib/guests/update-contact";
+import { updateGuestProfile } from "@/lib/guests/update-profile";
 import { withUser } from "@/lib/db/client";
 import { guests } from "@/lib/db/schema";
 import { decryptPii, type Ciphertext } from "@/lib/security/crypto";
@@ -65,6 +67,71 @@ export async function updateGuestContactAction(
       "invalid-input": r.reason === "invalid-input" ? r.issues.join("; ") : "Invalid input.",
     }[r.reason];
     return { status: "error", message };
+  }
+
+  revalidatePath(`/dashboard/guests/${parsed.data.guestId}`);
+  return { status: "saved" };
+}
+
+// Tags + sticky notes on the guest profile. Tags are plaintext (no
+// guest PII allowed — validated below); sticky notes are encrypted
+// at the domain helper boundary.
+export type ProfileActionState =
+  | { status: "idle" }
+  | { status: "error"; message: string }
+  | { status: "saved" };
+
+const ProfileSchema = z.object({
+  guestId: z.string().uuid(),
+  // Comma-separated tag string from the form; trim + split happens
+  // in parseAndValidateTags.
+  tagsRaw: z.string().max(1000),
+  notes: z.string().max(1000),
+});
+
+export async function updateGuestProfileAction(
+  _prev: ProfileActionState,
+  formData: FormData,
+): Promise<ProfileActionState> {
+  const { userId, orgId } = await requireRole("manager");
+
+  const parsed = ProfileSchema.safeParse({
+    guestId: formData.get("guestId"),
+    tagsRaw: (formData.get("tagsRaw") ?? "").toString(),
+    notes: (formData.get("notes") ?? "").toString(),
+  });
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: parsed.error.issues[0]?.message ?? "Check the inputs.",
+    };
+  }
+
+  const tagResult = parseAndValidateTags(parsed.data.tagsRaw);
+  if (!tagResult.ok) {
+    const message =
+      tagResult.reason === "too-many"
+        ? "Up to 20 tags."
+        : tagResult.reason === "bad-shape"
+          ? `Tag "${tagResult.offending}" must be 1–32 ASCII characters.`
+          : `Tags can't contain emails or phone-like digit runs (got "${tagResult.offending}").`;
+    return { status: "error", message };
+  }
+
+  const notes = parsed.data.notes.trim() === "" ? null : parsed.data.notes;
+
+  const r = await updateGuestProfile({
+    organisationId: orgId,
+    actorUserId: userId,
+    guestId: parsed.data.guestId,
+    tags: tagResult.tags,
+    notes,
+  });
+  if (!r.ok) {
+    return {
+      status: "error",
+      message: r.reason === "not-found" ? "Guest not found." : "Save failed.",
+    };
   }
 
   revalidatePath(`/dashboard/guests/${parsed.data.guestId}`);
