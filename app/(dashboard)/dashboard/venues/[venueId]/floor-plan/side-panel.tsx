@@ -3,7 +3,9 @@
 import { X } from "lucide-react";
 import Link from "next/link";
 
+import { GuestBadges } from "@/components/bookings/guest-badges";
 import { IconButton } from "@/components/ui";
+import type { GuestEnrichment } from "@/lib/bookings/detail";
 import type { BookingStatus } from "@/lib/bookings/state";
 import { STATUS_FILL } from "@/lib/bookings/status-style";
 
@@ -21,7 +23,7 @@ export type ActiveBookingDetail = {
   endAt: Date; // raw UTC; needed by the floor-plan to derive "overdue"
   notes: string | null;
   otherTableLabels: string[]; // multi-table bookings
-};
+} & GuestEnrichment;
 
 type Props = {
   venueId: string;
@@ -118,6 +120,15 @@ function BookingCard({
       <p className="text-ash mt-2 text-xs">
         {booking.startWall} – {booking.endWall}
       </p>
+      <GuestBadges
+        guestTags={booking.guestTags}
+        guestNotes={booking.guestNotes}
+        dietaryNotes={booking.dietaryNotes}
+        highChairs={booking.highChairs}
+        priorVisits={booking.priorVisits}
+        density="full"
+        className="mt-3"
+      />
       <p className="mt-3">
         <span
           className={`rounded-input inline-flex items-center border px-2 py-0.5 text-xs ${STATUS_FILL[booking.status]}`}
@@ -128,6 +139,20 @@ function BookingCard({
       {booking.otherTableLabels.length > 0 ? (
         <p className="text-ash mt-3 text-xs">
           Combined with {booking.otherTableLabels.map((l) => `T${l}`).join(", ")}
+        </p>
+      ) : null}
+      {booking.guestNotes ? (
+        <p className="text-charcoal mt-3 text-xs whitespace-pre-wrap">
+          <span className="text-ash text-[10px] font-semibold tracking-wider uppercase">Allergy / dietary</span>
+          <br />
+          {booking.guestNotes}
+        </p>
+      ) : null}
+      {booking.dietaryNotes ? (
+        <p className="text-charcoal mt-3 text-xs whitespace-pre-wrap">
+          <span className="text-ash text-[10px] font-semibold tracking-wider uppercase">Dietary (this visit)</span>
+          <br />
+          {booking.dietaryNotes}
         </p>
       ) : null}
       {booking.notes ? (

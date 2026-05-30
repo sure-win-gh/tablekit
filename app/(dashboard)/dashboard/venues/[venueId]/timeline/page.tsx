@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import { Button } from "@/components/ui";
 import { requireRole } from "@/lib/auth/require-role";
+import { enrichBookingsForDisplay } from "@/lib/bookings/enriched-detail";
 import {
   formatVenueDateLong,
   formatVenueTime,
@@ -61,7 +62,7 @@ export default async function TimelinePage({
   params: Promise<{ venueId: string }>;
   searchParams: Promise<SearchParams>;
 }) {
-  await requireRole("host");
+  const auth = await requireRole("host");
   const { venueId } = await params;
   const { date: dateParam } = await searchParams;
 
@@ -110,6 +111,10 @@ export default async function TimelinePage({
           guestFirstName: guests.firstName,
           serviceName: services.name,
           notes: bookings.notes,
+          guestTags: guests.tags,
+          guestNotesCipher: guests.notesCipher,
+          highChairs: bookings.highChairs,
+          dietaryNotesCipher: bookings.dietaryNotesCipher,
         })
         .from(bookings)
         .innerJoin(services, eq(services.id, bookings.serviceId))
@@ -208,6 +213,24 @@ export default async function TimelinePage({
       noShowOutcomes.set(p.bookingId, p.status === "succeeded" ? "captured" : "failed");
     }
   }
+
+  // Decrypt + count prior visits for every booking on the day so the
+  // detail dialog opens already-enriched.
+  const enrichmentMap = await withUser(async (db) =>
+    enrichBookingsForDisplay(
+      db,
+      auth.orgId,
+      bookingsForDay.map((b) => ({
+        id: b.id,
+        guestId: b.guestId,
+        startAt: b.startAt,
+        guestNotesCipher: b.guestNotesCipher,
+        dietaryNotesCipher: b.dietaryNotesCipher,
+        guestTags: b.guestTags,
+        highChairs: b.highChairs,
+      })),
+    ),
+  );
 
   // Build hour-tick labels for the header row.
   //
@@ -428,6 +451,13 @@ export default async function TimelinePage({
                         const blocks: TimelineBookingBlock[] = tableBookings.flatMap((b) => {
                           const span = bookingSpan(b.startAt, b.endAt, venue.timezone, window);
                           if (!span) return [];
+                          const enrichment = enrichmentMap.get(b.id) ?? {
+                            guestTags: b.guestTags,
+                            guestNotes: null,
+                            dietaryNotes: null,
+                            highChairs: b.highChairs,
+                            priorVisits: 0,
+                          };
                           return [
                             {
                               id: b.id,
@@ -452,6 +482,7 @@ export default async function TimelinePage({
                               refundable: refundableSet.has(b.id),
                               cardHold: cardHoldSet.has(b.id),
                               noShowOutcome: noShowOutcomes.get(b.id) ?? null,
+                              ...enrichment,
                             },
                           ];
                         });

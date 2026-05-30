@@ -14,12 +14,16 @@ import "server-only";
 import { and, eq } from "drizzle-orm";
 
 import { bookings } from "@/lib/db/schema";
+import { encryptPii } from "@/lib/security/crypto";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 
 const MAX_NOTES = 500;
 const MIN_PARTY = 1;
 const MAX_PARTY = 20;
+const MAX_DIETARY_NOTES = 500;
+const MIN_HIGHCHAIRS = 0;
+const MAX_HIGHCHAIRS = 20;
 
 export type UpdateBookingDetailsInput = {
   organisationId: string;
@@ -29,6 +33,11 @@ export type UpdateBookingDetailsInput = {
   notes?: string | null | undefined;
   // undefined = leave alone.
   partySize?: number | undefined;
+  // undefined = leave alone.
+  highChairs?: number | undefined;
+  // undefined = leave alone; null = clear; string = set (will be
+  // encrypted before write).
+  dietaryNotes?: string | null | undefined;
 };
 
 export type UpdateBookingDetailsResult =
@@ -48,7 +57,21 @@ export async function updateBookingDetails(
       issues.push(`partySize: must be ${MIN_PARTY}–${MAX_PARTY}`);
     }
   }
-  if (input.notes === undefined && input.partySize === undefined) {
+  if (input.highChairs !== undefined) {
+    if (!Number.isInteger(input.highChairs)) issues.push("highChairs: must be an integer");
+    else if (input.highChairs < MIN_HIGHCHAIRS || input.highChairs > MAX_HIGHCHAIRS) {
+      issues.push(`highChairs: must be ${MIN_HIGHCHAIRS}–${MAX_HIGHCHAIRS}`);
+    }
+  }
+  if (typeof input.dietaryNotes === "string" && input.dietaryNotes.length > MAX_DIETARY_NOTES) {
+    issues.push(`dietaryNotes: must be ≤ ${MAX_DIETARY_NOTES} characters`);
+  }
+  if (
+    input.notes === undefined &&
+    input.partySize === undefined &&
+    input.highChairs === undefined &&
+    input.dietaryNotes === undefined
+  ) {
     issues.push("nothing to update");
   }
   if (issues.length > 0) return { ok: false, reason: "invalid-input", issues };
@@ -62,12 +85,27 @@ export async function updateBookingDetails(
     .limit(1);
   if (!existing) return { ok: false, reason: "not-found" };
 
-  const patch: { notes?: string | null; partySize?: number } = {};
+  const patch: {
+    notes?: string | null;
+    partySize?: number;
+    highChairs?: number;
+    dietaryNotesCipher?: string | null;
+  } = {};
   if (input.notes !== undefined) {
     patch.notes = input.notes === null || input.notes.trim() === "" ? null : input.notes;
   }
   if (input.partySize !== undefined) {
     patch.partySize = input.partySize;
+  }
+  if (input.highChairs !== undefined) {
+    patch.highChairs = input.highChairs;
+  }
+  if (input.dietaryNotes !== undefined) {
+    // Article 9 special-category data — never written plaintext.
+    patch.dietaryNotesCipher =
+      input.dietaryNotes === null || input.dietaryNotes.trim() === ""
+        ? null
+        : await encryptPii(input.organisationId, input.dietaryNotes);
   }
 
   await db
@@ -87,6 +125,8 @@ export async function updateBookingDetails(
       kind: "details-update",
       notesUpdated: input.notes !== undefined,
       partySizeUpdated: input.partySize !== undefined,
+      highChairsUpdated: input.highChairs !== undefined,
+      dietaryNotesUpdated: input.dietaryNotes !== undefined,
     },
   });
 

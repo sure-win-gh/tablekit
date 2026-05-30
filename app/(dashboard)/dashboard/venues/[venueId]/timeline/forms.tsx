@@ -361,6 +361,14 @@ export type TimelineBookingBlock = {
   refundable: boolean;
   cardHold: boolean;
   noShowOutcome: "captured" | "failed" | null;
+  // Seating-moment enrichment. Built by the page server component
+  // and surfaced both as badges on the block and inside the detail
+  // dialog.
+  guestTags: string[];
+  guestNotes: string | null;
+  highChairs: number;
+  dietaryNotes: string | null;
+  priorVisits: number;
 };
 
 // Detail-modal payload — a TimelineBookingBlock plus the row's
@@ -1277,12 +1285,11 @@ export function BookingDetailModal({
     refundable: detailBlock.refundable,
     cardHold: detailBlock.cardHold,
     noShowOutcome: detailBlock.noShowOutcome,
-    // Wired in chunk 4 when TimelineDetailBlock carries enrichment.
-    guestTags: [],
-    guestNotes: null,
-    highChairs: 0,
-    dietaryNotes: null,
-    priorVisits: 0,
+    guestTags: detailBlock.guestTags,
+    guestNotes: detailBlock.guestNotes,
+    highChairs: detailBlock.highChairs,
+    dietaryNotes: detailBlock.dietaryNotes,
+    priorVisits: detailBlock.priorVisits,
   };
   return (
     <BookingDetailDialog

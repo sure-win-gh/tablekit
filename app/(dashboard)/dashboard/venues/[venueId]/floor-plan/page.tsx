@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { hasRole } from "@/lib/auth/role-level";
 import { requireRole } from "@/lib/auth/require-role";
+import { enrichBookingsForDisplay } from "@/lib/bookings/enriched-detail";
 import { deriveFloorState, type FloorTableState } from "@/lib/bookings/floor-state";
 import { formatVenueTime, todayInZone, venueLocalDayRange } from "@/lib/bookings/time";
 import { withUser } from "@/lib/db/client";
@@ -73,9 +74,14 @@ export default async function FloorPlanPage({ params }: { params: Promise<{ venu
           endAt: bookings.endAt,
           partySize: bookings.partySize,
           status: bookings.status,
+          guestId: bookings.guestId,
           guestFirstName: guests.firstName,
           serviceName: services.name,
           notes: bookings.notes,
+          guestTags: guests.tags,
+          guestNotesCipher: guests.notesCipher,
+          highChairs: bookings.highChairs,
+          dietaryNotesCipher: bookings.dietaryNotesCipher,
         })
         .from(bookings)
         .innerJoin(services, eq(services.id, bookings.serviceId))
@@ -117,6 +123,24 @@ export default async function FloorPlanPage({ params }: { params: Promise<{ venu
 
   const bookingsById = new Map(bookingsForDay.map((b) => [b.id, b]));
 
+  // Decrypt + count prior visits once for every booking on the day —
+  // side-panel renders are constant-time after this batch.
+  const enrichmentMap = await withUser(async (db) =>
+    enrichBookingsForDisplay(
+      db,
+      auth.orgId,
+      bookingsForDay.map((b) => ({
+        id: b.id,
+        guestId: b.guestId,
+        startAt: b.startAt,
+        guestNotesCipher: b.guestNotesCipher,
+        dietaryNotesCipher: b.dietaryNotesCipher,
+        guestTags: b.guestTags,
+        highChairs: b.highChairs,
+      })),
+    ),
+  );
+
   function buildDetail(bookingId: string, tableId: string): ActiveBookingDetail | null {
     const b = bookingsById.get(bookingId);
     if (!b) return null;
@@ -125,6 +149,13 @@ export default async function FloorPlanPage({ params }: { params: Promise<{ venu
       .filter((id) => id !== tableId)
       .map((id) => tableLabelById.get(id))
       .filter((label): label is string => Boolean(label));
+    const enrichment = enrichmentMap.get(b.id) ?? {
+      guestTags: b.guestTags,
+      guestNotes: null,
+      dietaryNotes: null,
+      highChairs: b.highChairs,
+      priorVisits: 0,
+    };
     return {
       id: b.id,
       status: b.status,
@@ -136,6 +167,7 @@ export default async function FloorPlanPage({ params }: { params: Promise<{ venu
       endAt: b.endAt,
       notes: b.notes,
       otherTableLabels,
+      ...enrichment,
     };
   }
 

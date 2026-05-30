@@ -4,20 +4,23 @@ import { Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useActionState, useState } from "react";
 
-import { Badge, Button, Field, Input } from "@/components/ui";
+import { Badge, Button, Field, Input, Textarea } from "@/components/ui";
 
 import {
   requestGuestErasureAction,
   setMarketingConsentAction,
   updateGuestContactAction,
+  updateGuestProfileAction,
   type ConsentActionState,
   type ContactActionState,
   type EraseActionState,
+  type ProfileActionState,
 } from "./actions";
 
 const idleContact: ContactActionState = { status: "idle" };
 const idleConsent: ConsentActionState = { status: "idle" };
 const idleErase: EraseActionState = { status: "idle" };
+const idleProfile: ProfileActionState = { status: "idle" };
 
 // ---------------------------------------------------------------------------
 // Edit contact card
@@ -238,6 +241,123 @@ function ChannelToggle({
         {pending ? "…" : on ? "Opt out" : "Opt in"}
       </Button>
     </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tags + sticky notes editor — surfaces at the seating moment.
+// ---------------------------------------------------------------------------
+
+export function EditProfileCard({
+  guestId,
+  canEdit,
+  erased,
+  tags,
+  stickyNotes,
+}: {
+  guestId: string;
+  canEdit: boolean;
+  erased: boolean;
+  tags: string[];
+  stickyNotes: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draftTags, setDraftTags] = useState(tags.join(", "));
+  const [draftNotes, setDraftNotes] = useState(stickyNotes);
+  const [state, formAction, pending] = useActionState<ProfileActionState, FormData>(
+    updateGuestProfileAction,
+    idleProfile,
+  );
+
+  return (
+    <div className="rounded-card border-hairline bg-white p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-ash text-sm font-semibold tracking-wider uppercase">Tags & sticky notes</h2>
+        {canEdit && !erased && !editing ? (
+          <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
+            Edit
+          </Button>
+        ) : null}
+      </div>
+      <p className="text-ash mb-3 text-xs">
+        Surfaces in every booking detail. Sticky notes are encrypted. Tags are operator-curated —
+        don&apos;t paste guest emails or phone numbers.
+      </p>
+
+      {editing ? (
+        <form action={formAction} className="flex flex-col gap-3">
+          <input type="hidden" name="guestId" value={guestId} />
+          <Field
+            label="Tags"
+            htmlFor="profile-tags"
+            hint="Comma-separated. Up to 20 tags, 1–32 chars each. Example: VIP, allergy:nuts, loud-party"
+            optional
+          >
+            <Input
+              id="profile-tags"
+              name="tagsRaw"
+              type="text"
+              value={draftTags}
+              onChange={(e) => setDraftTags(e.target.value)}
+              maxLength={1000}
+              size="sm"
+            />
+          </Field>
+          <Field
+            label="Sticky notes"
+            htmlFor="profile-notes"
+            hint="Allergies, accessibility, preferences that persist across visits."
+            optional
+          >
+            <Textarea
+              id="profile-notes"
+              name="notes"
+              value={draftNotes}
+              onChange={(e) => setDraftNotes(e.target.value)}
+              rows={3}
+              maxLength={1000}
+            />
+          </Field>
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setEditing(false);
+                setDraftTags(tags.join(", "));
+                setDraftNotes(stickyNotes);
+              }}
+              disabled={pending}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" disabled={pending}>
+              {pending ? "Saving…" : "Save profile"}
+            </Button>
+          </div>
+          {state.status === "error" ? (
+            <p className="text-rose text-xs">{state.message}</p>
+          ) : null}
+          {state.status === "saved" ? <p className="text-xs text-emerald-700">Saved.</p> : null}
+        </form>
+      ) : (
+        <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm">
+          <dt className="text-ash">Tags</dt>
+          <dd className="text-ink flex flex-wrap gap-1">
+            {tags.length === 0 ? (
+              <span className="text-ash">—</span>
+            ) : (
+              tags.map((t) => <Badge key={t}>{t}</Badge>)
+            )}
+          </dd>
+          <dt className="text-ash">Sticky notes</dt>
+          <dd className="text-ink whitespace-pre-wrap">
+            {stickyNotes ? stickyNotes : <span className="text-ash">—</span>}
+          </dd>
+        </dl>
+      )}
+    </div>
   );
 }
 

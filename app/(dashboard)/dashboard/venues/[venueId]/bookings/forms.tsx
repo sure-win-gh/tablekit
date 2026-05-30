@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
 
 import { BookingDetailDialog } from "@/components/bookings/booking-detail-dialog";
+import { GuestBadges } from "@/components/bookings/guest-badges";
 import { Badge, Button, IconButton, Input, Select, cn } from "@/components/ui";
-import type { VenueTableForDetail } from "@/lib/bookings/detail";
+import type { GuestEnrichment, VenueTableForDetail } from "@/lib/bookings/detail";
 import { BOOKING_STATUSES, type BookingStatus } from "@/lib/bookings/state";
 
 import {
@@ -73,6 +74,7 @@ type BookingRowProps = {
   assignedTables: Array<{ id: string; label: string; areaName: string }>;
   moveTargets: Array<{ id: string; label: string; areaName: string }>;
   allVenueTables: VenueTableForDetail[];
+  enrichment: GuestEnrichment;
 };
 
 export function BookingRow({
@@ -96,6 +98,7 @@ export function BookingRow({
   assignedTables,
   moveTargets,
   allVenueTables,
+  enrichment,
 }: BookingRowProps) {
   const [detailOpen, setDetailOpen] = useState(false);
   const primaryTable = assignedTables[0];
@@ -108,7 +111,7 @@ export function BookingRow({
           <span className="text-stone"> – </span>
           {wallEnd}
         </div>
-        <div className="flex flex-col">
+        <div className="flex flex-col gap-1">
           <span className="text-ink text-sm font-semibold">
             {guestFirstName} · party of {partySize}
           </span>
@@ -118,6 +121,7 @@ export function BookingRow({
               : assignedTables.map((t) => `${t.areaName} · ${t.label}`).join(", ")}
             {notes ? ` · ${notes}` : ""}
           </span>
+          <GuestBadges {...enrichment} density="row" />
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -172,12 +176,7 @@ export function BookingRow({
             refundable,
             cardHold,
             noShowOutcome,
-            // Wired in chunk 4 when the bookings page query is extended.
-            guestTags: [],
-            guestNotes: null,
-            highChairs: 0,
-            dietaryNotes: null,
-            priorVisits: 0,
+            ...enrichment,
           }}
         />
       ) : null}
