@@ -82,18 +82,6 @@ export async function getPriorRealisedVisitsBatch(
   return out;
 }
 
-// Pure copy used by the badge + dialog so the labelling stays
-// identical across surfaces. "Prior" is the count returned above;
-// the displayed visit number is `prior + 1` (this booking counted).
-export type VisitLabel = {
-  text: string;
-  tone: "info" | "success";
-  // Total visit ordinal including this one (1 = first, 2 = second, ...).
-  ordinal: number;
-};
-
-export function visitLabel(prior: number): VisitLabel {
-  if (prior <= 0) return { text: "First visit", tone: "info", ordinal: 1 };
-  if (prior === 1) return { text: "2nd visit", tone: "info", ordinal: 2 };
-  return { text: `Regular · ${prior + 1} visits`, tone: "success", ordinal: prior + 1 };
-}
+// Pure labelling lives in `./visit-label` so client components can
+// import it without dragging this server-only module into the bundle.
+export { visitLabel, type VisitLabel } from "./visit-label";

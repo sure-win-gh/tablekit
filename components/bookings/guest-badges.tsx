@@ -2,7 +2,7 @@ import { AlertTriangle, Baby, Sparkles, Star } from "lucide-react";
 
 import { Badge } from "@/components/ui";
 import type { GuestEnrichment } from "@/lib/bookings/detail";
-import { visitLabel } from "@/lib/guests/visit-history";
+import { visitLabel } from "@/lib/guests/visit-label";
 
 // Shared at-a-glance row used everywhere booking details surface:
 // bookings list row, booking detail dialog header, floor-plan side

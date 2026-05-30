@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { visitLabel } from "@/lib/guests/visit-history";
+import { visitLabel } from "@/lib/guests/visit-label";
 
 describe("visitLabel", () => {
   it("labels zero prior visits as first visit", () => {
