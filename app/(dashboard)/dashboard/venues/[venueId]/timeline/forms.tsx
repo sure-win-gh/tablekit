@@ -1277,6 +1277,12 @@ export function BookingDetailModal({
     refundable: detailBlock.refundable,
     cardHold: detailBlock.cardHold,
     noShowOutcome: detailBlock.noShowOutcome,
+    // Wired in chunk 4 when TimelineDetailBlock carries enrichment.
+    guestTags: [],
+    guestNotes: null,
+    highChairs: 0,
+    dietaryNotes: null,
+    priorVisits: 0,
   };
   return (
     <BookingDetailDialog

@@ -172,6 +172,12 @@ export function BookingRow({
             refundable,
             cardHold,
             noShowOutcome,
+            // Wired in chunk 4 when the bookings page query is extended.
+            guestTags: [],
+            guestNotes: null,
+            highChairs: 0,
+            dietaryNotes: null,
+            priorVisits: 0,
           }}
         />
       ) : null}
