@@ -295,6 +295,13 @@
       "when": 1779979786133,
       "tag": "0041_green_penance",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1780124223526,
+      "tag": "0042_serious_triathlon",
+      "breakpoints": true
     }
   ]
 }
