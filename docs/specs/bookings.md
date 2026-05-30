@@ -87,6 +87,17 @@ create table booking_events (
 );
 ```
 
+## Per-visit guest requirements
+
+When a host is about to seat a booked party, they need to see the things that change how they set the table — independent of the sticky guest profile. Two per-visit columns live on `bookings`:
+
+- `high_chairs integer not null default 0` — how many highchairs to set out for this party. Non-PII; aggregate-safe.
+- `dietary_notes_cipher text` — per-visit dietary / allergy notes that don't belong on the guest profile (e.g. "tonight's birthday guest is gluten-free"). Envelope-encrypted via `lib/security/crypto.ts`; treated as special-category data under UK GDPR Art. 9 (see `docs/playbooks/gdpr.md`).
+
+Both fields are editable from the booking detail dialog's "Edit details" mode and write through [`lib/bookings/update-details.ts`](../../lib/bookings/update-details.ts) (the cipher column is encrypted at the boundary). The seating-moment surfaces (bookings list, dialog, floor-plan side panel, timeline) render them via the shared `GuestBadges` component alongside the per-guest tags + sticky notes from `docs/specs/guests.md`.
+
+The first-visit / regular badge is derived from realised visit history (booking statuses in `confirmed | seated | finished`); the count helper lives in [`lib/guests/visit-history.ts`](../../lib/guests/visit-history.ts) and is shared with the `top-guests` report so both surfaces match.
+
 ## Out of scope
 
 - Multi-resource bookings (rooms + tables). We are a table booking product.
