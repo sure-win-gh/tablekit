@@ -39,7 +39,8 @@ export async function updateGuestProfile(
     .limit(1);
   if (!existing) return { ok: false, reason: "not-found" };
 
-  const notesCipher = input.notes === null ? null : await encryptPii(input.organisationId, input.notes);
+  const notesCipher =
+    input.notes === null ? null : await encryptPii(input.organisationId, input.notes);
 
   await db
     .update(guests)

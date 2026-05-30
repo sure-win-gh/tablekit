@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/require-role";
 import { createDsarRequest } from "@/lib/dsar/create";
 import { setMarketingConsent, type MarketingChannel } from "@/lib/guests/marketing-consent";
+import { parseAndValidateTags } from "@/lib/guests/profile-validation";
 import { updateGuestContact } from "@/lib/guests/update-contact";
 import { updateGuestProfile } from "@/lib/guests/update-profile";
 import { withUser } from "@/lib/db/client";
@@ -80,13 +81,10 @@ export type ProfileActionState =
   | { status: "error"; message: string }
   | { status: "saved" };
 
-const TAG_RE = /^[\x20-\x7e]{1,32}$/; // ASCII printable, 1–32 chars.
-const EMAIL_LIKE_RE = /@/;
-const DIGITS_RE = /\d{6,}/;
-
 const ProfileSchema = z.object({
   guestId: z.string().uuid(),
-  // Comma-separated tag string from the form; trim + split here.
+  // Comma-separated tag string from the form; trim + split happens
+  // in parseAndValidateTags.
   tagsRaw: z.string().max(1000),
   notes: z.string().max(1000),
 });
@@ -109,38 +107,31 @@ export async function updateGuestProfileAction(
     };
   }
 
-  const rawTags = parsed.data.tagsRaw
-    .split(",")
-    .map((t) => t.trim())
-    .filter((t) => t.length > 0);
-
-  if (rawTags.length > 20) {
-    return { status: "error", message: "Up to 20 tags." };
-  }
-  for (const t of rawTags) {
-    if (!TAG_RE.test(t)) {
-      return { status: "error", message: `Tag "${t}" must be 1–32 ASCII characters.` };
-    }
-    if (EMAIL_LIKE_RE.test(t) || DIGITS_RE.test(t)) {
-      return {
-        status: "error",
-        message: `Tags can't contain emails or phone-like digit runs (got "${t}").`,
-      };
-    }
+  const tagResult = parseAndValidateTags(parsed.data.tagsRaw);
+  if (!tagResult.ok) {
+    const message =
+      tagResult.reason === "too-many"
+        ? "Up to 20 tags."
+        : tagResult.reason === "bad-shape"
+          ? `Tag "${tagResult.offending}" must be 1–32 ASCII characters.`
+          : `Tags can't contain emails or phone-like digit runs (got "${tagResult.offending}").`;
+    return { status: "error", message };
   }
 
-  const tags = Array.from(new Set(rawTags));
   const notes = parsed.data.notes.trim() === "" ? null : parsed.data.notes;
 
   const r = await updateGuestProfile({
     organisationId: orgId,
     actorUserId: userId,
     guestId: parsed.data.guestId,
-    tags,
+    tags: tagResult.tags,
     notes,
   });
   if (!r.ok) {
-    return { status: "error", message: r.reason === "not-found" ? "Guest not found." : "Save failed." };
+    return {
+      status: "error",
+      message: r.reason === "not-found" ? "Guest not found." : "Save failed.",
+    };
   }
 
   revalidatePath(`/dashboard/guests/${parsed.data.guestId}`);

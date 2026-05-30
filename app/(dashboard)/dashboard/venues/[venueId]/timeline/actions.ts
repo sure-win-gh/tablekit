@@ -150,9 +150,7 @@ export async function updateDetailsFromTimeline(raw: unknown): Promise<UpdateDet
     ...(parsed.data.notes !== undefined ? { notes: parsed.data.notes } : {}),
     ...(parsed.data.partySize !== undefined ? { partySize: parsed.data.partySize } : {}),
     ...(parsed.data.highChairs !== undefined ? { highChairs: parsed.data.highChairs } : {}),
-    ...(parsed.data.dietaryNotes !== undefined
-      ? { dietaryNotes: parsed.data.dietaryNotes }
-      : {}),
+    ...(parsed.data.dietaryNotes !== undefined ? { dietaryNotes: parsed.data.dietaryNotes } : {}),
   });
   if (!r.ok) {
     if (r.reason === "invalid-input") {

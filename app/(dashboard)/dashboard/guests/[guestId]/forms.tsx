@@ -272,7 +272,9 @@ export function EditProfileCard({
   return (
     <div className="rounded-card border-hairline bg-white p-4">
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-ash text-sm font-semibold tracking-wider uppercase">Tags & sticky notes</h2>
+        <h2 className="text-ash text-sm font-semibold tracking-wider uppercase">
+          Tags & sticky notes
+        </h2>
         {canEdit && !erased && !editing ? (
           <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
             Edit
@@ -336,9 +338,7 @@ export function EditProfileCard({
               {pending ? "Saving…" : "Save profile"}
             </Button>
           </div>
-          {state.status === "error" ? (
-            <p className="text-rose text-xs">{state.message}</p>
-          ) : null}
+          {state.status === "error" ? <p className="text-rose text-xs">{state.message}</p> : null}
           {state.status === "saved" ? <p className="text-xs text-emerald-700">Saved.</p> : null}
         </form>
       ) : (

@@ -143,14 +143,18 @@ function BookingCard({
       ) : null}
       {booking.guestNotes ? (
         <p className="text-charcoal mt-3 text-xs whitespace-pre-wrap">
-          <span className="text-ash text-[10px] font-semibold tracking-wider uppercase">Allergy / dietary</span>
+          <span className="text-ash text-[10px] font-semibold tracking-wider uppercase">
+            Allergy / dietary
+          </span>
           <br />
           {booking.guestNotes}
         </p>
       ) : null}
       {booking.dietaryNotes ? (
         <p className="text-charcoal mt-3 text-xs whitespace-pre-wrap">
-          <span className="text-ash text-[10px] font-semibold tracking-wider uppercase">Dietary (this visit)</span>
+          <span className="text-ash text-[10px] font-semibold tracking-wider uppercase">
+            Dietary (this visit)
+          </span>
           <br />
           {booking.dietaryNotes}
         </p>

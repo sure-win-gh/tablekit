@@ -326,7 +326,9 @@ function BookingDetailDialogBody({ venueId, date, booking, allVenueTables, onClo
           <span className="font-mono tabular-nums">
             {booking.partySize}
             {booking.highChairs > 0 ? (
-              <span className="text-ash ml-1 text-xs">· {booking.highChairs} highchair{booking.highChairs > 1 ? "s" : ""}</span>
+              <span className="text-ash ml-1 text-xs">
+                · {booking.highChairs} highchair{booking.highChairs > 1 ? "s" : ""}
+              </span>
             ) : null}
           </span>
         </DetailRow>

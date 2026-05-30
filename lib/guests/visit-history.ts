@@ -60,10 +60,7 @@ export async function getPriorRealisedVisitsBatch(
     })
     .from(bookings)
     .where(
-      and(
-        inArray(bookings.guestId, guestIds),
-        inArray(bookings.status, [...REALISED_STATUSES]),
-      ),
+      and(inArray(bookings.guestId, guestIds), inArray(bookings.status, [...REALISED_STATUSES])),
     );
 
   const byGuest = new Map<string, Array<{ bookingId: string; startAt: Date }>>();

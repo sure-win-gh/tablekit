@@ -16,7 +16,7 @@ import "server-only";
 
 import { and, eq, isNull, sql } from "drizzle-orm";
 
-import { dsarRequests, guests, reviews } from "@/lib/db/schema";
+import { bookings, dsarRequests, guests, reviews } from "@/lib/db/schema";
 import { encryptPii } from "@/lib/security/crypto";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
@@ -88,6 +88,11 @@ export async function runErasureScrub(input: RunErasureScrubInput): Promise<RunE
           lastNameCipher: emptyCipher,
           emailCipher: emptyCipher,
           phoneCipher: sql`NULL`,
+          // Sticky allergy / accessibility notes are special-category
+          // data (UK GDPR Art. 9). Tags + sticky notes are scrubbed
+          // alongside the contact ciphers on erasure.
+          tags: sql`ARRAY[]::text[]`,
+          notesCipher: sql`NULL`,
           erasedAt: sql`now()`,
           updatedAt: sql`now()`,
         })
@@ -97,6 +102,16 @@ export async function runErasureScrub(input: RunErasureScrubInput): Promise<RunE
             eq(guests.organisationId, dsar.organisationId),
             isNull(guests.erasedAt),
           ),
+        );
+
+      // Per-visit dietary notes on this guest's bookings are also
+      // Art. 9 data. Null the cipher column; the booking row itself
+      // is retained for 7 years (UK accounting).
+      await tx
+        .update(bookings)
+        .set({ dietaryNotesCipher: sql`NULL` })
+        .where(
+          and(eq(bookings.guestId, dsar.guestId), eq(bookings.organisationId, dsar.organisationId)),
         );
 
       const updated = await tx
