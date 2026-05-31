@@ -2,22 +2,13 @@
 
 import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { BookingDetailDialog } from "@/components/bookings/booking-detail-dialog";
 import { GuestBadges } from "@/components/bookings/guest-badges";
-import { Badge, Button, IconButton, Input, Select, cn } from "@/components/ui";
+import { Badge, Button, IconButton, Input, cn } from "@/components/ui";
 import type { GuestEnrichment, VenueTableForDetail } from "@/lib/bookings/detail";
 import { BOOKING_STATUSES, type BookingStatus } from "@/lib/bookings/state";
-
-import {
-  reassignTableAction,
-  refundBookingAction,
-  transitionBookingAction,
-  type ReassignTableActionState,
-  type RefundActionState,
-  type TransitionActionState,
-} from "./actions";
 
 const STATUS_LABEL: Record<BookingStatus, string> = {
   requested: "Requested",
@@ -44,15 +35,6 @@ const STATUS_TONE: Record<
   no_show: "danger",
 };
 
-const ACTION_LABEL: Record<BookingStatus, string> = {
-  requested: "Request",
-  confirmed: "Confirm",
-  seated: "Seat",
-  finished: "Finish",
-  cancelled: "Cancel",
-  no_show: "No-show",
-};
-
 type BookingRowProps = {
   venueId: string;
   date: string;
@@ -62,7 +44,6 @@ type BookingRowProps = {
   durationMinutes: number;
   partySize: number;
   status: BookingStatus;
-  actions: BookingStatus[];
   guestId: string;
   guestFirstName: string;
   notes: string | null;
@@ -72,7 +53,6 @@ type BookingRowProps = {
   cardHold: boolean;
   noShowOutcome: "captured" | "failed" | null;
   assignedTables: Array<{ id: string; label: string; areaName: string }>;
-  moveTargets: Array<{ id: string; label: string; areaName: string }>;
   allVenueTables: VenueTableForDetail[];
   enrichment: GuestEnrichment;
 };
@@ -86,7 +66,6 @@ export function BookingRow({
   durationMinutes,
   partySize,
   status,
-  actions,
   guestId,
   guestFirstName,
   notes,
@@ -96,15 +75,23 @@ export function BookingRow({
   cardHold,
   noShowOutcome,
   assignedTables,
-  moveTargets,
   allVenueTables,
   enrichment,
 }: BookingRowProps) {
   const [detailOpen, setDetailOpen] = useState(false);
   const primaryTable = assignedTables[0];
+  const noTable = assignedTables.length === 0;
 
   return (
-    <li className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <li
+      className={cn(
+        "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between",
+        // Highlight bookings with no table so operators can spot them at
+        // a glance. The status badge still tells them why (usually
+        // cancelled — the DB frees tables on cancel).
+        noTable && "bg-amber-50",
+      )}
+    >
       <div className="flex items-center gap-4">
         <div className="text-ink w-24 font-mono text-sm tabular-nums">
           {wallStart}
@@ -115,45 +102,27 @@ export function BookingRow({
           <span className="text-ink text-sm font-semibold">
             {guestFirstName} · party of {partySize}
           </span>
-          <span className="text-ash text-xs">
-            {assignedTables.length === 0
-              ? "No table"
-              : assignedTables.map((t) => `${t.areaName} · ${t.label}`).join(", ")}
-            {notes ? ` · ${notes}` : ""}
-          </span>
+          {noTable ? (
+            notes ? (
+              <span className="text-ash text-xs">{notes}</span>
+            ) : null
+          ) : (
+            <span className="text-ash text-xs">
+              {assignedTables.map((t) => `${t.areaName} · ${t.label}`).join(", ")}
+              {notes ? ` · ${notes}` : ""}
+            </span>
+          )}
           <GuestBadges {...enrichment} density="row" />
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</Badge>
-        {assignedTables.length === 1 && moveTargets.length > 0 ? (
-          <MoveTableControl
-            venueId={venueId}
-            bookingId={bookingId}
-            fromTableId={assignedTables[0]!.id}
-            targets={moveTargets}
-          />
-        ) : null}
-        {cardHold && !noShowOutcome ? <Badge tone="info">Card on file</Badge> : null}
-        {noShowOutcome === "captured" ? <Badge tone="success">No-show charged</Badge> : null}
-        {noShowOutcome === "failed" ? <Badge tone="danger">Capture failed</Badge> : null}
-        {actions.map((to) => (
-          <TransitionButton
-            key={to}
-            venueId={venueId}
-            bookingId={bookingId}
-            to={to}
-            label={ACTION_LABEL[to]}
-          />
-        ))}
-        {refundable ? <RefundButton venueId={venueId} bookingId={bookingId} /> : null}
-        {primaryTable ? (
-          <Button variant="ghost" size="sm" onClick={() => setDetailOpen(true)}>
-            Details
-          </Button>
-        ) : null}
+        {noTable ? <Badge tone="warning">No table</Badge> : null}
+        <Button variant="primary" size="sm" onClick={() => setDetailOpen(true)}>
+          View Booking
+        </Button>
       </div>
-      {detailOpen && primaryTable ? (
+      {detailOpen ? (
         <BookingDetailDialog
           venueId={venueId}
           date={date}
@@ -170,8 +139,8 @@ export function BookingRow({
             partySize,
             notes,
             serviceName,
-            tableId: primaryTable.id,
-            tableLabel: primaryTable.label,
+            tableId: primaryTable?.id ?? null,
+            tableLabel: primaryTable?.label ?? null,
             areaId,
             refundable,
             cardHold,
@@ -181,51 +150,6 @@ export function BookingRow({
         />
       ) : null}
     </li>
-  );
-}
-
-function TransitionButton({
-  venueId,
-  bookingId,
-  to,
-  label,
-}: {
-  venueId: string;
-  bookingId: string;
-  to: BookingStatus;
-  label: string;
-}) {
-  const [state, formAction, pending] = useActionState<TransitionActionState, FormData>(
-    transitionBookingAction,
-    { status: "idle" },
-  );
-  const [reason, setReason] = useState("");
-  const needsReason = to === "cancelled";
-  // Cancel is the only "destructive" transition; the rest are
-  // forward-flow and use the safe secondary look.
-  const variant = to === "cancelled" ? "destructive" : "secondary";
-
-  return (
-    <form action={formAction} className="flex items-center gap-1.5">
-      <input type="hidden" name="venueId" value={venueId} />
-      <input type="hidden" name="bookingId" value={bookingId} />
-      <input type="hidden" name="to" value={to} />
-      {needsReason ? (
-        <Input
-          type="text"
-          name="cancelledReason"
-          placeholder="Reason (optional)"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          size="sm"
-          className="w-40"
-        />
-      ) : null}
-      <Button type="submit" variant={variant} size="sm" disabled={pending}>
-        {pending ? "…" : label}
-      </Button>
-      {state.status === "error" ? <span className="text-rose text-xs">{state.message}</span> : null}
-    </form>
   );
 }
 
@@ -362,115 +286,5 @@ export function BookingsFilters({
         </Button>
       ) : null}
     </div>
-  );
-}
-
-// Refund button. Inline reason capture (server enforces ≥3 chars).
-// Two-step: click "Refund" to expand the reason input; click "Confirm
-// refund" to submit. Avoids the full-modal pattern for an MVP UI while
-// preventing one-click accidents. Shows the refund id on success and
-// the (already-truncated) Stripe message on failure.
-function RefundButton({ venueId, bookingId }: { venueId: string; bookingId: string }) {
-  const [state, formAction, pending] = useActionState<RefundActionState, FormData>(
-    refundBookingAction,
-    { status: "idle" },
-  );
-  const [armed, setArmed] = useState(false);
-  const [reason, setReason] = useState("");
-
-  if (state.status === "done") {
-    return <Badge tone="success">Refunded · {state.refundId}</Badge>;
-  }
-
-  if (!armed) {
-    return (
-      <Button variant="destructive" size="sm" onClick={() => setArmed(true)}>
-        Refund
-      </Button>
-    );
-  }
-
-  return (
-    <form action={formAction} className="flex flex-wrap items-center gap-1.5">
-      <input type="hidden" name="venueId" value={venueId} />
-      <input type="hidden" name="bookingId" value={bookingId} />
-      <Input
-        type="text"
-        name="reason"
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-        placeholder="Reason (≥ 3 chars)"
-        minLength={3}
-        maxLength={200}
-        required
-        size="sm"
-        className="w-48"
-      />
-      <Button
-        type="submit"
-        variant="destructive"
-        size="sm"
-        disabled={pending || reason.trim().length < 3}
-      >
-        {pending ? "Refunding…" : "Confirm refund"}
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => {
-          setArmed(false);
-          setReason("");
-        }}
-      >
-        Cancel
-      </Button>
-      {state.status === "error" ? <span className="text-rose text-xs">{state.message}</span> : null}
-    </form>
-  );
-}
-
-// Move-table control. Two-step interaction: dropdown picks the target;
-// submitting the form fires reassignTableAction. Same-area only — the
-// enforce_booking_tables_denorm trigger rejects cross-area moves and
-// the action returns 'wrong-area' if the host somehow forces it.
-function MoveTableControl({
-  venueId,
-  bookingId,
-  fromTableId,
-  targets,
-}: {
-  venueId: string;
-  bookingId: string;
-  fromTableId: string;
-  targets: Array<{ id: string; label: string; areaName: string }>;
-}) {
-  const [state, action, pending] = useActionState<ReassignTableActionState, FormData>(
-    reassignTableAction,
-    { status: "idle" },
-  );
-  const [toTableId, setToTableId] = useState("");
-  return (
-    <form action={action} className="flex items-center gap-1.5">
-      <input type="hidden" name="venueId" value={venueId} />
-      <input type="hidden" name="bookingId" value={bookingId} />
-      <input type="hidden" name="fromTableId" value={fromTableId} />
-      <Select
-        name="toTableId"
-        value={toTableId}
-        onChange={(e) => setToTableId(e.target.value)}
-        size="sm"
-      >
-        <option value="">Move to…</option>
-        {targets.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.areaName} · {t.label}
-          </option>
-        ))}
-      </Select>
-      <Button type="submit" variant="secondary" size="sm" disabled={pending || !toTableId}>
-        {pending ? "…" : "Move"}
-      </Button>
-      {state.status === "error" ? <span className="text-rose text-xs">{state.message}</span> : null}
-    </form>
   );
 }

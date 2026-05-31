@@ -3,17 +3,19 @@ import { Plus } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { DayOverview } from "@/components/bookings/day-overview";
 import { Button } from "@/components/ui";
 import { requireRole } from "@/lib/auth/require-role";
 import { enrichBookingsForDisplay } from "@/lib/bookings/enriched-detail";
 import { classifySearchInput, parseStatusFilter } from "@/lib/bookings/list-filters";
+import { bumpAgg, emptyAgg, type OverviewAgg, type OverviewSegment } from "@/lib/bookings/overview";
 import {
   formatVenueDateLong,
   formatVenueTime,
   todayInZone,
   venueLocalDayRange,
 } from "@/lib/bookings/time";
-import { nextActions, type BookingStatus } from "@/lib/bookings/state";
+import { type BookingStatus } from "@/lib/bookings/state";
 import { withUser } from "@/lib/db/client";
 import {
   areas,
@@ -239,6 +241,29 @@ export default async function BookingsPage({
     byService.set(r.serviceName, list);
   }
 
+  // Day-overview aggregates for the side card. Computed from the loaded
+  // rows in one pass, so they respect any active filter — the card
+  // labels itself "Filtered" when that's the case. We build an "All"
+  // segment plus one per service so the card can toggle between them.
+  // Covers exclude cancelled / no-show since those seats aren't filled.
+  const allAgg = emptyAgg();
+  const perService = new Map<string, OverviewAgg>();
+  for (const r of rows) {
+    const s = r.status as BookingStatus;
+    const noTable = (tablesByBooking.get(r.id)?.length ?? 0) === 0;
+    bumpAgg(allAgg, s, r.partySize, noTable);
+    let svc = perService.get(r.serviceName);
+    if (!svc) {
+      svc = emptyAgg();
+      perService.set(r.serviceName, svc);
+    }
+    bumpAgg(svc, s, r.partySize, noTable);
+  }
+  const overviewSegments: OverviewSegment[] = [
+    { key: "all", label: "All", ...allAgg },
+    ...[...perService.entries()].map(([name, agg]) => ({ key: name, label: name, ...agg })),
+  ];
+
   return (
     <section className="flex flex-col gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -272,69 +297,69 @@ export default async function BookingsPage({
         activeStatuses={statusFilter}
       />
 
-      {rows.length === 0 ? (
-        <p className="rounded-card border-hairline text-ash border border-dashed p-8 text-center text-sm">
-          {filtersActive
-            ? "No bookings match these filters. Try clearing the search or status chips."
-            : "Nothing on the books for this day. Click “New booking” to add one."}
-        </p>
-      ) : (
-        <div className="flex flex-col gap-6">
-          {[...byService.entries()].map(([svc, list]) => (
-            <div key={svc}>
-              <h3 className="text-ink text-sm font-semibold tracking-tight">{svc}</h3>
-              <ul className="divide-hairline rounded-card border-hairline mt-2 divide-y border bg-white">
-                {list.map((b) => {
-                  const assignedTables = tablesByBooking.get(b.id) ?? [];
-                  // Move-target candidates: same area, capacity ≥ party,
-                  // not already assigned to this booking.
-                  const assignedIds = new Set(assignedTables.map((t) => t.id));
-                  const moveTargets = allVenueTables.filter(
-                    (t) =>
-                      t.areaId === b.areaId && t.maxCover >= b.partySize && !assignedIds.has(t.id),
-                  );
-                  const durationMinutes = Math.round(
-                    (b.endAt.getTime() - b.startAt.getTime()) / 60000,
-                  );
-                  const enrichment = enrichmentMap.get(b.id) ?? {
-                    guestTags: b.guestTags,
-                    guestNotes: null,
-                    dietaryNotes: null,
-                    highChairs: b.highChairs,
-                    priorVisits: 0,
-                  };
-                  return (
-                    <BookingRow
-                      key={b.id}
-                      venueId={venueId}
-                      date={date}
-                      bookingId={b.id}
-                      wallStart={formatVenueTime(b.startAt, { timezone: venue.timezone })}
-                      wallEnd={formatVenueTime(b.endAt, { timezone: venue.timezone })}
-                      durationMinutes={durationMinutes}
-                      partySize={b.partySize}
-                      status={b.status as BookingStatus}
-                      actions={nextActions(b.status as BookingStatus)}
-                      guestId={b.guestId}
-                      guestFirstName={b.guestFirstName}
-                      notes={b.notes}
-                      serviceName={b.serviceName}
-                      areaId={b.areaId}
-                      refundable={refundableSet.has(b.id)}
-                      cardHold={cardHoldSet.has(b.id)}
-                      noShowOutcome={noShowOutcomes.get(b.id) ?? null}
-                      assignedTables={assignedTables}
-                      moveTargets={moveTargets}
-                      allVenueTables={allVenueTables}
-                      enrichment={enrichment}
-                    />
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* On desktop the list narrows into the left column and the day
+          overview sits beside it; on mobile the list stays full-width
+          and the card is hidden. */}
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+        {rows.length === 0 ? (
+          <p className="rounded-card border-hairline text-ash border border-dashed p-8 text-center text-sm">
+            {filtersActive
+              ? "No bookings match these filters. Try clearing the search or status chips."
+              : "Nothing on the books for this day. Click “New booking” to add one."}
+          </p>
+        ) : (
+          <div className="flex flex-col gap-6">
+            {[...byService.entries()].map(([svc, list]) => (
+              <div key={svc}>
+                <h3 className="text-ink text-sm font-semibold tracking-tight">{svc}</h3>
+                <ul className="divide-hairline rounded-card border-hairline mt-2 divide-y border bg-white">
+                  {list.map((b) => {
+                    const assignedTables = tablesByBooking.get(b.id) ?? [];
+                    const durationMinutes = Math.round(
+                      (b.endAt.getTime() - b.startAt.getTime()) / 60000,
+                    );
+                    const enrichment = enrichmentMap.get(b.id) ?? {
+                      guestTags: b.guestTags,
+                      guestNotes: null,
+                      dietaryNotes: null,
+                      highChairs: b.highChairs,
+                      priorVisits: 0,
+                    };
+                    return (
+                      <BookingRow
+                        key={b.id}
+                        venueId={venueId}
+                        date={date}
+                        bookingId={b.id}
+                        wallStart={formatVenueTime(b.startAt, { timezone: venue.timezone })}
+                        wallEnd={formatVenueTime(b.endAt, { timezone: venue.timezone })}
+                        durationMinutes={durationMinutes}
+                        partySize={b.partySize}
+                        status={b.status as BookingStatus}
+                        guestId={b.guestId}
+                        guestFirstName={b.guestFirstName}
+                        notes={b.notes}
+                        serviceName={b.serviceName}
+                        areaId={b.areaId}
+                        refundable={refundableSet.has(b.id)}
+                        cardHold={cardHoldSet.has(b.id)}
+                        noShowOutcome={noShowOutcomes.get(b.id) ?? null}
+                        assignedTables={assignedTables}
+                        allVenueTables={allVenueTables}
+                        enrichment={enrichment}
+                      />
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <aside className="hidden lg:sticky lg:top-4 lg:block">
+          <DayOverview segments={overviewSegments} filtersActive={filtersActive} />
+        </aside>
+      </div>
     </section>
   );
 }
