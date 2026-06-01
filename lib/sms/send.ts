@@ -56,11 +56,15 @@ export async function sendSms(input: SendSmsInput): Promise<SendSmsResult> {
     // number, opt-out, regulatory). 30000–30999 are message delivery
     // failures, mostly retryable. Anything else: retry by default.
     const retryable = !(typeof code === "number" && code >= 21000 && code < 22000);
-    throw new SmsSendError(
-      err instanceof Error ? err.message : String(err),
-      "provider-error",
-      retryable,
-      { status, code, original: err },
-    );
+    // PII-safe: Twilio validation errors (e.g. 21211 "Invalid 'To' Phone
+    // Number") echo the recipient number verbatim in err.message, and
+    // that string is persisted to messages.error / campaign_sends.error.
+    // Carry only a bland code — mirrors lib/whatsapp/send.ts + the
+    // gdpr.md §"Outbound messaging SDK errors" rule. Don't attach the raw
+    // err to .cause (it can carry the request payload = the number).
+    throw new SmsSendError(`twilio:${code ?? "send-failed"}`, "provider-error", retryable, {
+      status,
+      code,
+    });
   }
 }
