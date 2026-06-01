@@ -14,6 +14,7 @@ function BookingCancelledEmail({ ctx }: { ctx: MessageBookingContext }) {
       preview={`Your booking at ${ctx.venueName} has been cancelled`}
       unsubscribeUrl={ctx.unsubscribeUrl}
       venueName={ctx.venueName}
+      branding={ctx.branding}
     >
       <P>Hi {ctx.guestFirstName},</P>
       <P>

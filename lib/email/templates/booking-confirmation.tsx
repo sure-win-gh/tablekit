@@ -10,6 +10,7 @@ function BookingConfirmationEmail({ ctx }: { ctx: MessageBookingContext }) {
       preview={`Booking confirmed for ${ctx.startAtLocal}`}
       unsubscribeUrl={ctx.unsubscribeUrl}
       venueName={ctx.venueName}
+      branding={ctx.branding}
     >
       <P>Hi {ctx.guestFirstName},</P>
       <P>

@@ -13,6 +13,7 @@ function BookingReviewRequestEmail({ ctx }: { ctx: MessageBookingContext }) {
       preview={`How was your visit to ${ctx.venueName}?`}
       unsubscribeUrl={ctx.unsubscribeUrl}
       venueName={ctx.venueName}
+      branding={ctx.branding}
     >
       <P>Hi {ctx.guestFirstName},</P>
       <P>Thanks again for visiting {ctx.venueName}. We&apos;d love a quick word on how it went.</P>
