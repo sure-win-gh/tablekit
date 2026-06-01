@@ -21,10 +21,12 @@ import { EmailSendError, sendEmail } from "@/lib/email/send";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 import { SmsSendError, sendSms } from "@/lib/sms/send";
+import { WhatsAppSendError, sendWhatsApp } from "@/lib/whatsapp/send";
 
 import { backoffMs, truncateError } from "./enqueue";
 import { loadMessageContext } from "./load-context";
-import { renderForChannel, type MessageChannel, type MessageTemplate } from "./registry";
+import { renderMessage } from "./render-message";
+import { type MessageChannel, type MessageTemplate } from "./registry";
 
 export type DispatchResult = {
   processed: number;
@@ -108,8 +110,8 @@ async function processOne(row: ClaimedRow, appUrl: string): Promise<ProcessOutco
     return markFailed(row, `load-context: ${ctxResult.reason}`);
   }
 
-  // Render.
-  const rendered = await renderForChannel(template, channel, ctxResult.ctx);
+  // Render (override-aware: uses the venue's content override when set).
+  const rendered = await renderMessage(template, channel, ctxResult.ctx, ctxResult.override);
   if (rendered.kind === "no-renderer") {
     return markFailed(row, `no-renderer: ${template}/${channel}`);
   }
@@ -123,15 +125,40 @@ async function processOne(row: ClaimedRow, appUrl: string): Promise<ProcessOutco
         html: rendered.rendered.html,
         text: rendered.rendered.text,
         unsubscribeUrl: ctxResult.ctx.unsubscribeUrl,
+        ...(ctxResult.ctx.branding?.replyTo ? { replyTo: ctxResult.ctx.branding.replyTo } : {}),
         idempotencyKey: `msg_${row.id}_v1`,
       });
       return markSent(row, r.providerId);
     }
-    const r = await sendSms({ to: ctxResult.recipient, body: rendered.rendered.body });
+    // Twilio (SMS + WhatsApp) status callbacks land on this URL and
+    // drive messages.status → delivered/bounced + the channel-specific
+    // invalid marker. Without it the delivery/invalidation path never
+    // fires.
+    const twilioStatusCallback = `${appUrl}/api/twilio/webhook`;
+    if (rendered.kind === "whatsapp") {
+      const r = await sendWhatsApp({
+        to: ctxResult.recipient,
+        body: rendered.rendered.body,
+        statusCallback: twilioStatusCallback,
+        ...(rendered.rendered.contentSid ? { contentSid: rendered.rendered.contentSid } : {}),
+        ...(rendered.rendered.contentVariables
+          ? { contentVariables: rendered.rendered.contentVariables }
+          : {}),
+      });
+      return markSent(row, r.providerId);
+    }
+    const r = await sendSms({
+      to: ctxResult.recipient,
+      body: rendered.rendered.body,
+      statusCallback: twilioStatusCallback,
+    });
     return markSent(row, r.providerId);
   } catch (err) {
     const retryable =
-      (err instanceof EmailSendError || err instanceof SmsSendError) && err.retryable;
+      (err instanceof EmailSendError ||
+        err instanceof SmsSendError ||
+        err instanceof WhatsAppSendError) &&
+      err.retryable;
     return retryable ? scheduleRetry(row, err) : markFailed(row, truncateError(err));
   }
 }

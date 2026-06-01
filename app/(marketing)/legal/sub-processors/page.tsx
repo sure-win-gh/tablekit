@@ -29,7 +29,19 @@ const ROWS: Row[] = [
   },
   { name: "Stripe", purpose: "Payments + Connect", region: "EU (Ireland)", dpa: "Signed" },
   { name: "Resend", purpose: "Transactional email", region: "EU", dpa: "Signed" },
-  { name: "Twilio", purpose: "SMS", region: "EU (Ireland)", dpa: "Signed" },
+  { name: "Twilio", purpose: "SMS + WhatsApp (BSP)", region: "EU (Ireland)", dpa: "Signed" },
+  {
+    name: "Meta Platforms (WhatsApp, via Twilio)",
+    purpose: "WhatsApp message delivery",
+    region: "Global (US) — non-EU; SCCs / UK IDTA in place",
+    dpa: "Signed",
+  },
+  {
+    name: "AWS (Bedrock)",
+    purpose: "AI enquiry parsing (Plus tier)",
+    region: "EU (Ireland)",
+    dpa: "Signed",
+  },
   { name: "Sentry", purpose: "Error tracking", region: "EU", dpa: "Signed" },
   {
     name: "Cloudflare",
@@ -39,7 +51,7 @@ const ROWS: Row[] = [
   },
 ];
 
-const LAST_UPDATED = "2026-04-26";
+const LAST_UPDATED = "2026-06-01";
 
 export default function SubProcessorsPage() {
   return (

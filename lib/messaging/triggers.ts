@@ -1,21 +1,28 @@
 // Inline triggers — called from booking-create / transition handlers /
-// payment webhooks immediately after a state change. Enqueues the
-// matching message rows and optionally drives the worker inline so
-// confirmations land in seconds rather than waiting for the next cron.
+// payment webhooks immediately after a state change. Resolves the
+// effective channel per the venue's messaging settings + the guest's
+// deliverability, enqueues the matching message row(s), and optionally
+// drives the worker inline so confirmations land in seconds rather than
+// waiting for the next cron.
 //
 // Each trigger is fire-and-forget at the call site: errors here must
-// not block the booking flow that drove them. Callers wrap in their
-// own try/catch + console.error if they want.
+// not block the booking flow that drove them.
 //
-// Channels per template are decided by templateChannels() in the
-// registry, so adding SMS to confirmation later is a one-line change
-// in the registry.
+// Channel + timing now come from venues.settings (Phase 2) via
+// parseMessagingSettings + resolveChannel, not hardcoded literals.
+// review_request keeps its dedicated settings keys + path.
 
 import "server-only";
 
 import { enqueueMessage } from "./enqueue";
 import { processNextBatch } from "./dispatch";
-import { templateChannels, type MessageTemplate } from "./registry";
+import { resolveChannel, type GuestChannelState } from "./resolve-channels";
+import {
+  FLOW_EVENT_TEMPLATE,
+  parseMessagingSettings,
+  type FlowEvent,
+  type MessagingSettings,
+} from "./venue-settings";
 
 export type TriggerInput = {
   organisationId: string;
@@ -23,101 +30,148 @@ export type TriggerInput = {
 };
 
 // Drive the worker for a small number of rows immediately after
-// enqueueing. Keeps confirmation emails sub-second on the happy path.
+// enqueueing. Keeps confirmation messages sub-second on the happy path.
 const INLINE_DRIVE_LIMIT = 5;
 
-async function enqueueAllChannels(
-  organisationId: string,
+type TriggerContext = {
+  organisationId: string;
+  venueId: string;
+  startAt: Date;
+  settings: MessagingSettings;
+  guest: GuestChannelState;
+};
+
+// Resolve the channel for an event and enqueue it (if any channel is
+// deliverable). Single channel per event — first deliverable in the
+// operator's preference order.
+async function enqueueEvent(
+  ctx: TriggerContext,
   bookingId: string,
-  template: MessageTemplate,
+  event: FlowEvent,
   scheduleAt?: Date,
 ): Promise<void> {
-  for (const channel of templateChannels(template)) {
-    await enqueueMessage({
-      organisationId,
-      bookingId,
-      template,
-      channel,
-      ...(scheduleAt ? { scheduleAt } : {}),
-    });
-  }
+  const channel = resolveChannel({
+    event,
+    venueId: ctx.venueId,
+    config: ctx.settings[event],
+    guest: ctx.guest,
+  });
+  if (!channel) return;
+  await enqueueMessage({
+    organisationId: ctx.organisationId,
+    bookingId,
+    template: FLOW_EVENT_TEMPLATE[event],
+    channel,
+    ...(scheduleAt ? { scheduleAt } : {}),
+  });
 }
 
 export async function onBookingConfirmed(input: TriggerInput): Promise<void> {
-  await enqueueAllChannels(input.organisationId, input.bookingId, "booking.confirmation");
-  // Schedule the 24h + 2h reminders here — much cheaper than the
-  // cron sweeper having to find which bookings still need them.
-  // Worker WHERE clause filters on next_attempt_at <= now() so these
-  // sit dormant until their time comes round.
-  // NOTE: requires the booking's start_at — we look it up via a
-  // tiny query rather than threading it through every caller.
-  await scheduleRemindersFor(input);
+  const ctx = await loadTriggerContext(input.bookingId);
+  if (!ctx) return;
+
+  await enqueueEvent(ctx, input.bookingId, "confirmation");
+
+  // Schedule the reminders here — cheaper than a cron sweeper hunting
+  // for bookings that still need them. The worker's WHERE filters on
+  // next_attempt_at <= now() so these sit dormant until due. Timing
+  // comes from the venue's settings (defaults 24h / 2h).
+  const now = Date.now();
+  const startMs = ctx.startAt.getTime();
+  const r24 = ctx.settings.reminder_24h.hoursBeforeStart ?? 24;
+  const r2 = ctx.settings.reminder_2h.hoursBeforeStart ?? 2;
+  const reminder24h = new Date(startMs - r24 * 60 * 60 * 1000);
+  const reminder2h = new Date(startMs - r2 * 60 * 60 * 1000);
+  // Don't enqueue retroactive reminders (booking made inside the
+  // window) — the worker would just fire them immediately, which isn't
+  // useful since the guest already has the confirmation.
+  if (reminder24h.getTime() > now) {
+    await enqueueEvent(ctx, input.bookingId, "reminder_24h", reminder24h);
+  }
+  if (reminder2h.getTime() > now) {
+    await enqueueEvent(ctx, input.bookingId, "reminder_2h", reminder2h);
+  }
+
   await driveWorker();
 }
 
 export async function onBookingCancelled(input: TriggerInput): Promise<void> {
-  await enqueueAllChannels(input.organisationId, input.bookingId, "booking.cancelled");
+  const ctx = await loadTriggerContext(input.bookingId);
+  if (!ctx) return;
+  await enqueueEvent(ctx, input.bookingId, "cancelled");
   await driveWorker();
 }
 
 export async function onBookingFinished(input: TriggerInput): Promise<void> {
-  // Thank-you fires 3h after `finished` so the guest is past dessert
-  // and out the door. The cron sweeper picks this up.
-  const at = new Date(Date.now() + 3 * 60 * 60 * 1000);
-  await enqueueAllChannels(input.organisationId, input.bookingId, "booking.thank_you", at);
-  // Review request fires later (default 24h post-finish) so it doesn't
-  // collide with the thank-you and so the guest has slept on the
-  // experience. Per-venue toggle + delay live in venues.settings.
-  const settings = await loadVenueReviewSettings(input.bookingId);
-  if (settings && settings.enabled) {
-    const reviewAt = new Date(Date.now() + settings.delayHours * 60 * 60 * 1000);
-    await enqueueAllChannels(
-      input.organisationId,
-      input.bookingId,
-      "booking.review_request",
-      reviewAt,
-    );
+  const ctx = await loadTriggerContext(input.bookingId);
+  if (!ctx) return;
+
+  // Thank-you fires after `finished` (default 3h) so the guest is past
+  // dessert and out the door. The cron sweeper picks this up.
+  const thankYouHours = ctx.settings.thank_you.hoursAfterFinish ?? 3;
+  const thankYouAt = new Date(Date.now() + thankYouHours * 60 * 60 * 1000);
+  await enqueueEvent(ctx, input.bookingId, "thank_you", thankYouAt);
+
+  // Review request keeps its dedicated settings keys + path. Email-only
+  // template; dispatch suppresses if the guest opted out of email.
+  const review = await loadVenueReviewSettings(input.bookingId);
+  if (review && review.enabled && !ctx.guest.erasedAt) {
+    const reviewAt = new Date(Date.now() + review.delayHours * 60 * 60 * 1000);
+    await enqueueMessage({
+      organisationId: ctx.organisationId,
+      bookingId: input.bookingId,
+      template: "booking.review_request",
+      channel: "email",
+      scheduleAt: reviewAt,
+    });
   }
   // Don't drive worker — neither message is due for hours.
 }
 
 // --- internals ---------------------------------------------------------------
 
-async function scheduleRemindersFor(input: TriggerInput): Promise<void> {
+async function loadTriggerContext(bookingId: string): Promise<TriggerContext | null> {
   const { adminDb } = await import("@/lib/server/admin/db");
-  const { bookings } = await import("@/lib/db/schema");
+  const { bookings, venues, guests } = await import("@/lib/db/schema");
   const { eq } = await import("drizzle-orm");
   const [row] = await adminDb()
-    .select({ startAt: bookings.startAt })
+    .select({
+      organisationId: bookings.organisationId,
+      startAt: bookings.startAt,
+      venueId: venues.id,
+      settings: venues.settings,
+      hasPhone: guests.phoneCipher,
+      erasedAt: guests.erasedAt,
+      emailInvalid: guests.emailInvalid,
+      phoneInvalid: guests.phoneInvalid,
+      whatsappInvalid: guests.whatsappInvalid,
+      emailUnsubscribedVenues: guests.emailUnsubscribedVenues,
+      smsUnsubscribedVenues: guests.smsUnsubscribedVenues,
+      whatsappUnsubscribedVenues: guests.whatsappUnsubscribedVenues,
+    })
     .from(bookings)
-    .where(eq(bookings.id, input.bookingId))
+    .innerJoin(venues, eq(venues.id, bookings.venueId))
+    .innerJoin(guests, eq(guests.id, bookings.guestId))
+    .where(eq(bookings.id, bookingId))
     .limit(1);
-  if (!row) return;
+  if (!row) return null;
 
-  const startMs = row.startAt.getTime();
-  const reminder24h = new Date(startMs - 24 * 60 * 60 * 1000);
-  const reminder2h = new Date(startMs - 2 * 60 * 60 * 1000);
-
-  // Don't enqueue retroactive reminders (booking was made within the
-  // window). The worker would just send them immediately, which isn't
-  // useful — guest already has the confirmation.
-  const now = Date.now();
-  if (reminder24h.getTime() > now) {
-    await enqueueAllChannels(
-      input.organisationId,
-      input.bookingId,
-      "booking.reminder_24h",
-      reminder24h,
-    );
-  }
-  if (reminder2h.getTime() > now) {
-    await enqueueAllChannels(
-      input.organisationId,
-      input.bookingId,
-      "booking.reminder_2h",
-      reminder2h,
-    );
-  }
+  return {
+    organisationId: row.organisationId,
+    venueId: row.venueId,
+    startAt: row.startAt,
+    settings: parseMessagingSettings(row.settings),
+    guest: {
+      hasPhone: row.hasPhone !== null,
+      erasedAt: row.erasedAt,
+      emailInvalid: row.emailInvalid,
+      phoneInvalid: row.phoneInvalid,
+      whatsappInvalid: row.whatsappInvalid,
+      emailUnsubscribedVenues: row.emailUnsubscribedVenues,
+      smsUnsubscribedVenues: row.smsUnsubscribedVenues,
+      whatsappUnsubscribedVenues: row.whatsappUnsubscribedVenues,
+    },
+  };
 }
 
 // Read the per-venue review-request settings from venues.settings JSONB

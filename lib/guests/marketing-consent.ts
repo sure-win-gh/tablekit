@@ -15,6 +15,10 @@ import { guests } from "@/lib/db/schema";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 
+// WhatsApp marketing consent (guests.marketing_consent_whatsapp_at) is
+// captured here in Phase 2 (operator settings + consent UI). The column
+// exists from the WhatsApp-channel migration but has no write path yet —
+// transactional WhatsApp rests on Art 6(1)(b), not this consent.
 export type MarketingChannel = "email" | "sms";
 
 export type SetMarketingConsentInput = {

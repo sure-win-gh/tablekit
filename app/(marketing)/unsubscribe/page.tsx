@@ -49,12 +49,16 @@ export default async function UnsubscribePage({
 
   // Append venue id to the appropriate array, idempotent — array_append
   // dedupes via array_position guard.
-  const column =
-    payload.channel === "email" ? guests.emailUnsubscribedVenues : guests.smsUnsubscribedVenues;
+  const columnByChannel = {
+    email: { col: guests.emailUnsubscribedVenues, key: "emailUnsubscribedVenues" },
+    sms: { col: guests.smsUnsubscribedVenues, key: "smsUnsubscribedVenues" },
+    whatsapp: { col: guests.whatsappUnsubscribedVenues, key: "whatsappUnsubscribedVenues" },
+  } as const;
+  const { col: column, key } = columnByChannel[payload.channel];
   await db
     .update(guests)
     .set({
-      [payload.channel === "email" ? "emailUnsubscribedVenues" : "smsUnsubscribedVenues"]: sql`(
+      [key]: sql`(
         case
           when ${payload.venueId}::uuid = any(${column}) then ${column}
           else array_append(${column}, ${payload.venueId}::uuid)
@@ -82,8 +86,10 @@ function Result({
 }: {
   kind: "ok" | "bad-link";
   venueName?: string;
-  channel?: "email" | "sms";
+  channel?: "email" | "sms" | "whatsapp";
 }) {
+  const channelLabel =
+    channel === "email" ? "emails" : channel === "whatsapp" ? "WhatsApp messages" : "SMS";
   return (
     <main className="mx-auto flex min-h-[60vh] w-full max-w-md flex-col items-center justify-center p-6">
       <div className="w-full rounded-md border border-neutral-200 bg-white p-6 text-center">
@@ -99,8 +105,8 @@ function Result({
           <>
             <h1 className="text-lg font-semibold text-neutral-900">Unsubscribed</h1>
             <p className="mt-2 text-sm text-neutral-600">
-              You won&apos;t receive any more {channel === "email" ? "emails" : "SMS"} from{" "}
-              {venueName}. Other venues you&apos;ve booked at are unaffected.
+              You won&apos;t receive any more {channelLabel} from {venueName}. Other venues
+              you&apos;ve booked at are unaffected.
             </p>
           </>
         )}

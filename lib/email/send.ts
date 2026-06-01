@@ -28,6 +28,9 @@ export type SendEmailInput = {
   // POST, and a mismatched header would let mailbox providers
   // downgrade sender reputation.
   oneClickUnsubscribe?: boolean;
+  // Optional per-venue reply-to (operator branding). When set, guest
+  // replies go to the venue's own address rather than the platform from.
+  replyTo?: string;
   // Forwarded to Resend so they can dedupe on retries.
   idempotencyKey: string;
 };
@@ -70,6 +73,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
         subject: input.subject,
         html: input.html,
         ...(input.text ? { text: input.text } : {}),
+        ...(input.replyTo ? { replyTo: input.replyTo } : {}),
         headers,
       },
       { idempotencyKey: input.idempotencyKey },

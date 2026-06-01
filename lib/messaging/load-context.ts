@@ -13,17 +13,19 @@
 
 import "server-only";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
-import { bookings, guests, reviews, services, venues } from "@/lib/db/schema";
+import { bookings, guests, messageTemplates, reviews, services, venues } from "@/lib/db/schema";
 import { decryptPii, type Ciphertext } from "@/lib/security/crypto";
 import { adminDb } from "@/lib/server/admin/db";
 import { formatVenueDateLong, formatVenueTime } from "@/lib/bookings/time";
 
 import type { MessageBookingContext } from "./context";
 import type { MessageChannel, MessageTemplate } from "./registry";
+import type { TemplateOverride } from "./render-message";
 import { reviewUrl } from "./review-tokens";
 import { unsubscribeUrl } from "./tokens";
+import { parseBranding } from "./venue-settings";
 
 export type LoadContextInput = {
   bookingId: string;
@@ -36,7 +38,7 @@ export type LoadContextInput = {
 };
 
 export type LoadContextResult =
-  | { ok: true; ctx: MessageBookingContext; recipient: string }
+  | { ok: true; ctx: MessageBookingContext; recipient: string; override: TemplateOverride | null }
   | {
       ok: false;
       reason:
@@ -62,14 +64,17 @@ export async function loadMessageContext(input: LoadContextInput): Promise<LoadC
       venueName: venues.name,
       venueLocale: venues.locale,
       venueTimezone: venues.timezone,
+      venueSettings: venues.settings,
       guestId: guests.id,
       guestFirstName: guests.firstName,
       guestEmailCipher: guests.emailCipher,
       guestPhoneCipher: guests.phoneCipher,
       guestEmailInvalid: guests.emailInvalid,
       guestPhoneInvalid: guests.phoneInvalid,
+      guestWhatsappInvalid: guests.whatsappInvalid,
       guestEmailUnsubVenues: guests.emailUnsubscribedVenues,
       guestSmsUnsubVenues: guests.smsUnsubscribedVenues,
+      guestWhatsappUnsubVenues: guests.whatsappUnsubscribedVenues,
       guestErasedAt: guests.erasedAt,
     })
     .from(bookings)
@@ -97,6 +102,16 @@ export async function loadMessageContext(input: LoadContextInput): Promise<LoadC
     if (row.guestEmailUnsubVenues.includes(row.venueId)) {
       return { ok: false, reason: "missing-recipient" };
     }
+  } else if (input.channel === "whatsapp") {
+    // WhatsApp shares the encrypted phone number but its own opt-out +
+    // hard-invalid marker (a number can be SMS-reachable but not on
+    // WhatsApp, and vice versa).
+    if (row.guestWhatsappInvalid || !row.guestPhoneCipher) {
+      return { ok: false, reason: "missing-recipient" };
+    }
+    if (row.guestWhatsappUnsubVenues.includes(row.venueId)) {
+      return { ok: false, reason: "missing-recipient" };
+    }
   } else {
     if (row.guestPhoneInvalid || !row.guestPhoneCipher) {
       return { ok: false, reason: "missing-recipient" };
@@ -108,6 +123,8 @@ export async function loadMessageContext(input: LoadContextInput): Promise<LoadC
 
   let recipient: string;
   try {
+    // Email decrypts the email cipher; SMS + WhatsApp both decrypt the
+    // phone cipher (WhatsApp reuses the booking phone number).
     recipient =
       input.channel === "email"
         ? await decryptPii(row.organisationId, row.guestEmailCipher as Ciphertext)
@@ -138,6 +155,7 @@ export async function loadMessageContext(input: LoadContextInput): Promise<LoadC
       channel: input.channel,
     }),
     reviewUrl: reviewUrl(input.appUrl, { bookingId: row.bookingId }),
+    branding: parseBranding(row.venueSettings),
   };
 
   // Per-template extra loads. Kept in load-context (rather than the
@@ -196,7 +214,26 @@ export async function loadMessageContext(input: LoadContextInput): Promise<LoadC
     }
   }
 
-  return { ok: true, ctx, recipient };
+  // Per-venue content override for this (template, channel), if any.
+  // Present → the render layer uses the operator's copy instead of the
+  // shipped default. Looked up here so the dispatch worker stays thin.
+  const [ov] = await db
+    .select({
+      subjectOverride: messageTemplates.subjectOverride,
+      bodyOverride: messageTemplates.bodyOverride,
+      enabled: messageTemplates.enabled,
+    })
+    .from(messageTemplates)
+    .where(
+      and(
+        eq(messageTemplates.venueId, row.venueId),
+        eq(messageTemplates.template, input.template),
+        eq(messageTemplates.channel, input.channel),
+      ),
+    )
+    .limit(1);
+
+  return { ok: true, ctx, recipient, override: ov ?? null };
 }
 
 // Short, human-friendly reference derived from the booking id. Matches

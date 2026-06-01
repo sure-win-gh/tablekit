@@ -439,11 +439,23 @@ export const guests = pgTable(
       .array()
       .notNull()
       .default(sql`ARRAY[]::uuid[]`),
+    // WhatsApp shares the encrypted phone_cipher number but tracks its
+    // own per-venue opt-out — a guest can be on email + SMS at a venue
+    // and still STOP its WhatsApp without affecting the others.
+    whatsappUnsubscribedVenues: uuid("whatsapp_unsubscribed_venues")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::uuid[]`),
     // Hard-invalid markers — set by Resend bounce / Twilio failure
     // webhooks. Once true, dispatch skips the channel for all venues
     // until manually cleared.
     emailInvalid: boolean("email_invalid").notNull().default(false),
     phoneInvalid: boolean("phone_invalid").notNull().default(false),
+    // Set by the Twilio WhatsApp status webhook on a permanent delivery
+    // failure (number not on WhatsApp, blocked, etc.). Distinct from
+    // phoneInvalid because a number can be SMS-reachable but not on
+    // WhatsApp, and vice versa.
+    whatsappInvalid: boolean("whatsapp_invalid").notNull().default(false),
     // Legacy single-channel consent. Kept alongside the per-channel
     // pair below for one release per the forward-only migration rule
     // — new writes mirror to it; the next migration drops it once
@@ -451,6 +463,7 @@ export const guests = pgTable(
     marketingConsentAt: timestamp("marketing_consent_at", { withTimezone: true }),
     marketingConsentEmailAt: timestamp("marketing_consent_email_at", { withTimezone: true }),
     marketingConsentSmsAt: timestamp("marketing_consent_sms_at", { withTimezone: true }),
+    marketingConsentWhatsappAt: timestamp("marketing_consent_whatsapp_at", { withTimezone: true }),
     // Operator-curated short labels for at-a-glance recognition on the
     // floor (VIP, allergy:nuts, loud-party, ...). Plaintext per
     // docs/specs/guests.md — operator-controlled, not guest PII. Length
@@ -951,7 +964,7 @@ export const messages = pgTable(
     bookingId: uuid("booking_id")
       .notNull()
       .references(() => bookings.id, { onDelete: "cascade" }),
-    // 'email' | 'sms' — constrained in the migration.
+    // 'email' | 'sms' | 'whatsapp' — constrained in the migration.
     channel: text("channel").notNull(),
     // 'booking.confirmation' | 'booking.reminder_24h' | 'booking.reminder_2h'
     // | 'booking.cancelled' | 'booking.thank_you' | 'booking.waitlist_ready'
@@ -983,6 +996,176 @@ export const messages = pgTable(
     index("messages_worker_idx")
       .on(t.nextAttemptAt)
       .where(sql`${t.status} in ('queued','sending')`),
+  ],
+);
+
+// =============================================================================
+// Message templates (per-venue content overrides — Phase 2)
+// =============================================================================
+//
+// Operator-authored copy overrides for lifecycle messages. When a row
+// exists for a (venue, template, channel) the dispatch render layer uses
+// it instead of the shipped default, interpolating a fixed merge-tag set
+// (lib/messaging/merge-tags.ts). The unsubscribe footer + STOP line are
+// always re-appended by the render layer and cannot be edited away.
+//
+// `body_override` / `subject_override` are OPERATOR copy, not guest PII —
+// plaintext, same posture as bookings.notes. Operators must not paste
+// guest contact details here (the editor warns). organisation_id is
+// synced from the parent venue by a before-insert trigger (messages
+// pattern); RLS scopes reads to org members.
+export const messageTemplates = pgTable(
+  "message_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Populated by enforce_message_templates_org_id from the parent venue.
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    // MessageTemplate value — constrained in the migration (shares the
+    // messages_template_check allow-list shape).
+    template: text("template").notNull(),
+    // 'email' | 'sms' | 'whatsapp' — constrained in the migration.
+    channel: text("channel").notNull(),
+    // Email-only; null for sms/whatsapp.
+    subjectOverride: text("subject_override"),
+    bodyOverride: text("body_override"),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("message_templates_venue_template_channel_unique").on(
+      t.venueId,
+      t.template,
+      t.channel,
+    ),
+    index("message_templates_org_idx").on(t.organisationId),
+    index("message_templates_venue_idx").on(t.venueId),
+  ],
+);
+
+// =============================================================================
+// Marketing campaigns (Phase 3 — Plus tier)
+// =============================================================================
+//
+// Guest-scoped broadcast, beside the booking-scoped `messages` queue.
+// `body` / `subject` are operator copy (merge tags), not guest PII —
+// same plaintext posture as bookings.notes / message_templates.
+// organisation_id synced from the parent venue by a before-insert
+// trigger; RLS scopes reads to org members.
+export const campaigns = pgTable(
+  "campaigns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    // 'email' | 'sms' | 'whatsapp' — constrained in the migration.
+    channel: text("channel").notNull(),
+    // 'draft' | 'scheduled' | 'sending' | 'sent' | 'cancelled'
+    status: text("status").notNull().default("draft"),
+    subjectOverride: text("subject_override"),
+    body: text("body").notNull(),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    // Rolling tallies {queued,sent,delivered,failed,opened,clicked} kept
+    // for the dashboard without a per-render aggregate query.
+    counts: jsonb("counts")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("campaigns_org_idx").on(t.organisationId),
+    index("campaigns_venue_idx").on(t.venueId),
+  ],
+);
+
+// One row per (campaign, guest, channel). Idempotent fan-out + the
+// worker work-list. Mirrors the `messages` row shape.
+export const campaignSends = pgTable(
+  "campaign_sends",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Populated by enforce_campaign_sends_org_id from the parent campaign.
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    guestId: uuid("guest_id")
+      .notNull()
+      .references(() => guests.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    channel: text("channel").notNull(),
+    // 'queued' | 'sending' | 'sent' | 'delivered' | 'bounced' | 'failed'
+    status: text("status").notNull().default("queued"),
+    providerId: text("provider_id"),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    openedAt: timestamp("opened_at", { withTimezone: true }),
+    clickedAt: timestamp("clicked_at", { withTimezone: true }),
+    error: text("error"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("campaign_sends_campaign_guest_channel_unique").on(
+      t.campaignId,
+      t.guestId,
+      t.channel,
+    ),
+    index("campaign_sends_campaign_idx").on(t.campaignId),
+    index("campaign_sends_org_idx").on(t.organisationId),
+    index("campaign_sends_provider_idx").on(t.providerId),
+    index("campaign_sends_worker_idx")
+      .on(t.nextAttemptAt)
+      .where(sql`${t.status} in ('queued','sending')`),
+  ],
+);
+
+// Monthly per-channel send tally for pass-through billing. First
+// usage-metering surface in the codebase — Stripe usage reporting is a
+// later phase; we record now. Non-PII aggregate counts only.
+export const messageUsage = pgTable(
+  "message_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    // 'yyyy-mm' billing period (UTC).
+    period: text("period").notNull(),
+    // 'email' | 'sms' | 'whatsapp'
+    channel: text("channel").notNull(),
+    count: integer("count").notNull().default(0),
+    estCostPence: integer("est_cost_pence").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("message_usage_org_period_channel_unique").on(
+      t.organisationId,
+      t.period,
+      t.channel,
+    ),
+    index("message_usage_org_idx").on(t.organisationId),
   ],
 );
 

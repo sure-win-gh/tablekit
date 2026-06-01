@@ -24,15 +24,44 @@ const ctx: MessageBookingContext = {
 };
 
 describe("templateChannels", () => {
-  it("registers expected channels per template", () => {
-    expect(templateChannels("booking.confirmation")).toEqual(["email"]);
-    expect(templateChannels("booking.reminder_24h")).toEqual(["email"]);
-    expect(templateChannels("booking.reminder_2h")).toEqual(["sms"]);
+  it("registers expected channels per template (raw render capability)", () => {
+    // WhatsApp renderers were added for the three lifecycle messages
+    // that make sense on the channel; this reflects raw capability, not
+    // what triggers actually enqueue (see resolve-channels).
+    expect(templateChannels("booking.confirmation")).toEqual(["email", "whatsapp"]);
+    expect(templateChannels("booking.reminder_24h")).toEqual(["email", "whatsapp"]);
+    expect(templateChannels("booking.reminder_2h")).toEqual(["sms", "whatsapp"]);
     expect(templateChannels("booking.cancelled")).toEqual(["email"]);
     expect(templateChannels("booking.thank_you")).toEqual(["email"]);
     expect(templateChannels("booking.waitlist_ready")).toEqual(["sms"]);
     expect(templateChannels("booking.review_request")).toEqual(["email"]);
     expect(templateChannels("review.recovery_offer")).toEqual(["email"]);
+  });
+});
+
+describe("renderForChannel — whatsapp", () => {
+  it("renders a freeform whatsapp body when no approved template SID is set", async () => {
+    delete process.env["TWILIO_WA_TEMPLATE_BOOKING_REMINDER_2H"];
+    const r = await renderForChannel("booking.reminder_2h", "whatsapp", ctx);
+    expect(r.kind).toBe("whatsapp");
+    if (r.kind !== "whatsapp") return;
+    expect(r.rendered.body).toContain("ABC-123");
+    expect(r.rendered.contentSid).toBeUndefined();
+  });
+
+  it("emits contentSid + variables when an approved template SID is configured", async () => {
+    process.env["TWILIO_WA_TEMPLATE_BOOKING_REMINDER_2H"] = "HX" + "a".repeat(32);
+    const r = await renderForChannel("booking.reminder_2h", "whatsapp", ctx);
+    expect(r.kind).toBe("whatsapp");
+    if (r.kind !== "whatsapp") return;
+    expect(r.rendered.contentSid).toMatch(/^HX/);
+    expect(r.rendered.contentVariables).toMatchObject({ "1": "Tablekit Café" });
+    delete process.env["TWILIO_WA_TEMPLATE_BOOKING_REMINDER_2H"];
+  });
+
+  it("returns no-renderer for a template without a whatsapp renderer", async () => {
+    const r = await renderForChannel("booking.cancelled", "whatsapp", ctx);
+    expect(r.kind).toBe("no-renderer");
   });
 });
 
