@@ -10,6 +10,7 @@ function BookingThankYouEmail({ ctx }: { ctx: MessageBookingContext }) {
       preview={`Thanks for visiting ${ctx.venueName}`}
       unsubscribeUrl={ctx.unsubscribeUrl}
       venueName={ctx.venueName}
+      branding={ctx.branding}
     >
       <P>Hi {ctx.guestFirstName},</P>
       <P>Thanks for joining us at {ctx.venueName} earlier today.</P>

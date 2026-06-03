@@ -30,7 +30,13 @@ function decodePayload(encoded: string): UnsubscribePayload | null {
   try {
     const decoded = Buffer.from(encoded, "base64url").toString("utf8");
     const [guestId, venueId, channel] = decoded.split(".");
-    if (!guestId || !venueId || (channel !== "email" && channel !== "sms")) return null;
+    if (
+      !guestId ||
+      !venueId ||
+      (channel !== "email" && channel !== "sms" && channel !== "whatsapp")
+    ) {
+      return null;
+    }
     return { guestId, venueId, channel };
   } catch {
     return null;

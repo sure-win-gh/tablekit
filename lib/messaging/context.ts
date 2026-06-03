@@ -38,6 +38,18 @@ export type MessageBookingContext = {
   // operatorReplyText but lives in reviews.recovery_message_cipher.
   // Populated only for the `review.recovery_offer` template.
   recoveryMessageText?: string | null;
+  // Per-venue branding (Phase 2). Loaded from venues.settings.branding;
+  // undefined falls back to the shipped neutral layout. Applies to email
+  // only — SMS/WhatsApp stay plain. Explicit `| undefined` so it can be
+  // assigned the parser's result under exactOptionalPropertyTypes.
+  branding?: VenueBranding | undefined;
+};
+
+export type VenueBranding = {
+  logoUrl?: string | null;
+  brandColour?: string | null; // hex, e.g. "#c2410c"
+  signature?: string | null; // operator sign-off line(s)
+  replyTo?: string | null;
 };
 
 export type RenderedEmail = {
@@ -48,4 +60,15 @@ export type RenderedEmail = {
 
 export type RenderedSms = {
   body: string;
+};
+
+// WhatsApp renders like SMS (plain body for the session-window path)
+// but may also carry an approved-template reference for the
+// business-initiated path. The dispatch layer prefers contentSid when
+// present; `body` is the freeform/session fallback and the value we
+// log-render in previews.
+export type RenderedWhatsApp = {
+  body: string;
+  contentSid?: string;
+  contentVariables?: Record<string, string>;
 };

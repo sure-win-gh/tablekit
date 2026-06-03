@@ -10,6 +10,7 @@ function BookingReminder24hEmail({ ctx }: { ctx: MessageBookingContext }) {
       preview={`Reminder: tomorrow at ${ctx.venueName}`}
       unsubscribeUrl={ctx.unsubscribeUrl}
       venueName={ctx.venueName}
+      branding={ctx.branding}
     >
       <P>Hi {ctx.guestFirstName},</P>
       <P>

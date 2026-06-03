@@ -6,7 +6,10 @@ import { requirePlatformAdmin } from "@/lib/server/admin/auth";
 import { adminDb } from "@/lib/server/admin/db";
 import { platformAudit } from "@/lib/server/admin/dashboard/audit";
 import { getBookingCounts, getBookingsByDay } from "@/lib/server/admin/dashboard/metrics/bookings";
-import { getMessageVolume7d } from "@/lib/server/admin/dashboard/metrics/messages";
+import {
+  getMessageVolume7d,
+  getPlatformUsageThisMonth,
+} from "@/lib/server/admin/dashboard/metrics/messages";
 import { getSignupCounts, getSignupsByDay } from "@/lib/server/admin/dashboard/metrics/signups";
 
 export const dynamic = "force-dynamic";
@@ -16,13 +19,15 @@ export default async function AdminOverviewPage() {
   await platformAudit.log({ actorEmail: session.email, action: "login" });
 
   const db = adminDb();
-  const [signups, signupsByDay, bookings, bookingsByDay, messages] = await Promise.all([
+  const [signups, signupsByDay, bookings, bookingsByDay, messages, usage] = await Promise.all([
     getSignupCounts(db),
     getSignupsByDay(db, 30),
     getBookingCounts(db),
     getBookingsByDay(db, 30),
     getMessageVolume7d(db),
+    getPlatformUsageThisMonth(db),
   ]);
+  const usageTotalPence = usage.reduce((s, r) => s + r.costPence, 0);
 
   return (
     <div className="flex max-w-6xl flex-col gap-6">
@@ -93,6 +98,42 @@ export default async function AdminOverviewPage() {
                   <td className="text-ink py-1.5 text-right tabular-nums">{row.count}</td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        )}
+      </Section>
+
+      <Section title="Messaging usage — this month (pass-through)">
+        {usage.length === 0 ? (
+          <Empty message="No metered sends this month." />
+        ) : (
+          <table className="w-full text-xs">
+            <thead className="text-ash text-left">
+              <tr>
+                <th className="py-1 font-medium">Channel</th>
+                <th className="py-1 text-right font-medium">Sends</th>
+                <th className="py-1 text-right font-medium">Est. cost</th>
+              </tr>
+            </thead>
+            <tbody className="divide-hairline divide-y">
+              {usage.map((row) => (
+                <tr key={row.channel}>
+                  <td className="text-ink py-1.5">{row.channel}</td>
+                  <td className="text-ink py-1.5 text-right tabular-nums">{row.count}</td>
+                  <td className="text-ink py-1.5 text-right tabular-nums">
+                    £{(row.costPence / 100).toFixed(2)}
+                  </td>
+                </tr>
+              ))}
+              <tr className="font-semibold">
+                <td className="text-ink py-1.5">Total</td>
+                <td className="text-ink py-1.5 text-right tabular-nums">
+                  {usage.reduce((s, r) => s + r.count, 0)}
+                </td>
+                <td className="text-ink py-1.5 text-right tabular-nums">
+                  £{(usageTotalPence / 100).toFixed(2)}
+                </td>
+              </tr>
             </tbody>
           </table>
         )}

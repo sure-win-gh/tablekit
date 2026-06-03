@@ -54,5 +54,6 @@ create table messages (
 
 ## Out of scope
 
-- Marketing / broadcast email (Plus tier, later).
-- WhatsApp (expensive, revisit year 2).
+- Marketing / broadcast email (Plus tier, later) — see `marketing-campaigns.md` (planned).
+- WhatsApp — now delivered as a third channel in `whatsapp.md`.
+- Operator content/flow customisation — now delivered in `message-customisation.md`.

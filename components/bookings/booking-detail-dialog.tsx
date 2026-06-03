@@ -97,7 +97,9 @@ export function BookingDetailDialog(props: Props) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="rounded-card border-hairline shadow-panel w-full max-w-md border bg-white"
+        // Desktop gets a roomier modal (≈50% wider than the mobile
+        // max-w-md). Mobile stays full-width within the p-4 inset.
+        className="rounded-card border-hairline shadow-panel w-full max-w-md border bg-white md:max-w-2xl"
       >
         <BookingDetailDialogBody key={props.booking.id} {...props} />
       </div>
@@ -224,13 +226,14 @@ function BookingDetailDialogBody({ venueId, date, booking, allVenueTables, onClo
   }
 
   function onConfirmReassign() {
-    if (!reassignTo) return;
+    const fromTableId = booking.tableId;
+    if (!reassignTo || !fromTableId) return;
     setError(null);
     startTransition(async () => {
       const r = await reassignFromTimeline({
         venueId,
         bookingId: booking.id,
-        fromTableId: booking.tableId,
+        fromTableId,
         toTableId: reassignTo,
       });
       if (!r.ok) {
@@ -273,7 +276,8 @@ function BookingDetailDialogBody({ venueId, date, booking, allVenueTables, onClo
             </Link>
           </h3>
           <p className="text-ash mt-0.5 text-xs">
-            {booking.wallStart}–{booking.wallEnd} · {booking.tableLabel} · {booking.serviceName}
+            {booking.wallStart}–{booking.wallEnd} · {booking.tableLabel ?? "No table"} ·{" "}
+            {booking.serviceName}
           </p>
           <GuestBadges
             guestTags={booking.guestTags}
@@ -657,7 +661,7 @@ function BookingDetailDialogBody({ venueId, date, booking, allVenueTables, onClo
                 Edit details
               </Button>
             ) : null}
-            {editable && moveTargets.length > 0 ? (
+            {editable && booking.tableId && moveTargets.length > 0 ? (
               <Button
                 variant="secondary"
                 size="sm"

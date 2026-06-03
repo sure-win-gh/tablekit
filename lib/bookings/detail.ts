@@ -22,8 +22,11 @@ export type BookingDetailPayload = {
   partySize: number;
   notes: string | null;
   serviceName: string;
-  tableId: string;
-  tableLabel: string;
+  // Null when the booking has no table assigned (e.g. cancelled — a DB
+  // trigger frees the tables). The list surface can open the dialog for
+  // these; the timeline always passes a real table.
+  tableId: string | null;
+  tableLabel: string | null;
   areaId: string;
   refundable: boolean;
   cardHold: boolean;

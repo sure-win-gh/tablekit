@@ -16,7 +16,7 @@ import "server-only";
 
 import { and, eq, isNull, sql } from "drizzle-orm";
 
-import { bookings, dsarRequests, guests, reviews } from "@/lib/db/schema";
+import { bookings, campaignSends, dsarRequests, guests, reviews } from "@/lib/db/schema";
 import { encryptPii } from "@/lib/security/crypto";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
@@ -93,6 +93,20 @@ export async function runErasureScrub(input: RunErasureScrubInput): Promise<RunE
           // alongside the contact ciphers on erasure.
           tags: sql`ARRAY[]::text[]`,
           notesCipher: sql`NULL`,
+          // WhatsApp shares phone_cipher (nulled above) but keeps its
+          // own opt-out + hard-invalid markers — reset them so an
+          // erased+re-created guest doesn't inherit stale suppression,
+          // and so no venue linkage survives in the opt-out array.
+          whatsappUnsubscribedVenues: sql`ARRAY[]::uuid[]`,
+          whatsappInvalid: false,
+          // Consent records must not reference a living data subject
+          // after erasure (same rationale as nulling reviews.showcase_
+          // consent_at). Clear every per-channel marketing-consent
+          // timestamp + the legacy mirror.
+          marketingConsentAt: sql`NULL`,
+          marketingConsentEmailAt: sql`NULL`,
+          marketingConsentSmsAt: sql`NULL`,
+          marketingConsentWhatsappAt: sql`NULL`,
           erasedAt: sql`now()`,
           updatedAt: sql`now()`,
         })
@@ -113,6 +127,11 @@ export async function runErasureScrub(input: RunErasureScrubInput): Promise<RunE
         .where(
           and(eq(bookings.guestId, dsar.guestId), eq(bookings.organisationId, dsar.organisationId)),
         );
+
+      // Marketing campaign send records carry behavioural engagement
+      // data (opens/clicks) keyed to the guest — delete them outright on
+      // erasure (no accounting retention applies to marketing sends).
+      await tx.delete(campaignSends).where(eq(campaignSends.guestId, dsar.guestId));
 
       const updated = await tx
         .update(reviews)

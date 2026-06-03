@@ -18,6 +18,7 @@ import {
   LayoutDashboard,
   Lock,
   LogOut,
+  Megaphone,
   Menu,
   MessageSquare,
   Settings,
@@ -33,7 +34,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 import { cn } from "@/components/ui";
 
@@ -50,6 +51,10 @@ const COLLAPSE_KEY = "tablekit:sidebar-collapsed";
 const DRAWER_KEY = "tablekit:sidebar-drawer";
 // Per-group expand/collapse persistence. Suffix is the group's own key.
 const GROUP_KEY_PREFIX = "tablekit:nav-group:";
+// Last venue the user was looking at. Lets the Venue section stay
+// pinned in the rail after navigating to an org-level route (which has
+// no /venues/<id>/ segment in its path).
+const VENUE_KEY = "tablekit:last-venue";
 
 export type SidebarData = {
   user: { name: string; email: string };
@@ -106,7 +111,22 @@ export function SidebarShell({
   const collapsed = useFlagStore(COLLAPSE_KEY);
   const drawerOpen = useFlagStore(DRAWER_KEY);
 
-  const venueId = matchVenueId(pathname);
+  // The venue in the URL when we're on a venue route. Persist it so the
+  // Venue section can stay in the rail after the user jumps to an
+  // org-level route (Organisation, Guests, Admin…), which carries no
+  // venue in its path. Falls back to the stored venue, then the first
+  // venue, so the section is present whenever the org has any venue.
+  const urlVenueId = matchVenueId(pathname);
+  useEffect(() => {
+    if (urlVenueId) writeValue(VENUE_KEY, urlVenueId);
+  }, [urlVenueId]);
+
+  const storedVenueId = useValueStore(VENUE_KEY);
+  // Guard against a stored venue that's since been deleted / left.
+  const storedIsKnown = storedVenueId ? data.venues.some((v) => v.id === storedVenueId) : false;
+  const venueId =
+    urlVenueId ?? (storedIsKnown ? storedVenueId : null) ?? data.venues[0]?.id ?? null;
+  const activeVenue = venueId ? data.venues.find((v) => v.id === venueId) : undefined;
 
   // Org-section entries. Day-to-day links sit at the top; the
   // compliance/data plumbing collapses into Admin so the rail isn't
@@ -219,6 +239,12 @@ export function SidebarShell({
               href: `/dashboard/venues/${venueId}/reviews`,
               label: "Reviews",
               icon: Star,
+            },
+            {
+              kind: "item",
+              href: `/dashboard/venues/${venueId}/campaigns`,
+              label: "Campaigns",
+              icon: Megaphone,
             },
           ],
         },
@@ -344,7 +370,7 @@ export function SidebarShell({
           />
           {venueId ? (
             <Section
-              label="Venue"
+              label={activeVenue?.name ?? "Venue"}
               entries={filterEntries(venueEntries)}
               pathname={pathname}
               collapsed={collapsed}
@@ -623,5 +649,35 @@ function useFlagStore(key: string): boolean {
     () => readFlag(key),
     // Server snapshot — sidebar starts expanded + drawer + groups closed.
     () => false,
+  );
+}
+
+// String-valued sibling of the flag store, for the last-venue pointer.
+// Shares the same storage-event subscription plumbing.
+
+function readValue(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeValue(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+    window.dispatchEvent(new StorageEvent("storage", { key, newValue: value }));
+  } catch {
+    // No storage — the pointer just isn't remembered.
+  }
+}
+
+function useValueStore(key: string): string | null {
+  return useSyncExternalStore(
+    getSub(key),
+    () => readValue(key),
+    // Server snapshot — nothing remembered yet; the client fills it in
+    // after hydration (and the first-venue fallback covers SSR).
+    () => null,
   );
 }

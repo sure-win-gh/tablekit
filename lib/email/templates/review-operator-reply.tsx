@@ -14,6 +14,7 @@ function ReviewOperatorReplyEmail({ ctx }: { ctx: MessageBookingContext }) {
       preview={`A note from ${ctx.venueName}`}
       unsubscribeUrl={ctx.unsubscribeUrl}
       venueName={ctx.venueName}
+      branding={ctx.branding}
     >
       <P>Hi {ctx.guestFirstName},</P>
       <P>

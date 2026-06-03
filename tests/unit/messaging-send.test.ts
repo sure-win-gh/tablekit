@@ -13,7 +13,9 @@ beforeEach(() => {
   process.env["TWILIO_ACCOUNT_SID"] = "AC" + "x".repeat(32);
   process.env["TWILIO_AUTH_TOKEN"] = "x".repeat(32);
   process.env["TWILIO_FROM_NUMBER"] = "+441234567890";
+  process.env["TWILIO_WHATSAPP_FROM"] = "+14155238886";
   delete process.env["MESSAGING_DISABLED"];
+  delete process.env["TWILIO_WA_TEMPLATE_BOOKING_REMINDER_2H"];
 });
 
 afterEach(() => {
@@ -190,5 +192,75 @@ describe("sendSms", () => {
     }));
     const { sendSms } = await import("@/lib/sms/send");
     await expect(sendSms({ to: "+1", body: "x" })).rejects.toMatchObject({ retryable: true });
+  });
+});
+
+describe("sendWhatsApp", () => {
+  it("short-circuits when MESSAGING_DISABLED=true", async () => {
+    process.env["MESSAGING_DISABLED"] = "true";
+    const { sendWhatsApp } = await import("@/lib/whatsapp/send");
+    await expect(sendWhatsApp({ to: "+447700900123", body: "x" })).rejects.toMatchObject({
+      name: "WhatsAppSendError",
+      code: "messaging-disabled",
+      retryable: false,
+    });
+  });
+
+  it("adds the whatsapp: prefix to to/from and returns providerId (freeform body)", async () => {
+    const createMock = vi.fn(async () => ({ sid: "SM_wa_1" }));
+    vi.doMock("@/lib/whatsapp/client", () => ({
+      twilioClient: () => ({ messages: { create: createMock } }),
+      whatsappFrom: () => "whatsapp:+14155238886",
+      whatsappTo: (e164: string) => `whatsapp:${e164}`,
+      messagingDisabled: () => false,
+    }));
+    const { sendWhatsApp } = await import("@/lib/whatsapp/send");
+    const r = await sendWhatsApp({ to: "+447700900123", body: "See you at 7pm." });
+    expect(r.providerId).toBe("SM_wa_1");
+    expect(createMock).toHaveBeenCalledWith({
+      to: "whatsapp:+447700900123",
+      from: "whatsapp:+14155238886",
+      body: "See you at 7pm.",
+    });
+  });
+
+  it("sends via approved template (contentSid + stringified variables)", async () => {
+    const createMock = vi.fn(async (_arg: Record<string, unknown>) => ({ sid: "SM_wa_2" }));
+    vi.doMock("@/lib/whatsapp/client", () => ({
+      twilioClient: () => ({ messages: { create: createMock } }),
+      whatsappFrom: () => "whatsapp:+14155238886",
+      whatsappTo: (e164: string) => `whatsapp:${e164}`,
+      messagingDisabled: () => false,
+    }));
+    const { sendWhatsApp } = await import("@/lib/whatsapp/send");
+    await sendWhatsApp({
+      to: "+447700900123",
+      body: "fallback",
+      contentSid: "HX123",
+      contentVariables: { "1": "Jane" },
+    });
+    const arg = createMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(arg["contentSid"]).toBe("HX123");
+    expect(arg["contentVariables"]).toBe(JSON.stringify({ "1": "Jane" }));
+    // body is omitted when a template is used
+    expect(arg["body"]).toBeUndefined();
+  });
+
+  it("classifies a Twilio 21000-range error as non-retryable", async () => {
+    const err = Object.assign(new Error("not a whatsapp number"), { code: 21211 });
+    vi.doMock("@/lib/whatsapp/client", () => ({
+      twilioClient: () => ({
+        messages: {
+          create: async () => {
+            throw err;
+          },
+        },
+      }),
+      whatsappFrom: () => "whatsapp:+14155238886",
+      whatsappTo: (e164: string) => `whatsapp:${e164}`,
+      messagingDisabled: () => false,
+    }));
+    const { sendWhatsApp } = await import("@/lib/whatsapp/send");
+    await expect(sendWhatsApp({ to: "+1", body: "x" })).rejects.toMatchObject({ retryable: false });
   });
 });

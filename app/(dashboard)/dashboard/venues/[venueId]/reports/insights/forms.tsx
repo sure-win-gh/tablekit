@@ -18,6 +18,7 @@ import {
 } from "recharts";
 
 import { Card, CardBody, CardDescription, CardHeader, CardTitle, Input, cn } from "@/components/ui";
+import type { GuestEngagementReport } from "@/lib/reports/guest-engagement";
 import {
   GRANULARITIES,
   type ChannelPerformanceRow,
@@ -438,5 +439,65 @@ export function ChannelPerformanceCard({
         </tbody>
       </table>
     </InsightCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Guest engagement — segment sizes (bar) + aggregate campaign engagement
+// (sent / open rate / click rate) for the range. Phase 4.
+// ---------------------------------------------------------------------------
+export function GuestEngagementCard({ report }: { report: GuestEngagementReport }) {
+  const data = report.segments
+    .filter((s) => s.key !== "all")
+    .map((s) => ({ name: s.label, count: s.count }));
+  const c = report.campaigns;
+  const pct = (n: number) => `${Math.round(n * 100)}%`;
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>Guest segments &amp; campaign engagement</CardTitle>
+          <CardDescription>
+            How your guest base breaks down, and how email campaigns in this range performed
+            (open/click rates are email-only).
+          </CardDescription>
+        </div>
+      </CardHeader>
+      <CardBody>
+        <div className="grid grid-cols-3 gap-3">
+          <Kpi label="Sent" value={String(c.sent)} />
+          <Kpi label="Open rate" value={c.sent > 0 ? pct(c.openRate) : "—"} />
+          <Kpi label="Click rate" value={c.sent > 0 ? pct(c.clickRate) : "—"} />
+        </div>
+        {data.some((d) => d.count > 0) ? (
+          <div className="mt-4 h-56 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data} margin={{ top: 8, right: 8, bottom: 8, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Bar dataKey="count" name="Guests" radius={[4, 4, 0, 0]} fill="#c2410c" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <p className="text-ash mt-4 text-sm">No segmented guests yet.</p>
+        )}
+        <p className="text-ash mt-3 text-xs">
+          Total guests: {report.segments.find((s) => s.key === "all")?.count ?? 0}. Segments are a
+          live snapshot; engagement covers campaigns created in the selected range.
+        </p>
+      </CardBody>
+    </Card>
+  );
+}
+
+function Kpi({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-hairline rounded-md border p-3">
+      <p className="text-ash text-xs">{label}</p>
+      <p className="text-ink text-lg font-semibold">{value}</p>
+    </div>
   );
 }

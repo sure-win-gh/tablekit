@@ -103,6 +103,15 @@ beforeAll(async () => {
       phoneCipher: await encryptPii(org.id, "+447700900000"),
       tags: ["VIP", "allergy:nuts"],
       notesCipher: await encryptPii(org.id, "Severe nut allergy."),
+      // WhatsApp suppression markers — must be reset on erasure so no
+      // venue linkage survives and a re-created guest doesn't inherit
+      // stale suppression.
+      whatsappInvalid: true,
+      whatsappUnsubscribedVenues: [venue.id],
+      // Marketing-consent records must not survive erasure.
+      marketingConsentEmailAt: new Date(),
+      marketingConsentSmsAt: new Date(),
+      marketingConsentWhatsappAt: new Date(),
     })
     .returning({ id: schema.guests.id });
   if (!guest) throw new Error("guest insert returned no row");
@@ -152,6 +161,27 @@ beforeAll(async () => {
     })
     .returning({ id: schema.reviews.id });
   if (!internalReview) throw new Error("internal review insert returned no row");
+
+  // A marketing campaign + a send to this guest — the scrub must delete
+  // the guest's engagement send rows on erasure.
+  const [campaign] = await db
+    .insert(schema.campaigns)
+    .values({
+      organisationId: org.id,
+      venueId: venue.id,
+      name: "Erasure test",
+      channel: "email",
+      body: "Hi {{guestFirstName}}",
+    })
+    .returning({ id: schema.campaigns.id });
+  await db.insert(schema.campaignSends).values({
+    organisationId: org.id,
+    campaignId: campaign!.id,
+    guestId: guest.id,
+    venueId: venue.id,
+    channel: "email",
+    openedAt: sql`now()`,
+  });
 
   ctx = {
     userId,
@@ -222,6 +252,11 @@ describe("runErasureScrub", () => {
         phoneCipher: schema.guests.phoneCipher,
         tags: schema.guests.tags,
         notesCipher: schema.guests.notesCipher,
+        whatsappInvalid: schema.guests.whatsappInvalid,
+        whatsappUnsubscribedVenues: schema.guests.whatsappUnsubscribedVenues,
+        marketingConsentEmailAt: schema.guests.marketingConsentEmailAt,
+        marketingConsentSmsAt: schema.guests.marketingConsentSmsAt,
+        marketingConsentWhatsappAt: schema.guests.marketingConsentWhatsappAt,
         erasedAt: schema.guests.erasedAt,
       })
       .from(schema.guests)
@@ -230,10 +265,25 @@ describe("runErasureScrub", () => {
     expect(guestAfter?.phoneCipher).toBeNull();
     expect(guestAfter?.tags).toEqual([]);
     expect(guestAfter?.notesCipher).toBeNull();
+    // WhatsApp suppression markers reset on erasure.
+    expect(guestAfter?.whatsappInvalid).toBe(false);
+    expect(guestAfter?.whatsappUnsubscribedVenues).toEqual([]);
+    // Marketing-consent records cleared on erasure (no consent record
+    // may reference a living data subject).
+    expect(guestAfter?.marketingConsentEmailAt).toBeNull();
+    expect(guestAfter?.marketingConsentSmsAt).toBeNull();
+    expect(guestAfter?.marketingConsentWhatsappAt).toBeNull();
     expect(guestAfter?.erasedAt).not.toBeNull();
     // Both NOT NULL ciphers must decrypt to empty string.
     expect(await decryptPii(ctx.orgId, guestAfter!.lastNameCipher as Ciphertext)).toBe("");
     expect(await decryptPii(ctx.orgId, guestAfter!.emailCipher as Ciphertext)).toBe("");
+
+    // Marketing campaign sends for this guest are deleted outright.
+    const sendsAfter = await db
+      .select({ id: schema.campaignSends.id })
+      .from(schema.campaignSends)
+      .where(eq(schema.campaignSends.guestId, ctx.guestId));
+    expect(sendsAfter).toHaveLength(0);
 
     // Per-visit dietary notes on this guest's bookings nulled too.
     // The booking row itself stays (7-year accounting retention).

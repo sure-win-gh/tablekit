@@ -21,10 +21,14 @@ import { EmailSendError, sendEmail } from "@/lib/email/send";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 import { SmsSendError, sendSms } from "@/lib/sms/send";
+import { WhatsAppSendError, sendWhatsApp } from "@/lib/whatsapp/send";
+
+import { recordUsage } from "@/lib/billing/usage";
 
 import { backoffMs, truncateError } from "./enqueue";
 import { loadMessageContext } from "./load-context";
-import { renderForChannel, type MessageChannel, type MessageTemplate } from "./registry";
+import { renderMessage } from "./render-message";
+import { type MessageChannel, type MessageTemplate } from "./registry";
 
 export type DispatchResult = {
   processed: number;
@@ -47,6 +51,7 @@ export async function processNextBatch(
 ): Promise<DispatchResult> {
   const limit = opts.limit ?? 25;
   const appUrl = opts.appUrl ?? process.env["NEXT_PUBLIC_APP_URL"] ?? "https://app.tablekit.test";
+  const now = opts.now ?? new Date();
 
   const db = adminDb();
 
@@ -81,7 +86,7 @@ export async function processNextBatch(
   let retried = 0;
 
   for (const row of rows) {
-    const outcome = await processOne(row, appUrl);
+    const outcome = await processOne(row, appUrl, now);
     if (outcome === "sent") sent += 1;
     else if (outcome === "retried") retried += 1;
     else failed += 1;
@@ -92,7 +97,7 @@ export async function processNextBatch(
 
 type ProcessOutcome = "sent" | "retried" | "failed";
 
-async function processOne(row: ClaimedRow, appUrl: string): Promise<ProcessOutcome> {
+async function processOne(row: ClaimedRow, appUrl: string, now: Date): Promise<ProcessOutcome> {
   const channel = row.channel as MessageChannel;
   const template = row.template as MessageTemplate;
 
@@ -108,8 +113,8 @@ async function processOne(row: ClaimedRow, appUrl: string): Promise<ProcessOutco
     return markFailed(row, `load-context: ${ctxResult.reason}`);
   }
 
-  // Render.
-  const rendered = await renderForChannel(template, channel, ctxResult.ctx);
+  // Render (override-aware: uses the venue's content override when set).
+  const rendered = await renderMessage(template, channel, ctxResult.ctx, ctxResult.override);
   if (rendered.kind === "no-renderer") {
     return markFailed(row, `no-renderer: ${template}/${channel}`);
   }
@@ -123,20 +128,45 @@ async function processOne(row: ClaimedRow, appUrl: string): Promise<ProcessOutco
         html: rendered.rendered.html,
         text: rendered.rendered.text,
         unsubscribeUrl: ctxResult.ctx.unsubscribeUrl,
+        ...(ctxResult.ctx.branding?.replyTo ? { replyTo: ctxResult.ctx.branding.replyTo } : {}),
         idempotencyKey: `msg_${row.id}_v1`,
       });
-      return markSent(row, r.providerId);
+      return markSent(row, r.providerId, now);
     }
-    const r = await sendSms({ to: ctxResult.recipient, body: rendered.rendered.body });
-    return markSent(row, r.providerId);
+    // Twilio (SMS + WhatsApp) status callbacks land on this URL and
+    // drive messages.status → delivered/bounced + the channel-specific
+    // invalid marker. Without it the delivery/invalidation path never
+    // fires.
+    const twilioStatusCallback = `${appUrl}/api/twilio/webhook`;
+    if (rendered.kind === "whatsapp") {
+      const r = await sendWhatsApp({
+        to: ctxResult.recipient,
+        body: rendered.rendered.body,
+        statusCallback: twilioStatusCallback,
+        ...(rendered.rendered.contentSid ? { contentSid: rendered.rendered.contentSid } : {}),
+        ...(rendered.rendered.contentVariables
+          ? { contentVariables: rendered.rendered.contentVariables }
+          : {}),
+      });
+      return markSent(row, r.providerId, now);
+    }
+    const r = await sendSms({
+      to: ctxResult.recipient,
+      body: rendered.rendered.body,
+      statusCallback: twilioStatusCallback,
+    });
+    return markSent(row, r.providerId, now);
   } catch (err) {
     const retryable =
-      (err instanceof EmailSendError || err instanceof SmsSendError) && err.retryable;
+      (err instanceof EmailSendError ||
+        err instanceof SmsSendError ||
+        err instanceof WhatsAppSendError) &&
+      err.retryable;
     return retryable ? scheduleRetry(row, err) : markFailed(row, truncateError(err));
   }
 }
 
-async function markSent(row: ClaimedRow, providerId: string): Promise<"sent"> {
+async function markSent(row: ClaimedRow, providerId: string, now: Date): Promise<"sent"> {
   const db = adminDb();
   await db
     .update(messages)
@@ -147,6 +177,18 @@ async function markSent(row: ClaimedRow, providerId: string): Promise<"sent"> {
       error: null,
     })
     .where(eq(messages.id, row.id));
+  // Pass-through usage metering — transactional SMS/WhatsApp reminders
+  // cost money too, not just campaigns (email is recorded at 0p).
+  // NON-FATAL: the message is already sent + committed; a metering write
+  // failure must never flip a genuinely-sent row to 'failed' (this runs
+  // inside processOne's try). Swallow + log.
+  try {
+    await recordUsage(row.organisationId, row.channel as MessageChannel, now);
+  } catch (err) {
+    console.error("[lib/messaging/dispatch.ts] recordUsage failed (send already succeeded):", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
   await audit.log({
     organisationId: row.organisationId,
     actorUserId: null,

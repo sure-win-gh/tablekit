@@ -10,6 +10,7 @@ import {
   Heading,
   Hr,
   Html,
+  Img,
   Link,
   Preview,
   Section,
@@ -17,17 +18,29 @@ import {
 } from "@react-email/components";
 import type { ReactNode } from "react";
 
+import type { VenueBranding } from "@/lib/messaging/context";
+
+// Accent colour applied to the heading. Falls back to the neutral ink
+// when the venue hasn't set one. We only accept a hex value (validated
+// at the settings boundary) so this can't inject arbitrary CSS.
+const DEFAULT_HEADING = "#111111";
+
 export function EmailLayout({
   preview,
   children,
   unsubscribeUrl,
   venueName,
+  branding,
 }: {
   preview: string;
   children: ReactNode;
   unsubscribeUrl: string;
   venueName: string;
+  branding?: VenueBranding | undefined;
 }) {
+  const headingColour = branding?.brandColour || DEFAULT_HEADING;
+  const logoUrl = branding?.logoUrl || null;
+  const signature = branding?.signature || null;
   return (
     <Html>
       <Head />
@@ -50,19 +63,33 @@ export function EmailLayout({
           }}
         >
           <Section>
+            {logoUrl ? (
+              <Img
+                src={logoUrl}
+                alt={venueName}
+                style={{ maxHeight: "48px", margin: "0 0 16px 0" }}
+              />
+            ) : null}
             <Heading
               as="h1"
               style={{
                 fontSize: "20px",
                 fontWeight: 600,
                 margin: "0 0 16px 0",
-                color: "#111111",
+                color: headingColour,
               }}
             >
               {venueName}
             </Heading>
           </Section>
           <Section>{children}</Section>
+          {signature ? (
+            <Section>
+              <Text style={{ fontSize: "15px", lineHeight: "22px", margin: "12px 0 0 0" }}>
+                {signature}
+              </Text>
+            </Section>
+          ) : null}
           <Hr style={{ borderColor: "#e5e5e5", margin: "24px 0" }} />
           <Section>
             <Text style={{ fontSize: "12px", color: "#737373", margin: "0 0 4px 0" }}>

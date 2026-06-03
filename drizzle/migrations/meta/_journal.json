@@ -302,6 +302,34 @@
       "when": 1780124223526,
       "tag": "0042_serious_triathlon",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1780313304392,
+      "tag": "0043_dry_obadiah_stane",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1780321413871,
+      "tag": "0044_worthless_zarda",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1780329942835,
+      "tag": "0045_clumsy_beast",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1780342217734,
+      "tag": "0046_warm_firedrake",
+      "breakpoints": true
     }
   ]
 }

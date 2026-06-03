@@ -1,16 +1,22 @@
-// POST /api/twilio/webhook — Twilio inbound SMS + status callbacks.
+// POST /api/twilio/webhook — Twilio inbound SMS/WhatsApp + status callbacks.
+//
+// WhatsApp rides the same Twilio account as SMS, so its inbound replies
+// and status callbacks land on this same URL. WhatsApp payloads carry a
+// `whatsapp:` prefix on From/To; status callbacks are told apart from
+// SMS by the channel of the matching messages row.
 //
 // Two flavours of payload come through this URL:
-//   1. Inbound SMS (when a guest replies STOP / HELP / etc).
+//   1. Inbound SMS / WhatsApp (when a guest replies STOP / HELP / etc).
 //      Twilio sends `From`, `To`, `Body`. We parse for STOP keywords
 //      and mark the guest's phone as invalid (per our spec — opt-out
-//      is venue-scoped via the unsubscribe URL on the SMS body, but
+//      is venue-scoped via the unsubscribe URL on the message body, but
 //      a STOP reply is a global signal we have to honour for any
 //      number we send to).
-//   2. Status callbacks for outbound SMS (when we set
+//   2. Status callbacks for outbound SMS / WhatsApp (when we set
 //      statusCallback on the create call). Twilio sends MessageSid,
 //      MessageStatus = delivered | failed | undelivered. We update
-//      the matching messages row.
+//      the matching messages row and invalidate the channel that
+//      failed.
 //
 // Twilio signs requests with HMAC-SHA1 over (full URL + sorted body
 // params). Twilio's SDK has validateRequest() — we use it.
@@ -64,6 +70,12 @@ export async function POST(req: NextRequest) {
 }
 
 async function handleInbound(from: string, body: string) {
+  // WhatsApp inbound numbers arrive prefixed `whatsapp:`; strip it so
+  // the phone hash matches the stored number and so we know which
+  // channel the STOP applies to.
+  const isWhatsApp = from.startsWith("whatsapp:");
+  const bareFrom = isWhatsApp ? from.slice("whatsapp:".length) : from;
+
   const trimmed = body.trim().toUpperCase();
   if (!STOP_WORDS.has(trimmed)) {
     // HELP and other keywords could be added here. For MVP, only
@@ -71,17 +83,22 @@ async function handleInbound(from: string, body: string) {
     return NextResponse.json({ ok: true, action: "no-keyword-match" });
   }
 
-  // Find the guest by phone hash and flag them invalid for SMS. We
-  // hash here rather than decrypting every guest row.
-  const phoneHash = hashForLookup(from, "phone");
+  // Find the guest by phone hash and flag them invalid for the channel
+  // they STOPped. We hash here rather than decrypting every guest row.
+  const phoneHash = hashForLookup(bareFrom, "phone");
   // Note: we don't currently store phoneHash on guests. For MVP we
   // skip the per-guest lookup and rely on Twilio's own opt-out cache
   // (Twilio refuses to deliver to numbers that have STOPped that
-  // sending number). When we add phone_hash to guests as a follow-
-  // up, this branch updates phone_invalid for the matching row.
+  // sending number, per channel). When we add phone_hash to guests as a
+  // follow-up, this branch updates phone_invalid / whatsapp_invalid for
+  // the matching row depending on `isWhatsApp`.
   void phoneHash;
 
-  return NextResponse.json({ ok: true, action: "stop-acknowledged" });
+  return NextResponse.json({
+    ok: true,
+    action: "stop-acknowledged",
+    channel: isWhatsApp ? "whatsapp" : "sms",
+  });
 }
 
 async function handleStatus(messageSid: string, status: string) {
@@ -91,6 +108,7 @@ async function handleStatus(messageSid: string, status: string) {
       id: messages.id,
       organisationId: messages.organisationId,
       bookingId: messages.bookingId,
+      channel: messages.channel,
     })
     .from(messages)
     .where(eq(messages.providerId, messageSid))
@@ -107,20 +125,23 @@ async function handleStatus(messageSid: string, status: string) {
       .update(messages)
       .set({ status: "bounced", error: `twilio:${status}` })
       .where(eq(messages.id, msg.id));
-    await markPhoneInvalid(msg.bookingId);
+    // Invalidate the channel that actually failed: a number can be
+    // SMS-reachable but not on WhatsApp (or the reverse), so a WhatsApp
+    // failure must not poison the SMS channel.
+    await markContactInvalid(msg.bookingId, msg.channel === "whatsapp" ? "whatsapp" : "sms");
     await audit.log({
       organisationId: msg.organisationId,
       actorUserId: null,
       action: "message.bounced",
       targetType: "message",
       targetId: msg.id,
-      metadata: { reason: status, bookingId: msg.bookingId },
+      metadata: { reason: status, bookingId: msg.bookingId, channel: msg.channel },
     });
   }
   return NextResponse.json({ ok: true });
 }
 
-async function markPhoneInvalid(bookingId: string): Promise<void> {
+async function markContactInvalid(bookingId: string, channel: "sms" | "whatsapp"): Promise<void> {
   const db = adminDb();
   const { bookings } = await import("@/lib/db/schema");
   const [b] = await db
@@ -129,5 +150,8 @@ async function markPhoneInvalid(bookingId: string): Promise<void> {
     .where(eq(bookings.id, bookingId))
     .limit(1);
   if (!b) return;
-  await db.update(guests).set({ phoneInvalid: true }).where(eq(guests.id, b.guestId));
+  await db
+    .update(guests)
+    .set(channel === "whatsapp" ? { whatsappInvalid: true } : { phoneInvalid: true })
+    .where(eq(guests.id, b.guestId));
 }

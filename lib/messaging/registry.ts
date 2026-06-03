@@ -14,7 +14,12 @@
 
 import "server-only";
 
-import type { MessageBookingContext, RenderedEmail, RenderedSms } from "./context";
+import type {
+  MessageBookingContext,
+  RenderedEmail,
+  RenderedSms,
+  RenderedWhatsApp,
+} from "./context";
 
 import { renderBookingCancelled } from "@/lib/email/templates/booking-cancelled";
 import { renderBookingConfirmation } from "@/lib/email/templates/booking-confirmation";
@@ -25,8 +30,11 @@ import { renderReviewOperatorReply } from "@/lib/email/templates/review-operator
 import { renderReviewRecoveryOffer } from "@/lib/email/templates/review-recovery-offer";
 import { renderBookingReminder2h } from "@/lib/sms/templates/booking-reminder-2h";
 import { renderBookingWaitlistReady } from "@/lib/sms/templates/booking-waitlist-ready";
+import { renderBookingConfirmationWhatsApp } from "@/lib/whatsapp/templates/booking-confirmation";
+import { renderBookingReminder24hWhatsApp } from "@/lib/whatsapp/templates/booking-reminder-24h";
+import { renderBookingReminder2hWhatsApp } from "@/lib/whatsapp/templates/booking-reminder-2h";
 
-export type MessageChannel = "email" | "sms";
+export type MessageChannel = "email" | "sms" | "whatsapp";
 
 export type MessageTemplate =
   | "booking.confirmation"
@@ -41,16 +49,27 @@ export type MessageTemplate =
 
 type EmailRenderer = (ctx: MessageBookingContext) => Promise<RenderedEmail>;
 type SmsRenderer = (ctx: MessageBookingContext) => RenderedSms;
+type WhatsAppRenderer = (ctx: MessageBookingContext) => RenderedWhatsApp;
 
 type RegistryEntry = {
   email?: EmailRenderer;
   sms?: SmsRenderer;
+  whatsapp?: WhatsAppRenderer;
 };
 
 const TEMPLATE_REGISTRY: Record<MessageTemplate, RegistryEntry> = {
-  "booking.confirmation": { email: renderBookingConfirmation },
-  "booking.reminder_24h": { email: renderBookingReminder24h },
-  "booking.reminder_2h": { sms: renderBookingReminder2h },
+  "booking.confirmation": {
+    email: renderBookingConfirmation,
+    whatsapp: renderBookingConfirmationWhatsApp,
+  },
+  "booking.reminder_24h": {
+    email: renderBookingReminder24h,
+    whatsapp: renderBookingReminder24hWhatsApp,
+  },
+  "booking.reminder_2h": {
+    sms: renderBookingReminder2h,
+    whatsapp: renderBookingReminder2hWhatsApp,
+  },
   "booking.cancelled": { email: renderBookingCancelled },
   "booking.thank_you": { email: renderBookingThankYou },
   "booking.waitlist_ready": { sms: renderBookingWaitlistReady },
@@ -59,19 +78,25 @@ const TEMPLATE_REGISTRY: Record<MessageTemplate, RegistryEntry> = {
   "review.recovery_offer": { email: renderReviewRecoveryOffer },
 };
 
-// Channels a given template currently supports. Inline triggers
-// consult this to decide what to enqueue.
+// Channels a given template can *render*. This is raw capability — the
+// effective channels for a booking (which intersects operator
+// preference + guest consent/opt-out + valid contact) is resolved by
+// lib/messaging/resolve-channels.ts. Inline triggers go through the
+// resolver, not this, so adding a whatsapp renderer above does not by
+// itself start sending WhatsApp.
 export function templateChannels(template: MessageTemplate): MessageChannel[] {
   const entry = TEMPLATE_REGISTRY[template];
   const channels: MessageChannel[] = [];
   if (entry.email) channels.push("email");
   if (entry.sms) channels.push("sms");
+  if (entry.whatsapp) channels.push("whatsapp");
   return channels;
 }
 
 export type RenderResult =
   | { kind: "email"; rendered: RenderedEmail }
   | { kind: "sms"; rendered: RenderedSms }
+  | { kind: "whatsapp"; rendered: RenderedWhatsApp }
   | { kind: "no-renderer" };
 
 export async function renderForChannel(
@@ -85,6 +110,9 @@ export async function renderForChannel(
   }
   if (channel === "sms" && entry.sms) {
     return { kind: "sms", rendered: entry.sms(ctx) };
+  }
+  if (channel === "whatsapp" && entry.whatsapp) {
+    return { kind: "whatsapp", rendered: entry.whatsapp(ctx) };
   }
   return { kind: "no-renderer" };
 }
