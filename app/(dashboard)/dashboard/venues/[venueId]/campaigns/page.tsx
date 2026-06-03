@@ -1,7 +1,9 @@
 import { desc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 
-import { InsufficientPlanError, requirePlan } from "@/lib/auth/require-plan";
+import { LockedFeature } from "@/components/billing/locked-feature";
+import { isLocked } from "@/lib/auth/entitlements";
+import { getPlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { estimateAudience } from "@/lib/campaigns/recipients";
 import { MARKETING_TAG_NAMES } from "@/lib/campaigns/render";
@@ -17,11 +19,9 @@ export default async function CampaignsPage({ params }: { params: Promise<{ venu
   const { orgId } = await requireRole("manager");
   const { venueId } = await params;
 
-  try {
-    await requirePlan(orgId, "plus");
-  } catch (err) {
-    if (err instanceof InsufficientPlanError) return <Upsell />;
-    throw err;
+  const plan = await getPlan(orgId);
+  if (isLocked(plan, "campaigns")) {
+    return <LockedFeature feature="campaigns" currentPlan={plan} />;
   }
 
   const venue = await withUser(async (db) => {
@@ -104,21 +104,6 @@ export default async function CampaignsPage({ params }: { params: Promise<{ venu
             </table>
           </div>
         )}
-      </div>
-    </section>
-  );
-}
-
-function Upsell() {
-  return (
-    <section className="flex flex-col gap-3">
-      <h1 className="text-ink text-2xl font-bold tracking-tight">Campaigns</h1>
-      <div className="border-hairline rounded-card border bg-white p-6">
-        <p className="text-charcoal text-sm">
-          Marketing campaigns are a <strong>Plus</strong> feature. Upgrade to broadcast events and
-          offers to your consented guests across email, SMS and WhatsApp — with audience estimates,
-          live previews, and open tracking.
-        </p>
       </div>
     </section>
   );

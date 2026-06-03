@@ -2,7 +2,9 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { requirePlan } from "@/lib/auth/require-plan";
+import { LockedFeature } from "@/components/billing/locked-feature";
+import { isLocked } from "@/lib/auth/entitlements";
+import { getPlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { assertVenueVisible } from "@/lib/auth/venue-scope";
 import { withUser } from "@/lib/db/client";
@@ -25,7 +27,10 @@ export default async function EnquiriesPage({
   searchParams: Promise<{ bucket?: string }>;
 }) {
   const { orgId } = await requireRole("host");
-  await requirePlan(orgId, "plus");
+  const plan = await getPlan(orgId);
+  if (isLocked(plan, "enquiries")) {
+    return <LockedFeature feature="enquiries" currentPlan={plan} />;
+  }
 
   const { venueId } = await params;
   if (!(await assertVenueVisible(venueId))) notFound();

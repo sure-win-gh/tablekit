@@ -1,6 +1,9 @@
 import { and, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 
+import { UpgradeBanner } from "@/components/billing/locked-feature";
+import { isLocked } from "@/lib/auth/entitlements";
+import { getPlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { getAccount } from "@/lib/stripe/connect";
 import { withUser } from "@/lib/db/client";
@@ -74,6 +77,7 @@ export default async function VenueSettingsPage({
   searchParams: Promise<{ stripe?: string; google?: string }>;
 }) {
   const { orgId, role } = await requireRole("manager");
+  const orgPlan = await getPlan(orgId);
   const isOwner = role === "owner";
   const { venueId } = await params;
   const sp = await searchParams;
@@ -291,6 +295,7 @@ export default async function VenueSettingsPage({
       </div>
 
       <div className="border-hairline rounded-card border bg-white p-6">
+        {isLocked(orgPlan, "messaging") ? <UpgradeBanner feature="messaging" /> : null}
         <MessagingSettingsForm
           venueId={venue.id}
           events={flowEvents}
