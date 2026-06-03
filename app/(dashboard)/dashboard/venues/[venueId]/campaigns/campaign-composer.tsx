@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 
 import {
   createCampaign,
+  estimateCampaignAudience,
   previewCampaign,
   type CampaignPreview,
   type CreateCampaignState,
@@ -17,7 +18,7 @@ const CHANNEL_LABEL: Record<string, string> = {
   whatsapp: "WhatsApp",
 };
 
-export type AudienceMap = Record<string, { count: number; costPence: number }>;
+export type SegmentOption = { key: string; label: string };
 
 function formatCost(pence: number): string {
   return pence === 0 ? "free" : `£${(pence / 100).toFixed(2)}`;
@@ -25,16 +26,19 @@ function formatCost(pence: number): string {
 
 export function CampaignComposer({
   venueId,
-  audience,
+  segments,
+  initialEstimate,
   mergeTags,
 }: {
   venueId: string;
-  audience: AudienceMap;
+  segments: SegmentOption[];
+  initialEstimate: { count: number; costPence: number };
   mergeTags: string[];
 }) {
   const [state, formAction, pending] = useActionState(createCampaign, initial);
 
   const [channel, setChannel] = useState("email");
+  const [segment, setSegment] = useState("all");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [scheduleAt, setScheduleAt] = useState("");
@@ -42,7 +46,19 @@ export function CampaignComposer({
   const [preview, setPreview] = useState<CampaignPreview | null>(null);
   const [previewing, startPreview] = useTransition();
 
-  const est = audience[channel] ?? { count: 0, costPence: 0 };
+  // Audience estimate refetched whenever channel/segment changes.
+  const [est, setEst] = useState(initialEstimate);
+  const [estimating, startEstimate] = useTransition();
+  useEffect(() => {
+    let cancelled = false;
+    startEstimate(async () => {
+      const r = await estimateCampaignAudience({ venueId, channel, segment });
+      if (!cancelled && r.ok) setEst({ count: r.count, costPence: r.costPence });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [venueId, channel, segment]);
 
   function runPreview() {
     startPreview(async () => {
@@ -77,26 +93,50 @@ export function CampaignComposer({
           />
         </label>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-ink font-medium">Channel</span>
-          <select
-            name="channel"
-            value={channel}
-            onChange={(e) => setChannel(e.target.value)}
-            className="border-hairline rounded-md border px-3 py-2 text-sm"
-          >
-            {Object.keys(CHANNEL_LABEL).map((c) => (
-              <option key={c} value={c}>
-                {CHANNEL_LABEL[c]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-ink font-medium">Channel</span>
+            <select
+              name="channel"
+              value={channel}
+              onChange={(e) => setChannel(e.target.value)}
+              className="border-hairline rounded-md border px-3 py-2 text-sm"
+            >
+              {Object.keys(CHANNEL_LABEL).map((c) => (
+                <option key={c} value={c}>
+                  {CHANNEL_LABEL[c]}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-ink font-medium">Audience</span>
+            <select
+              name="segment"
+              value={segment}
+              onChange={(e) => setSegment(e.target.value)}
+              className="border-hairline rounded-md border px-3 py-2 text-sm"
+            >
+              {segments.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         <p className="text-charcoal bg-cloud rounded-md px-3 py-2 text-sm">
-          Estimated audience: <strong>{est.count}</strong> consented{" "}
-          {est.count === 1 ? "guest" : "guests"} · estimated cost{" "}
-          <strong>{formatCost(est.costPence)}</strong>
+          {estimating ? (
+            <span className="text-ash">Estimating audience…</span>
+          ) : (
+            <>
+              Estimated audience: <strong>{est.count}</strong> consented{" "}
+              {est.count === 1 ? "guest" : "guests"} · estimated cost{" "}
+              <strong>{formatCost(est.costPence)}</strong>
+            </>
+          )}
         </p>
 
         <div className="text-ash flex flex-wrap gap-1.5 text-xs">

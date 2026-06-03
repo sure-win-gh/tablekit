@@ -10,6 +10,7 @@ import "server-only";
 import { eq, sql } from "drizzle-orm";
 
 import { campaigns, campaignSends } from "@/lib/db/schema";
+import { isSegment } from "@/lib/guests/segments";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 
@@ -32,6 +33,7 @@ export async function enqueueCampaign(
       venueId: campaigns.venueId,
       channel: campaigns.channel,
       status: campaigns.status,
+      segment: campaigns.segment,
     })
     .from(campaigns)
     .where(eq(campaigns.id, campaignId))
@@ -42,7 +44,10 @@ export async function enqueueCampaign(
   }
 
   const channel = campaign.channel as MessageChannel;
-  const guestIds = await resolveRecipientIds(campaign.organisationId, campaign.venueId, channel);
+  const guestIds = await resolveRecipientIds(campaign.organisationId, campaign.venueId, channel, {
+    segment: isSegment(campaign.segment) ? campaign.segment : "all",
+    now: opts.now,
+  });
 
   const firstAttempt = opts.scheduleAt ?? opts.now;
   if (guestIds.length > 0) {

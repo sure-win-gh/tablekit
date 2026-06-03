@@ -7,6 +7,7 @@ import { todayInZone } from "@/lib/bookings/time";
 import { withUser } from "@/lib/db/client";
 import { venues } from "@/lib/db/schema";
 import { parseFilter } from "@/lib/reports/filter";
+import { getGuestEngagementReport } from "@/lib/reports/guest-engagement";
 import { getChannelPerformanceReport } from "@/lib/reports/insights/channel-performance";
 import {
   overallNoShowRate,
@@ -22,6 +23,7 @@ import {
   ChannelPerformanceCard,
   ComparisonBand,
   DateRangeNav,
+  GuestEngagementCard,
   LeadTimeCard,
   NoShowTrendCard,
 } from "./forms";
@@ -73,10 +75,11 @@ export default async function InsightsPage({
   const { bounds } = parsed;
   // Serial inside a single transaction — one pg client per tx, same as the
   // MVP reports page.
-  const { leadTime, noShowTrend, channels } = await withUser(async (db) => ({
+  const { leadTime, noShowTrend, channels, engagement } = await withUser(async (db) => ({
     leadTime: await getLeadTimeReport(db, venueId, bounds),
     noShowTrend: await getNoShowTrendReport(db, venueId, bounds),
     channels: await getChannelPerformanceReport(db, venueId, bounds),
+    engagement: await getGuestEngagementReport(db, orgId, venueId, bounds, new Date()),
   }));
 
   // Compare overlay: re-run only the two queries that feed the headline
@@ -142,6 +145,7 @@ export default async function InsightsPage({
         rows={channels}
         downloadHref={`${exportBase}/channel-performance${queryString}`}
       />
+      <GuestEngagementCard report={engagement} />
     </section>
   );
 }

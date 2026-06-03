@@ -1072,6 +1072,10 @@ export const campaigns = pgTable(
     channel: text("channel").notNull(),
     // 'draft' | 'scheduled' | 'sending' | 'sent' | 'cancelled'
     status: text("status").notNull().default("draft"),
+    // Target segment (Phase 4): 'all' | 'new' | 'regular' | 'lapsed' |
+    // 'vip' — constrained in the migration. Recorded so the send-time
+    // re-check + any re-fan-out use the same audience.
+    segment: text("segment").notNull().default("all"),
     subjectOverride: text("subject_override"),
     body: text("body").notNull(),
     scheduledAt: timestamp("scheduled_at", { withTimezone: true }),

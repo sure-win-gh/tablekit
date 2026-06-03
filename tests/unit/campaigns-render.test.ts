@@ -7,7 +7,7 @@ import {
   renderCampaign,
   MARKETING_TAG_NAMES,
 } from "@/lib/campaigns/render";
-import { billingPeriod, estimateCostPence, CHANNEL_COST_PENCE } from "@/lib/campaigns/usage";
+import { billingPeriod, estimateCostPence, CHANNEL_COST_PENCE } from "@/lib/billing/usage";
 
 const ctx = {
   guestFirstName: "Jamie",

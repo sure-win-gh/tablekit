@@ -8,13 +8,16 @@ import { requireRole } from "@/lib/auth/require-role";
 import { InsufficientPlanError, requirePlan } from "@/lib/auth/require-plan";
 import { enqueueCampaign } from "@/lib/campaigns/enqueue";
 import { processNextCampaignBatch } from "@/lib/campaigns/dispatch";
+import { estimateAudience } from "@/lib/campaigns/recipients";
 import { findUnknownMarketingTags, renderCampaign } from "@/lib/campaigns/render";
 import { campaigns, venues } from "@/lib/db/schema";
+import { SEGMENTS } from "@/lib/guests/segments";
 import { parseBranding } from "@/lib/messaging/venue-settings";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 
 const CHANNEL = z.enum(["email", "sms", "whatsapp"]);
+const SEGMENT = z.enum(SEGMENTS);
 
 export type CreateCampaignState =
   | { status: "idle" }
@@ -41,6 +44,7 @@ export async function createCampaign(
       venueId: z.uuid(),
       name: z.string().min(1).max(120),
       channel: CHANNEL,
+      segment: SEGMENT,
       subject: z.string().max(200).optional(),
       body: z.string().min(1, "Write some copy").max(2000),
       send: z.boolean(),
@@ -49,6 +53,7 @@ export async function createCampaign(
       venueId: fd.get("venue_id"),
       name: fd.get("name"),
       channel: fd.get("channel"),
+      segment: fd.get("segment") ?? "all",
       subject: (fd.get("subject") as string | null) ?? undefined,
       body: fd.get("body"),
       send: fd.get("send") === "now",
@@ -57,7 +62,7 @@ export async function createCampaign(
     return { status: "error", message: "Please complete the campaign fields." };
   }
 
-  const { venueId, name, channel } = parsed.data;
+  const { venueId, name, channel, segment } = parsed.data;
   const body = parsed.data.body.trim();
   const subject = parsed.data.subject?.trim() ?? "";
 
@@ -95,6 +100,7 @@ export async function createCampaign(
       venueId,
       name,
       channel,
+      segment,
       status: "draft",
       subjectOverride: channel === "email" ? subject || null : null,
       body,
@@ -109,7 +115,7 @@ export async function createCampaign(
     action: "campaign.created",
     targetType: "campaign",
     targetId: campaign.id,
-    metadata: { channel, name },
+    metadata: { channel, name, segment },
   });
 
   if (!parsed.data.send) {
@@ -130,6 +136,42 @@ export async function createCampaign(
     queued: r.ok ? r.queued : 0,
     sent: true,
   };
+}
+
+// On-demand audience estimate for a (channel, segment). Plus-gated +
+// org-scoped. Called by the composer when channel/segment changes.
+export type AudienceEstimateResult =
+  | { ok: true; count: number; costPence: number }
+  | { ok: false; message: string };
+
+export async function estimateCampaignAudience(input: {
+  venueId: string;
+  channel: string;
+  segment: string;
+}): Promise<AudienceEstimateResult> {
+  const { orgId } = await requireRole("manager");
+  try {
+    await requirePlan(orgId, "plus");
+  } catch (err) {
+    if (err instanceof InsufficientPlanError) return { ok: false, message: "Plus-tier feature." };
+    throw err;
+  }
+  const channel = CHANNEL.safeParse(input.channel);
+  const segment = SEGMENT.safeParse(input.segment);
+  const vid = z.uuid().safeParse(input.venueId);
+  if (!channel.success || !segment.success || !vid.success) {
+    return { ok: false, message: "Invalid selection." };
+  }
+  // Org guard before estimating against the venue.
+  const [venue] = await adminDb()
+    .select({ id: venues.id })
+    .from(venues)
+    .where(and(eq(venues.id, vid.data), eq(venues.organisationId, orgId)))
+    .limit(1);
+  if (!venue) return { ok: false, message: "Venue not found." };
+
+  const est = await estimateAudience(orgId, vid.data, channel.data, { segment: segment.data });
+  return { ok: true, count: est.count, costPence: est.costPence };
 }
 
 // Live preview of campaign copy against a sample guest. Plus-gated.

@@ -7,13 +7,11 @@ import { estimateAudience } from "@/lib/campaigns/recipients";
 import { MARKETING_TAG_NAMES } from "@/lib/campaigns/render";
 import { withUser } from "@/lib/db/client";
 import { campaigns, venues } from "@/lib/db/schema";
-import type { MessageChannel } from "@/lib/messaging/registry";
+import { SEGMENTS, SEGMENT_LABEL } from "@/lib/guests/segments";
 
-import { CampaignComposer, type AudienceMap } from "./campaign-composer";
+import { CampaignComposer } from "./campaign-composer";
 
 export const metadata = { title: "Campaigns · TableKit" };
-
-const CHANNELS: MessageChannel[] = ["email", "sms", "whatsapp"];
 
 export default async function CampaignsPage({ params }: { params: Promise<{ venueId: string }> }) {
   const { orgId } = await requireRole("manager");
@@ -36,12 +34,10 @@ export default async function CampaignsPage({ params }: { params: Promise<{ venu
   });
   if (!venue) notFound();
 
-  // Consent-filtered audience estimate per channel (drives the composer's
-  // pre-send count + cost).
-  const audience: AudienceMap = {};
-  for (const ch of CHANNELS) {
-    audience[ch] = await estimateAudience(orgId, venueId, ch);
-  }
+  // Initial consent-filtered estimate for the default (email, all). The
+  // composer refetches per (channel, segment) on change.
+  const initialEstimate = await estimateAudience(orgId, venueId, "email", { segment: "all" });
+  const segments = SEGMENTS.map((key) => ({ key, label: SEGMENT_LABEL[key] }));
 
   const list = await withUser(async (db) =>
     db
@@ -70,7 +66,8 @@ export default async function CampaignsPage({ params }: { params: Promise<{ venu
 
       <CampaignComposer
         venueId={venue.id}
-        audience={audience}
+        segments={segments}
+        initialEstimate={initialEstimate}
         mergeTags={[...MARKETING_TAG_NAMES]}
       />
 

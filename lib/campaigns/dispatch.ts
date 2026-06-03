@@ -19,6 +19,7 @@ import { adminDb } from "@/lib/server/admin/db";
 import { SmsSendError, sendSms } from "@/lib/sms/send";
 import { WhatsAppSendError, sendWhatsApp } from "@/lib/whatsapp/send";
 
+import { isSegment } from "@/lib/guests/segments";
 import { backoffMs, truncateError } from "@/lib/messaging/enqueue";
 import type { MessageChannel } from "@/lib/messaging/registry";
 import { unsubscribeUrl } from "@/lib/messaging/tokens";
@@ -26,7 +27,7 @@ import { parseBranding } from "@/lib/messaging/venue-settings";
 
 import { renderCampaign } from "./render";
 import { isStillEligible } from "./recipients";
-import { recordUsage } from "./usage";
+import { recordUsage } from "@/lib/billing/usage";
 
 export type CampaignDispatchResult = {
   processed: number;
@@ -96,12 +97,6 @@ async function processOne(row: ClaimedRow, appUrl: string, now: Date): Promise<O
   const channel = row.channel as MessageChannel;
   const db = adminDb();
 
-  // Re-check eligibility at send time — consent withdrawn / unsubscribed
-  // / erased since enqueue must stop the send.
-  if (!(await isStillEligible(row.organisationId, row.venueId, channel, row.guestId))) {
-    return markSkipped(row, "ineligible-at-send");
-  }
-
   const [ctx] = await db
     .select({
       guestFirstName: guests.firstName,
@@ -111,6 +106,7 @@ async function processOne(row: ClaimedRow, appUrl: string, now: Date): Promise<O
       venueSettings: venues.settings,
       campaignSubject: campaigns.subjectOverride,
       campaignBody: campaigns.body,
+      campaignSegment: campaigns.segment,
     })
     .from(campaignSends)
     .innerJoin(campaigns, eq(campaigns.id, campaignSends.campaignId))
@@ -119,6 +115,19 @@ async function processOne(row: ClaimedRow, appUrl: string, now: Date): Promise<O
     .where(eq(campaignSends.id, row.id))
     .limit(1);
   if (!ctx) return markFailed(row, "context-missing");
+
+  // Re-check eligibility at send time — consent withdrawn / unsubscribed
+  // / erased, OR the guest left the targeted segment (e.g. a lapsed guest
+  // who re-booked before a scheduled send) must stop the send.
+  const segment = isSegment(ctx.campaignSegment) ? ctx.campaignSegment : "all";
+  if (
+    !(await isStillEligible(row.organisationId, row.venueId, channel, row.guestId, {
+      segment,
+      now,
+    }))
+  ) {
+    return markSkipped(row, "ineligible-at-send");
+  }
 
   let recipient: string;
   try {
@@ -200,7 +209,15 @@ async function markSent(
     .set({ status: "sent", providerId, sentAt: sql`now()`, error: null })
     .where(eq(campaignSends.id, row.id));
   await bumpCount(row.campaignId, "sent");
-  await recordUsage(row.organisationId, channel, now);
+  // NON-FATAL: send already committed; a metering write failure must not
+  // flip a sent row to 'failed' (markSent runs inside processOne's try).
+  try {
+    await recordUsage(row.organisationId, channel, now);
+  } catch (err) {
+    console.error("[lib/campaigns/dispatch.ts] recordUsage failed (send already succeeded):", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
   return "sent";
 }
 
