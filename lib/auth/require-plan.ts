@@ -58,3 +58,19 @@ export async function requirePlan(orgId: string, min: Plan): Promise<Plan> {
   }
   return plan;
 }
+
+// Non-throwing sibling of requirePlan: just resolve the org's plan so a
+// page can decide whether to render a locked/upsell state instead of
+// crashing. Throws only when the org genuinely doesn't exist — that's a
+// bug, not an entitlement outcome. The show-but-lock paywall uses this
+// with isLocked() from ./entitlements.ts.
+export async function getPlan(orgId: string): Promise<Plan> {
+  const db = adminDb();
+  const [row] = await db
+    .select({ plan: organisations.plan })
+    .from(organisations)
+    .where(eq(organisations.id, orgId))
+    .limit(1);
+  if (!row) throw new OrgNotFoundError(orgId);
+  return toPlan(row.plan);
+}
