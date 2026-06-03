@@ -63,7 +63,7 @@ create table campaign_sends (
 -- worker partial index on next_attempt_at where status in ('queued','sending')
 ```
 
-Also: a `message_usage` ledger `(organisation_id, period 'yyyy-mm', channel, count, est_cost_pence)` incremented at successful send in BOTH the transactional and campaign dispatchers (first usage-metering in the codebase; Stripe usage reporting is a later phase — record now).
+Also: a `message_usage` ledger `(organisation_id, period 'yyyy-mm', channel, count, est_cost_pence)` incremented at successful send in BOTH the transactional and campaign dispatchers (helper at `lib/billing/usage.ts`; first usage-metering in the codebase). **Surfaced** in the operator org page (`getUsageSummary`) + the founder admin dashboard (`getPlatformUsageThisMonth`). SMS/WhatsApp channel enablement is gated Core+ (`updateMessagingSettings`). Engagement retention: `campaign_sends` swept at 24 months (`lib/campaigns/retention.ts` + `/api/cron/campaign-retention`). **Stripe usage-record reporting is deferred** — it needs subscription billing (no Stripe subscriptions exist yet).
 
 ## API surface
 

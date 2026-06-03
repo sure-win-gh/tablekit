@@ -40,6 +40,10 @@
     {
       "path": "/api/cron/campaign-tick",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/campaign-retention",
+      "schedule": "20 5 * * *"
     }
   ]
 }

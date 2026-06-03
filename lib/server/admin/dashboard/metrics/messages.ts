@@ -9,9 +9,10 @@
 
 import "server-only";
 
-import { and, gte, lte, sql } from "drizzle-orm";
+import { and, eq, gte, lte, sql } from "drizzle-orm";
 
-import { messages } from "@/lib/db/schema";
+import { messages, messageUsage } from "@/lib/db/schema";
+import { billingPeriod } from "@/lib/billing/usage";
 
 import { lastNDays } from "../filter";
 import type { AdminDb } from "../types";
@@ -37,4 +38,25 @@ export async function getMessageVolume7d(
     .where(and(gte(messages.createdAt, bounds.fromUtc), lte(messages.createdAt, bounds.toUtc)))
     .groupBy(messages.channel, messages.status)
     .orderBy(messages.channel, messages.status);
+}
+
+export type PlatformUsageRow = { channel: string; count: number; costPence: number };
+
+// Platform-wide pass-through usage for the current billing month —
+// summed across all orgs from the message_usage ledger.
+export async function getPlatformUsageThisMonth(
+  db: AdminDb,
+  now: Date = new Date(),
+): Promise<PlatformUsageRow[]> {
+  const period = billingPeriod(now);
+  return db
+    .select({
+      channel: messageUsage.channel,
+      count: sql<number>`coalesce(sum(${messageUsage.count}), 0)::int`.as("count"),
+      costPence: sql<number>`coalesce(sum(${messageUsage.estCostPence}), 0)::int`.as("costPence"),
+    })
+    .from(messageUsage)
+    .where(eq(messageUsage.period, period))
+    .groupBy(messageUsage.channel)
+    .orderBy(messageUsage.channel);
 }

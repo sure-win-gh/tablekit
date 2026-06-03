@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { InsufficientPlanError, requirePlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { messageTemplates, venues } from "@/lib/db/schema";
 import type { MessageBookingContext } from "@/lib/messaging/context";
@@ -100,10 +101,31 @@ export async function updateMessagingSettings(
   if (!venueId.success) return { status: "error", message: "Invalid venue." };
 
   const messaging: Record<string, unknown> = {};
+  let usesPaidChannel = false;
   for (const event of FLOW_EVENTS) {
     const r = readEvent(event, fd);
     if ("error" in r) return { status: "error", message: r.error };
+    if (r.enabled && r.channels.some((c) => c === "sms" || c === "whatsapp")) {
+      usesPaidChannel = true;
+    }
     messaging[event] = r;
+  }
+
+  // SMS/WhatsApp are paid (pass-through) channels — gated Core+. Email
+  // stays free for every tier. Catch InsufficientPlanError and surface
+  // an upgrade prompt rather than 500ing.
+  if (usesPaidChannel) {
+    try {
+      await requirePlan(orgId, "core");
+    } catch (err) {
+      if (err instanceof InsufficientPlanError) {
+        return {
+          status: "error",
+          message: "SMS and WhatsApp are paid channels — upgrade to Core or higher to enable them.",
+        };
+      }
+      throw err;
+    }
   }
 
   // Branding — all optional, validated so nothing unsafe reaches the

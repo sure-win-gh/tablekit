@@ -4,10 +4,13 @@ import Link from "next/link";
 
 import { hasPlan, toPlan } from "@/lib/auth/plan-level";
 import { requireRole } from "@/lib/auth/require-role";
+import { getUsageSummary, type UsageSummary } from "@/lib/billing/usage-summary";
 import { withUser } from "@/lib/db/client";
 import { organisations, venues } from "@/lib/db/schema";
 
 import { GroupCrmToggle } from "./forms";
+
+const CHANNEL_LABEL: Record<string, string> = { email: "Email", sms: "SMS", whatsapp: "WhatsApp" };
 
 export const metadata = { title: "Organisation · TableKit" };
 
@@ -21,7 +24,7 @@ export default async function OrganisationPage() {
   const { role } = await requireRole("host");
   const isOwner = role === "owner";
 
-  const { org, venueCount } = await withUser(async (db) => {
+  const { org, venueCount, usage } = await withUser(async (db) => {
     const [o] = await db
       .select({
         id: organisations.id,
@@ -32,12 +35,13 @@ export default async function OrganisationPage() {
       })
       .from(organisations)
       .limit(1);
-    if (!o) return { org: null, venueCount: 0 };
+    if (!o) return { org: null, venueCount: 0, usage: null };
     const v = await db
       .select({ id: venues.id })
       .from(venues)
       .where(eq(venues.organisationId, o.id));
-    return { org: o, venueCount: v.length };
+    const usage = await getUsageSummary(db, o.id, new Date());
+    return { org: o, venueCount: v.length, usage };
   });
 
   if (!org) {
@@ -94,6 +98,8 @@ export default async function OrganisationPage() {
         />
       </section>
 
+      {usage ? <UsageSection usage={usage} /> : null}
+
       <section className="mt-8 flex flex-col gap-2">
         <h2 className="text-ink text-sm font-semibold tracking-tight">Team</h2>
         <p className="text-ash text-sm">
@@ -138,5 +144,55 @@ export default async function OrganisationPage() {
         </section>
       ) : null}
     </main>
+  );
+}
+
+function fmtCost(pence: number): string {
+  return pence === 0 ? "£0.00" : `£${(pence / 100).toFixed(2)}`;
+}
+
+// Messaging usage this month — send volume + estimated pass-through cost
+// per channel. SMS/WhatsApp are billed at cost; email is free.
+function UsageSection({ usage }: { usage: UsageSummary }) {
+  const total = usage.rows.reduce((s, r) => s + r.count, 0);
+  return (
+    <section className="mt-8 flex flex-col gap-2">
+      <h2 className="text-ink text-sm font-semibold tracking-tight">Messaging usage</h2>
+      <p className="text-ash text-sm">
+        Sends this month ({usage.period}). SMS and WhatsApp are billed at cost; email is free.
+        Estimated — reconciled against the provider invoice.
+      </p>
+      {total === 0 ? (
+        <p className="rounded-card border-hairline bg-cloud text-ash border p-3 text-xs">
+          No messages sent yet this month.
+        </p>
+      ) : (
+        <div className="rounded-card border-hairline overflow-hidden border bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-cloud text-ash text-left text-xs font-semibold tracking-wider uppercase">
+              <tr>
+                <th className="px-4 py-2.5">Channel</th>
+                <th className="px-4 py-2.5">Sends</th>
+                <th className="px-4 py-2.5">Est. cost</th>
+              </tr>
+            </thead>
+            <tbody className="divide-hairline divide-y">
+              {usage.rows.map((r) => (
+                <tr key={r.channel}>
+                  <td className="text-ink px-4 py-3">{CHANNEL_LABEL[r.channel] ?? r.channel}</td>
+                  <td className="text-charcoal px-4 py-3">{r.count}</td>
+                  <td className="text-charcoal px-4 py-3">{fmtCost(r.costPence)}</td>
+                </tr>
+              ))}
+              <tr className="bg-cloud/40 font-semibold">
+                <td className="text-ink px-4 py-3">Total</td>
+                <td className="text-ink px-4 py-3">{total}</td>
+                <td className="text-ink px-4 py-3">{fmtCost(usage.totalCostPence)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
