@@ -55,7 +55,7 @@ export async function disconnectGoogle(
     metadata: { provider: "google" },
   });
 
-  revalidatePath(`/dashboard/venues/${venueId}/settings`);
+  revalidatePath(`/dashboard/venues/${venueId}/settings/google`);
   return { status: "saved" };
 }
 
@@ -123,7 +123,7 @@ export async function pickGoogleLocation(
     metadata: { provider: "google" },
   });
 
-  revalidatePath(`/dashboard/venues/${venueId}/settings`);
+  revalidatePath(`/dashboard/venues/${venueId}/settings/google`);
   return { status: "saved" };
 }
 

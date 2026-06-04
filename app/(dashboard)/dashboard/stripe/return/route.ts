@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
   });
 
   const target = firstVenue
-    ? `/dashboard/venues/${firstVenue.id}/settings?stripe=${encodeURIComponent(status)}`
+    ? `/dashboard/venues/${firstVenue.id}/settings/payments?stripe=${encodeURIComponent(status)}`
     : `/dashboard?stripe=${encodeURIComponent(status)}`;
 
   return NextResponse.redirect(new URL(target, req.url));

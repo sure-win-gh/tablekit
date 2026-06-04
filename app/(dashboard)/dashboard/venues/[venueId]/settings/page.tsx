@@ -1,69 +1,12 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 
-import { UpgradeBanner } from "@/components/billing/locked-feature";
-import { isLocked } from "@/lib/auth/entitlements";
-import { getPlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
-import { getAccount } from "@/lib/stripe/connect";
 import { withUser } from "@/lib/db/client";
-import {
-  messageTemplates,
-  venueOauthConnections,
-  venueSendingDomains,
-  venues,
-} from "@/lib/db/schema";
-import { listAccounts, listLocations } from "@/lib/google/business-profile";
-import { getActiveGoogleConnection } from "@/lib/google/connection";
-import { MERGE_TAG_NAMES } from "@/lib/messaging/merge-tags";
-import { templateChannels } from "@/lib/messaging/registry";
-import {
-  FLOW_EVENTS,
-  FLOW_EVENT_TEMPLATE,
-  parseBranding,
-  parseMessagingSettings,
-  type FlowEvent,
-} from "@/lib/messaging/venue-settings";
-import { isConfigured as googleOauthConfigured } from "@/lib/oauth/google";
+import { venueSendingDomains, venues } from "@/lib/db/schema";
 
-import { BillingSection } from "./billing";
-import { GoogleConnectionSection } from "./google-connection";
-import { GoogleLocationPicker, type PickerLocation } from "./google-location-picker";
-import { MessageComposer } from "./message-composer";
-import { MessagingSettingsForm, type FlowEventView } from "./messaging-form";
-import { SendingDomainSection, type SendingDomainRow } from "./sending-domain-section";
 import { VenueSettingsForm } from "./form";
-
-const EVENT_META: Record<
-  FlowEvent,
-  { label: string; help: string; timing: "before" | "after" | null }
-> = {
-  confirmation: {
-    label: "Booking confirmation",
-    help: "Sent as soon as a booking is confirmed.",
-    timing: null,
-  },
-  reminder_24h: {
-    label: "24-hour reminder",
-    help: "A reminder the day before the booking.",
-    timing: "before",
-  },
-  reminder_2h: {
-    label: "2-hour reminder",
-    help: "A nudge a couple of hours before arrival.",
-    timing: "before",
-  },
-  cancelled: {
-    label: "Cancellation",
-    help: "Sent when a booking is cancelled.",
-    timing: null,
-  },
-  thank_you: {
-    label: "Thank-you",
-    help: "Sent a few hours after the visit finishes.",
-    timing: "after",
-  },
-};
+import { SendingDomainSection, type SendingDomainRow } from "./sending-domain-section";
 
 export const metadata = {
   title: "Settings · TableKit",
@@ -71,16 +14,12 @@ export const metadata = {
 
 export default async function VenueSettingsPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ venueId: string }>;
-  searchParams: Promise<{ stripe?: string; google?: string }>;
 }) {
-  const { orgId, role } = await requireRole("manager");
-  const orgPlan = await getPlan(orgId);
+  const { role } = await requireRole("manager");
   const isOwner = role === "owner";
   const { venueId } = await params;
-  const sp = await searchParams;
 
   const venue = await withUser(async (db) => {
     const rows = await db
@@ -133,43 +72,6 @@ export default async function VenueSettingsPage({
   // requirePlan-equivalent gate (if/when added) refuse. Default off.
   const aiEnquiryAutoSendEnabled = settings["aiEnquiryAutoSendEnabled"] === true;
 
-  // Messaging flow + branding (Phase 2). Parsed into a typed view for
-  // the form; capability per event comes from the registry.
-  const messaging = parseMessagingSettings(venue.settings);
-  const branding = parseBranding(venue.settings);
-  const flowEvents: FlowEventView[] = FLOW_EVENTS.map((ev) => {
-    const cfg = messaging[ev];
-    const meta = EVENT_META[ev];
-    return {
-      event: ev,
-      label: meta.label,
-      help: meta.help,
-      capableChannels: templateChannels(FLOW_EVENT_TEMPLATE[ev]),
-      timing: meta.timing,
-      enabled: cfg.enabled,
-      primary: cfg.channels[0] ?? "email",
-      secondary: cfg.channels[1] ?? null,
-      hours: cfg.hoursBeforeStart ?? cfg.hoursAfterFinish ?? null,
-    };
-  });
-  const overrideSlots = FLOW_EVENTS.map((ev) => ({
-    template: FLOW_EVENT_TEMPLATE[ev],
-    label: EVENT_META[ev].label,
-    channels: templateChannels(FLOW_EVENT_TEMPLATE[ev]),
-  }));
-  const overrideRows = await withUser(async (db) =>
-    db
-      .select({
-        template: messageTemplates.template,
-        channel: messageTemplates.channel,
-        subjectOverride: messageTemplates.subjectOverride,
-        bodyOverride: messageTemplates.bodyOverride,
-        enabled: messageTemplates.enabled,
-      })
-      .from(messageTemplates)
-      .where(eq(messageTemplates.venueId, venueId)),
-  );
-
   // Per-venue sending domain. Optional — most venues use the platform
   // default until they care about "via tablekit.uk" in client UX.
   const sendingDomainRowRaw = await withUser(async (db) => {
@@ -196,153 +98,34 @@ export default async function VenueSettingsPage({
       }
     : null;
 
-  // Stripe Connect state is org-scoped — one connected account per
-  // organisation (D1 in the phase plan). The billing section is
-  // per-venue in the sense that it lives under a venue URL, but every
-  // venue in an org sees the same state.
-  const stripeAccount = await getAccount(orgId);
-
-  // Google Business Profile connection state — RLS-scoped read.
-  const googleConnection = await withUser(async (db) => {
-    const rows = await db
-      .select({
-        externalAccountId: venueOauthConnections.externalAccountId,
-        scopes: venueOauthConnections.scopes,
-        tokenExpiresAt: venueOauthConnections.tokenExpiresAt,
-        lastSyncedAt: venueOauthConnections.lastSyncedAt,
-      })
-      .from(venueOauthConnections)
-      .where(
-        and(
-          eq(venueOauthConnections.venueId, venueId),
-          eq(venueOauthConnections.provider, "google"),
-        ),
-      )
-      .limit(1);
-    return rows[0] ?? null;
-  });
-
-  // If the operator has connected but not yet picked a location, fetch
-  // the available locations server-side so the picker can render. The
-  // active-connection helper handles token refresh transparently.
-  let pickerLocations: PickerLocation[] = [];
-  let pickerLoadError: string | null = null;
-  if (googleConnection && !googleConnection.externalAccountId) {
-    try {
-      const conn = await getActiveGoogleConnection(venueId);
-      if (!conn) {
-        pickerLoadError = "Connection lost. Disconnect and try again.";
-      } else {
-        const accountsRes = await listAccounts(conn.accessToken);
-        if (!accountsRes.ok) {
-          pickerLoadError = `Couldn't list Google accounts (HTTP ${accountsRes.status}).`;
-        } else {
-          // Flatten accounts → locations. Most operators have one
-          // account; we don't paginate here because GBP returns all
-          // accounts in a single response for the typical case.
-          const all: PickerLocation[] = [];
-          for (const account of accountsRes.accounts) {
-            const locs = await listLocations({
-              accessToken: conn.accessToken,
-              accountName: account.name,
-            });
-            if (!locs.ok) continue;
-            for (const l of locs.locations) {
-              all.push({
-                resourceName: `${account.name}/${l.name}`,
-                title: l.title,
-                address:
-                  l.storefrontAddress?.addressLines?.join(", ") ??
-                  l.storefrontAddress?.locality ??
-                  null,
-              });
-            }
-          }
-          pickerLocations = all;
-        }
-      }
-    } catch {
-      pickerLoadError = "Couldn't reach Google. Try again.";
-    }
-  }
-
   return (
-    <section className="flex flex-col gap-8">
+    <section className="flex flex-col gap-6">
       <div>
-        <p className="text-ash mb-6 text-sm">
+        <h2 className="text-ink text-xl font-bold tracking-tight">General</h2>
+        <p className="text-ash mt-0.5 text-sm">
           Venue type is <span className="text-charcoal font-mono">{venue.venueType}</span> —
           changing type isn&apos;t supported yet.
         </p>
-
-        <VenueSettingsForm
-          venueId={venue.id}
-          name={venue.name}
-          slug={venue.slug ?? ""}
-          publicBaseUrl={publicBaseUrl}
-          timezone={venue.timezone}
-          locale={venue.locale}
-          reviewRequestEnabled={reviewSettings.enabled}
-          reviewRequestDelayHours={reviewSettings.delayHours}
-          googlePlaceId={reviewSettings.googlePlaceId}
-          escalationEnabled={escalationSettings.enabled}
-          escalationThreshold={escalationSettings.threshold}
-          escalationEmail={escalationSettings.email}
-          showcaseEnabled={showcaseEnabled}
-          aiEnquiryAutoSendEnabled={aiEnquiryAutoSendEnabled}
-        />
-
-        <SendingDomainSection venueId={venue.id} isOwner={isOwner} row={sendingDomainRow} />
       </div>
 
-      <div className="border-hairline rounded-card border bg-white p-6">
-        {isLocked(orgPlan, "messaging") ? <UpgradeBanner feature="messaging" /> : null}
-        <MessagingSettingsForm
-          venueId={venue.id}
-          events={flowEvents}
-          branding={{
-            logoUrl: branding?.logoUrl ?? "",
-            brandColour: branding?.brandColour ?? "",
-            signature: branding?.signature ?? "",
-            replyTo: branding?.replyTo ?? "",
-          }}
-        />
-        <MessageComposer
-          venueId={venue.id}
-          slots={overrideSlots}
-          overrides={overrideRows}
-          mergeTags={[...MERGE_TAG_NAMES]}
-        />
-      </div>
-
-      <BillingSection
+      <VenueSettingsForm
         venueId={venue.id}
-        account={
-          stripeAccount
-            ? {
-                accountId: stripeAccount.accountId,
-                chargesEnabled: stripeAccount.chargesEnabled,
-                payoutsEnabled: stripeAccount.payoutsEnabled,
-                detailsSubmitted: stripeAccount.detailsSubmitted,
-              }
-            : null
-        }
-        flash={sp.stripe ?? null}
+        name={venue.name}
+        slug={venue.slug ?? ""}
+        publicBaseUrl={publicBaseUrl}
+        timezone={venue.timezone}
+        locale={venue.locale}
+        reviewRequestEnabled={reviewSettings.enabled}
+        reviewRequestDelayHours={reviewSettings.delayHours}
+        googlePlaceId={reviewSettings.googlePlaceId}
+        escalationEnabled={escalationSettings.enabled}
+        escalationThreshold={escalationSettings.threshold}
+        escalationEmail={escalationSettings.email}
+        showcaseEnabled={showcaseEnabled}
+        aiEnquiryAutoSendEnabled={aiEnquiryAutoSendEnabled}
       />
 
-      <GoogleConnectionSection
-        venueId={venue.id}
-        configured={googleOauthConfigured()}
-        connection={googleConnection}
-        flash={sp.google ?? null}
-      />
-
-      {googleConnection && !googleConnection.externalAccountId ? (
-        <GoogleLocationPicker
-          venueId={venue.id}
-          locations={pickerLocations}
-          loadError={pickerLoadError}
-        />
-      ) : null}
+      <SendingDomainSection venueId={venue.id} isOwner={isOwner} row={sendingDomainRow} />
     </section>
   );
 }

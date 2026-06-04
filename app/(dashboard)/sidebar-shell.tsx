@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Banknote,
   Building2,
   CalendarDays,
   CalendarRange,
@@ -13,6 +14,7 @@ import {
   CreditCard,
   Database,
   Gauge,
+  Globe,
   Hourglass,
   Inbox,
   LayoutDashboard,
@@ -256,10 +258,18 @@ export function SidebarShell({
         },
         {
           kind: "group",
+          // groupKey kept as "venue-setup" so existing expand/collapse
+          // state survives the Setup → Settings rename.
           groupKey: "venue-setup",
-          label: "Setup",
-          icon: Wrench,
+          label: "Settings",
+          icon: Settings,
           items: [
+            {
+              kind: "item",
+              href: `/dashboard/venues/${venueId}/settings`,
+              label: "General",
+              icon: Wrench,
+            },
             {
               kind: "item",
               href: `/dashboard/venues/${venueId}/services`,
@@ -275,9 +285,21 @@ export function SidebarShell({
             },
             {
               kind: "item",
-              href: `/dashboard/venues/${venueId}/settings`,
-              label: "Settings",
-              icon: Settings,
+              href: `/dashboard/venues/${venueId}/settings/messaging`,
+              label: "Messaging",
+              icon: MessageSquare,
+            },
+            {
+              kind: "item",
+              href: `/dashboard/venues/${venueId}/settings/payments`,
+              label: "Payments",
+              icon: Banknote,
+            },
+            {
+              kind: "item",
+              href: `/dashboard/venues/${venueId}/settings/google`,
+              label: "Google",
+              icon: Globe,
             },
           ],
         },

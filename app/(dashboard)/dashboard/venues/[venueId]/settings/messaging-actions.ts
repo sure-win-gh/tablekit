@@ -177,7 +177,7 @@ export async function updateMessagingSettings(
     targetId: venueId.data,
   });
 
-  revalidatePath(`/dashboard/venues/${venueId.data}/settings`, "layout");
+  revalidatePath(`/dashboard/venues/${venueId.data}/settings/messaging`, "layout");
   return { status: "saved" };
 }
 
@@ -273,7 +273,7 @@ export async function upsertMessageTemplate(
     metadata: { template, channel, enabled: parsed.data.enabled },
   });
 
-  revalidatePath(`/dashboard/venues/${venueId}/settings`, "layout");
+  revalidatePath(`/dashboard/venues/${venueId}/settings/messaging`, "layout");
   return { status: "saved", unknownTags };
 }
 
