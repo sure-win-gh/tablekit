@@ -1,12 +1,20 @@
 import { eq } from "drizzle-orm";
-import { Building2, ChevronRight, KeyRound, UserPlus, Webhook } from "lucide-react";
+import {
+  Building2,
+  ChevronRight,
+  CreditCard,
+  KeyRound,
+  TriangleAlert,
+  UserPlus,
+  Webhook,
+} from "lucide-react";
 import Link from "next/link";
 
 import { hasPlan, toPlan } from "@/lib/auth/plan-level";
 import { requireRole } from "@/lib/auth/require-role";
 import { getUsageSummary, type UsageSummary } from "@/lib/billing/usage-summary";
 import { withUser } from "@/lib/db/client";
-import { organisations, venues } from "@/lib/db/schema";
+import { billingSubscriptions, organisations, venues } from "@/lib/db/schema";
 
 import { GroupCrmToggle } from "./forms";
 
@@ -24,7 +32,7 @@ export default async function OrganisationPage() {
   const { role } = await requireRole("host");
   const isOwner = role === "owner";
 
-  const { org, venueCount, usage } = await withUser(async (db) => {
+  const { org, venueCount, usage, billingPastDue } = await withUser(async (db) => {
     const [o] = await db
       .select({
         id: organisations.id,
@@ -35,13 +43,18 @@ export default async function OrganisationPage() {
       })
       .from(organisations)
       .limit(1);
-    if (!o) return { org: null, venueCount: 0, usage: null };
+    if (!o) return { org: null, venueCount: 0, usage: null, billingPastDue: false };
     const v = await db
       .select({ id: venues.id })
       .from(venues)
       .where(eq(venues.organisationId, o.id));
     const usage = await getUsageSummary(db, o.id, new Date());
-    return { org: o, venueCount: v.length, usage };
+    const [sub] = await db
+      .select({ status: billingSubscriptions.status })
+      .from(billingSubscriptions)
+      .where(eq(billingSubscriptions.organisationId, o.id))
+      .limit(1);
+    return { org: o, venueCount: v.length, usage, billingPastDue: sub?.status === "past_due" };
   });
 
   if (!org) {
@@ -70,6 +83,36 @@ export default async function OrganisationPage() {
           {venueCount === 1 ? "venue" : "venues"}
         </p>
       </header>
+
+      {billingPastDue && isOwner ? (
+        <Link
+          href="/dashboard/organisation/billing"
+          className="rounded-card mt-4 flex items-start gap-2 border border-amber-500/40 bg-amber-50 p-3 text-sm text-amber-900 transition hover:border-amber-500"
+        >
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <span>
+            There&apos;s a problem with your last payment. Update your card on the Billing page to
+            keep your plan.
+          </span>
+        </Link>
+      ) : null}
+
+      {isOwner ? (
+        <section className="mt-6 flex flex-col gap-2">
+          <h2 className="text-ink text-sm font-semibold tracking-tight">Billing</h2>
+          <p className="text-ash text-sm">
+            Your subscription plan and payment method, managed securely through Stripe.
+          </p>
+          <Link
+            href="/dashboard/organisation/billing"
+            className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
+          >
+            <CreditCard className="text-ash h-4 w-4" aria-hidden />
+            Manage billing
+            <ChevronRight className="text-stone h-4 w-4" aria-hidden />
+          </Link>
+        </section>
+      ) : null}
 
       <section className="mt-6 flex flex-col gap-2">
         <h2 className="text-ink text-sm font-semibold tracking-tight">Group CRM</h2>

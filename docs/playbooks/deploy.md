@@ -49,6 +49,14 @@ For solo operation: steps 2–4 are where Claude Code earns its keep. Use subage
 - Changes to env vars are deployed by re-triggering the current build.
 - Per-environment values: local (dev), preview (shared), staging, production.
 
+### Stripe billing (platform-account subscriptions)
+
+Distinct from Connect/deposits. Deposits run on the **connected account** (venue = merchant); these are **platform** events (Tablekit = merchant for the £19/£39 plan + credit top-ups). See `docs/specs/stripe-billing.md`.
+
+- **Webhook endpoints (two, same receiver `/api/stripe/webhook`):** per `payments.md`, one is type **Account** (platform), one is type **Connect**. Billing events arrive on the **platform** endpoint (no `account` field): `checkout.session.completed`, `customer.subscription.created|updated|deleted`, `invoice.paid`, `invoice.payment_failed`. Add these to the platform endpoint's event selection. Its `whsec_*` feeds `STRIPE_WEBHOOK_SECRET` (shared with the existing platform endpoint).
+- **Products / Prices (dashboard, not API):** create a Core (£19/mo) and Plus (£39/mo) recurring Price; paste their `price_…` ids into `STRIPE_PRICE_CORE` / `STRIPE_PRICE_PLUS`.
+- **Usage Meter (for transactional metering, PR-3):** create a Billing **Meter** with **`sum`** aggregation over the event's `value`, plus a metered Price of **£0.01 per unit** tied to it → `STRIPE_PRICE_USAGE`. Reporting `value` in **pence** then bills at exact cost. Record the meter's `event_name` as `STRIPE_METER_USAGE_EVENT_NAME`. The subscription Checkout omits the usage line item until `STRIPE_PRICE_USAGE` is set, so plans can be sold before the meter exists.
+
 ## Domains
 
 - Primary: `tablekit.uk` (marketing site).
@@ -80,6 +88,8 @@ Before flipping from "private beta" to "public beta":
 - [ ] RLS tests green on every org-scoped table.
 - [ ] Stripe live mode keys in production. Test payment end-to-end.
 - [ ] Webhooks pointing at production URL, signatures verified.
+- [ ] Billing: live Core/Plus Prices created + `STRIPE_PRICE_*` set; platform webhook subscribed to the subscription/invoice events; test an upgrade + cancel end-to-end.
+- [ ] Billing: usage Meter is `sum`-aggregated at £0.01/unit (so pence bills at cost) before enabling transactional metering.
 - [ ] DPA click-through live, `/legal/sub-processors` page live.
 - [ ] Backups verified (actually restore one to a throwaway DB).
 - [ ] Kill switches tested on staging.
