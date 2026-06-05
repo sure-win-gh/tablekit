@@ -2,6 +2,9 @@
 
 import { useActionState, useEffect, useState, useTransition } from "react";
 
+import { TOPUP_AMOUNTS_PENCE } from "@/lib/billing/topup-amounts";
+
+import { startTopup } from "../../../organisation/billing/topup-actions";
 import {
   createCampaign,
   estimateCampaignAudience,
@@ -28,11 +31,13 @@ export function CampaignComposer({
   venueId,
   segments,
   initialEstimate,
+  initialBalancePence,
   mergeTags,
 }: {
   venueId: string;
   segments: SegmentOption[];
   initialEstimate: { count: number; costPence: number };
+  initialBalancePence: number;
   mergeTags: string[];
 }) {
   const [state, formAction, pending] = useActionState(createCampaign, initial);
@@ -46,19 +51,28 @@ export function CampaignComposer({
   const [preview, setPreview] = useState<CampaignPreview | null>(null);
   const [previewing, startPreview] = useTransition();
 
-  // Audience estimate refetched whenever channel/segment changes.
+  // Audience estimate + current credit balance, refetched whenever
+  // channel/segment changes.
   const [est, setEst] = useState(initialEstimate);
+  const [balancePence, setBalancePence] = useState(initialBalancePence);
   const [estimating, startEstimate] = useTransition();
   useEffect(() => {
     let cancelled = false;
     startEstimate(async () => {
       const r = await estimateCampaignAudience({ venueId, channel, segment });
-      if (!cancelled && r.ok) setEst({ count: r.count, costPence: r.costPence });
+      if (!cancelled && r.ok) {
+        setEst({ count: r.count, costPence: r.costPence });
+        setBalancePence(r.balancePence);
+      }
     });
     return () => {
       cancelled = true;
     };
   }, [venueId, channel, segment]);
+
+  // Prepaid gate: a paid campaign (cost > 0) can only send if the balance
+  // covers it. Email (cost 0) is always sendable.
+  const insufficientCredit = est.costPence > balancePence;
 
   function runPreview() {
     startPreview(async () => {
@@ -135,9 +149,41 @@ export function CampaignComposer({
               Estimated audience: <strong>{est.count}</strong> consented{" "}
               {est.count === 1 ? "guest" : "guests"} · estimated cost{" "}
               <strong>{formatCost(est.costPence)}</strong>
+              {est.costPence > 0 ? (
+                <>
+                  {" "}
+                  · credit balance <strong>{formatCost(balancePence)}</strong>
+                </>
+              ) : null}
             </>
           )}
         </p>
+
+        {insufficientCredit ? (
+          <div className="rounded-md border border-amber-500/40 bg-amber-50 p-3 text-sm text-amber-900">
+            <p>
+              Not enough messaging credit to send this campaign (need {formatCost(est.costPence)},
+              balance {formatCost(balancePence)}). You can still save it as a draft. Top up to send:
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {TOPUP_AMOUNTS_PENCE.map((amt) => (
+                <form key={amt} action={startTopup.bind(null, amt)}>
+                  <input
+                    type="hidden"
+                    name="return_to"
+                    value={`/dashboard/venues/${venueId}/campaigns`}
+                  />
+                  <button
+                    type="submit"
+                    className="border-hairline rounded-md border bg-white px-3 py-1.5 text-xs font-semibold hover:border-amber-600"
+                  >
+                    Top up {formatCost(amt)}
+                  </button>
+                </form>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="text-ash flex flex-wrap gap-1.5 text-xs">
           <span className="text-charcoal font-medium">Merge tags:</span>
@@ -209,7 +255,8 @@ export function CampaignComposer({
             type="submit"
             name="send"
             value="now"
-            disabled={pending}
+            disabled={pending || insufficientCredit}
+            title={insufficientCredit ? "Top up messaging credit to send" : undefined}
             className="bg-ink rounded-md px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
             {pending

@@ -18,13 +18,22 @@ import "server-only";
 import type Stripe from "stripe";
 
 import { syncFromSubscription } from "@/lib/billing/subscription";
+import { creditTopupFromSession } from "@/lib/billing/topup";
 import { stripe } from "@/lib/stripe/client";
 
 import { registerHandler } from "../webhook";
 
 async function handle(event: Stripe.Event): Promise<void> {
   const session = event.data.object as Stripe.Checkout.Session;
-  if (session.mode !== "subscription") return; // top-ups handled elsewhere
+
+  // Payment-mode session with our top-up marker → credit the balance.
+  if (session.mode === "payment") {
+    if (session.metadata?.["kind"] === "credit_topup") await creditTopupFromSession(session);
+    return;
+  }
+
+  // Subscription-mode session → sync the new subscription (sets the plan).
+  if (session.mode !== "subscription") return;
   const subId = typeof session.subscription === "string" ? session.subscription : null;
   if (!subId) return;
 

@@ -8,15 +8,17 @@
 import type Stripe from "stripe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockRetrieve, mockSync } = vi.hoisted(() => ({
+const { mockRetrieve, mockSync, mockTopup } = vi.hoisted(() => ({
   mockRetrieve: vi.fn(),
   mockSync: vi.fn(),
+  mockTopup: vi.fn(),
 }));
 
 vi.mock("@/lib/stripe/client", () => ({
   stripe: () => ({ subscriptions: { retrieve: mockRetrieve } }),
 }));
 vi.mock("@/lib/billing/subscription", () => ({ syncFromSubscription: mockSync }));
+vi.mock("@/lib/billing/topup", () => ({ creditTopupFromSession: mockTopup }));
 
 import "@/lib/stripe/handlers/billing-checkout"; // registers the handler
 import { getHandler } from "@/lib/stripe/webhook";
@@ -39,10 +41,18 @@ describe("checkout.session.completed handler", () => {
     expect(mockSync).toHaveBeenCalledWith(fakeSub);
   });
 
-  it("ignores payment-mode sessions (PR-2 top-ups) — no retrieve, no sync", async () => {
+  it("credits a top-up payment session (no subscription retrieve/sync)", async () => {
     const handler = getHandler("checkout.session.completed")!;
     await handler(sessionEvent({ mode: "payment", metadata: { kind: "credit_topup" } }));
+    expect(mockTopup).toHaveBeenCalledTimes(1);
     expect(mockRetrieve).not.toHaveBeenCalled();
+    expect(mockSync).not.toHaveBeenCalled();
+  });
+
+  it("ignores a payment session without the credit_topup marker", async () => {
+    const handler = getHandler("checkout.session.completed")!;
+    await handler(sessionEvent({ mode: "payment", metadata: { kind: "something_else" } }));
+    expect(mockTopup).not.toHaveBeenCalled();
     expect(mockSync).not.toHaveBeenCalled();
   });
 

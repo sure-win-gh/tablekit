@@ -2,10 +2,15 @@
 //
 // Mirrors lib/messaging/dispatch.ts (atomic FOR UPDATE SKIP LOCKED
 // claim, exponential backoff, audit) but guest-scoped. Reuses the
-// shared provider send functions + backoff/truncate helpers. Two extra
-// guarantees vs transactional: (1) it RE-CHECKS marketing consent +
-// suppression + erasure per send (the state can change between enqueue
-// and send), and (2) it records pass-through usage on each success.
+// shared provider send functions + backoff/truncate helpers. Extra
+// guarantee vs transactional: it RE-CHECKS marketing consent + suppression
+// + erasure per send (the state can change between enqueue and send).
+//
+// Marketing is PREPAID, not metered: cost is reserved from the org's credit
+// balance at enqueue (lib/billing/credit.ts#reserveForCampaign) and the
+// unsent remainder is refunded once the campaign drains (reconcileCampaign
+// in finaliseDrainedCampaigns). So — unlike transactional dispatch — we do
+// NOT write message_usage here, or the send would be billed twice.
 
 import "server-only";
 
@@ -25,9 +30,10 @@ import type { MessageChannel } from "@/lib/messaging/registry";
 import { unsubscribeUrl } from "@/lib/messaging/tokens";
 import { parseBranding } from "@/lib/messaging/venue-settings";
 
+import { reconcileCampaign } from "@/lib/billing/credit";
+
 import { renderCampaign } from "./render";
 import { isStillEligible } from "./recipients";
-import { recordUsage } from "@/lib/billing/usage";
 
 export type CampaignDispatchResult = {
   processed: number;
@@ -186,7 +192,7 @@ async function processOne(row: ClaimedRow, appUrl: string, now: Date): Promise<O
       });
       providerId = r.providerId;
     }
-    return markSent(row, providerId, channel, now);
+    return markSent(row, providerId);
   } catch (err) {
     const retryable =
       (err instanceof EmailSendError ||
@@ -197,27 +203,13 @@ async function processOne(row: ClaimedRow, appUrl: string, now: Date): Promise<O
   }
 }
 
-async function markSent(
-  row: ClaimedRow,
-  providerId: string,
-  channel: MessageChannel,
-  now: Date,
-): Promise<"sent"> {
+async function markSent(row: ClaimedRow, providerId: string): Promise<"sent"> {
   const db = adminDb();
   await db
     .update(campaignSends)
     .set({ status: "sent", providerId, sentAt: sql`now()`, error: null })
     .where(eq(campaignSends.id, row.id));
   await bumpCount(row.campaignId, "sent");
-  // NON-FATAL: send already committed; a metering write failure must not
-  // flip a sent row to 'failed' (markSent runs inside processOne's try).
-  try {
-    await recordUsage(row.organisationId, channel, now);
-  } catch (err) {
-    console.error("[lib/campaigns/dispatch.ts] recordUsage failed (send already succeeded):", {
-      message: err instanceof Error ? err.message : String(err),
-    });
-  }
   return "sent";
 }
 
@@ -286,7 +278,9 @@ async function bumpCount(campaignId: string, key: string): Promise<void> {
     .where(eq(campaigns.id, campaignId));
 }
 
-// Flip a campaign to 'sent' once it has no remaining queued/sending rows.
+// Flip a campaign to 'sent' once it has no remaining queued/sending rows,
+// and refund any unspent reservation. reconcileCampaign is idempotent
+// (keyed on the campaign id), so calling it on every drain is safe.
 async function finaliseDrainedCampaigns(campaignIds: string[]): Promise<void> {
   const db = adminDb();
   const unique = [...new Set(campaignIds)];
@@ -302,6 +296,8 @@ async function finaliseDrainedCampaigns(campaignIds: string[]): Promise<void> {
         .update(campaigns)
         .set({ status: "sent", sentAt: sql`now()` })
         .where(sql`${campaigns.id} = ${id} and ${campaigns.status} = 'sending'`);
+      // Refund reserved − actually-sent (no-op for email / already-refunded).
+      await reconcileCampaign(id);
     }
   }
 }

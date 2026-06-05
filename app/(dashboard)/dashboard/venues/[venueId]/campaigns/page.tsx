@@ -5,6 +5,7 @@ import { LockedFeature } from "@/components/billing/locked-feature";
 import { isLocked } from "@/lib/auth/entitlements";
 import { getPlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
+import { getBalance } from "@/lib/billing/credit";
 import { estimateAudience } from "@/lib/campaigns/recipients";
 import { MARKETING_TAG_NAMES } from "@/lib/campaigns/render";
 import { withUser } from "@/lib/db/client";
@@ -37,6 +38,7 @@ export default async function CampaignsPage({ params }: { params: Promise<{ venu
   // Initial consent-filtered estimate for the default (email, all). The
   // composer refetches per (channel, segment) on change.
   const initialEstimate = await estimateAudience(orgId, venueId, "email", { segment: "all" });
+  const initialBalancePence = await withUser((db) => getBalance(db, orgId));
   const segments = SEGMENTS.map((key) => ({ key, label: SEGMENT_LABEL[key] }));
 
   const list = await withUser(async (db) =>
@@ -68,6 +70,7 @@ export default async function CampaignsPage({ params }: { params: Promise<{ venu
         venueId={venue.id}
         segments={segments}
         initialEstimate={initialEstimate}
+        initialBalancePence={initialBalancePence}
         mergeTags={[...MARKETING_TAG_NAMES]}
       />
 

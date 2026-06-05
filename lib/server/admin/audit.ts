@@ -76,6 +76,9 @@ export type AuditAction =
   | "billing.invoice.paid"
   | "billing.invoice.payment_failed"
   | "billing.checkout.started"
+  | "billing.credit.topup"
+  | "billing.credit.reserved"
+  | "billing.credit.refunded"
   // messaging phase
   | "message.queued"
   | "message.sent"

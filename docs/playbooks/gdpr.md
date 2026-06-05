@@ -68,6 +68,7 @@ Outbound hyperlinks to third-party sites (e.g. the Google review form linked fro
 | Marketing campaign copy (`campaigns.body`, `subject_override`) | Lifetime of the venue | No — operator copy, not guest PII (mirrors `bookings.notes`). |
 | Marketing campaign sends + engagement (`campaign_sends`: status, opens/clicks, keyed to `guest_id`) | 24 months from send, or guest erasure (whichever first) | Yes — rows deleted on guest erasure (`lib/dsar/scrub.ts`) and by the 24-month retention sweep (`lib/campaigns/retention.ts` + `/api/cron/campaign-retention`). Behavioural data, no accounting retention. Parent campaign aggregate counts (non-PII) retained. |
 | Message usage tallies (`message_usage`: per-month per-channel counts + est cost) | Indefinite (billing record) | No — non-PII aggregate counts only, no guest linkage. |
+| Prepaid credit ledger (`billing_credit_ledger`: org id, integer pence, reason, Stripe/campaign ref) | 7 years (alongside payment metadata) | No — financial record, deliberately PII-free (no guest linkage). |
 | Audit log             | 2 years                        | No (integrity) |
 | Session logs          | 30 days                        | Auto-expiry |
 | Import job records (`import_jobs`: filename, column_map, counters) | 12 months from `completed_at` / `failed_at` | No PII fields by design — purged by cron |

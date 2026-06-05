@@ -21,7 +21,7 @@ import { stripe } from "@/lib/stripe/client";
 
 import { optionalUsagePriceId, type PaidPlan, priceIdForPlan } from "./plans";
 
-function appUrl(): string {
+export function appUrl(): string {
   const url = process.env["NEXT_PUBLIC_APP_URL"];
   if (!url) throw new Error("lib/billing/checkout.ts: NEXT_PUBLIC_APP_URL is not set.");
   return url.replace(/\/$/, "");
@@ -29,8 +29,10 @@ function appUrl(): string {
 
 // Ensure the org has a platform Stripe Customer, creating one on first use.
 // The idempotency key is per-org + versioned so a network retry can never
-// create a second customer for the same org.
-async function ensureCustomer(orgId: string): Promise<string> {
+// create a second customer for the same org (and two concurrent checkouts
+// both racing here converge on the same customer for the same reason).
+// Exported so the credit top-up flow reuses the one-customer-per-org rule.
+export async function ensureCustomer(orgId: string): Promise<string> {
   const db = adminDb();
   const [org] = await db
     .select({ name: organisations.name, customerId: organisations.stripeCustomerId })
