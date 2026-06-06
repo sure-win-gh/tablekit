@@ -1,6 +1,6 @@
 # Spec: Stripe subscription billing + prepaid messaging credit
 
-**Status:** draft
+**Status:** shipped (PR #71 — subscriptions + prepaid credit + usage meter). Code complete; Stripe dashboard config (Prices, platform webhook events, Billing Meter) pending before it can charge — see `docs/playbooks/deploy.md`.
 **Depends on:** `docs/playbooks/payments.md` (SAQ-A, idempotency, webhooks), `marketing-campaigns.md` (the campaign dispatcher this gates on credit), `messaging.md` (transactional sends, billed monthly), `auth.md` (`requireRole`, `requirePlan`, the `plan` column), `docs/playbooks/deploy.md` (new cron + env)
 
 ## What we're building
@@ -151,3 +151,7 @@ Reused / modified, not new:
 - In-app/embedded card collection (hosted only, SAQ-A).
 - Reconciling `message_usage` recorded before go-live (meter starts at go-live).
 - Stripe Connect / deposits (unchanged).
+
+---
+
+Shipped via [PR #71](https://github.com/sure-win-gh/tablekit/pull/71): PR-1 platform-account subscriptions, PR-2 prepaid messaging credit (gates marketing), PR-3 transactional usage meter. Migration 0047. Remaining before go-live = Stripe dashboard config only (`docs/playbooks/deploy.md`).
