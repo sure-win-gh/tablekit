@@ -24,7 +24,7 @@ const STATE_COOKIE = "tk_google_oauth_state";
 
 function backTo(appUrl: string, venueId: string | null, flash: string): NextResponse {
   const dest = venueId
-    ? new URL(`/dashboard/venues/${venueId}/settings?google=${flash}`, appUrl)
+    ? new URL(`/dashboard/venues/${venueId}/settings/google?google=${flash}`, appUrl)
     : new URL(`/dashboard/venues?google=${flash}`, appUrl);
   return NextResponse.redirect(dest);
 }

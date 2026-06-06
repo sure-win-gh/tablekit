@@ -1,9 +1,11 @@
 import { ChevronRight, KeyRound } from "lucide-react";
 import Link from "next/link";
 
+import { LockedFeature } from "@/components/billing/locked-feature";
 import { loadApiKeys } from "@/lib/api-keys/list";
+import { isLocked } from "@/lib/auth/entitlements";
 import { hasPlan, toPlan } from "@/lib/auth/plan-level";
-import { requirePlan } from "@/lib/auth/require-plan";
+import { getPlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
 import { organisations } from "@/lib/db/schema";
@@ -23,7 +25,10 @@ export const dynamic = "force-dynamic";
 
 export default async function ApiKeysPage() {
   const { orgId, role } = await requireRole("owner");
-  await requirePlan(orgId, "plus");
+  const orgPlan = await getPlan(orgId);
+  if (isLocked(orgPlan, "apiKeys")) {
+    return <LockedFeature feature="apiKeys" currentPlan={orgPlan} />;
+  }
 
   const { keys, plan } = await withUser(async (db) => {
     const [o] = await db

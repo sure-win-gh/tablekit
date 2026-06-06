@@ -2,7 +2,9 @@ import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 
 import { Badge, Card, CardBody } from "@/components/ui";
-import { requirePlan } from "@/lib/auth/require-plan";
+import { LockedFeature } from "@/components/billing/locked-feature";
+import { isLocked } from "@/lib/auth/entitlements";
+import { getPlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { formatVenueTime, todayInZone } from "@/lib/bookings/time";
 import { withUser } from "@/lib/db/client";
@@ -26,7 +28,10 @@ export default async function ServiceSummaryPage({
   searchParams: Promise<{ date?: string }>;
 }) {
   const { orgId } = await requireRole("host");
-  await requirePlan(orgId, "plus");
+  const plan = await getPlan(orgId);
+  if (isLocked(plan, "serviceSummary")) {
+    return <LockedFeature feature="serviceSummary" currentPlan={plan} />;
+  }
 
   const { venueId } = await params;
   const { date: dateParam } = await searchParams;

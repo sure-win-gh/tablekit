@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Banknote,
   Building2,
   CalendarDays,
   CalendarRange,
@@ -13,6 +14,7 @@ import {
   CreditCard,
   Database,
   Gauge,
+  Globe,
   Hourglass,
   Inbox,
   LayoutDashboard,
@@ -37,6 +39,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useSyncExternalStore } from "react";
 
 import { cn } from "@/components/ui";
+import { isLocked } from "@/lib/auth/entitlements";
+import type { Plan } from "@/lib/auth/plan-level";
 
 // Collapsable left sidebar — the dashboard's primary chrome.
 //
@@ -61,14 +65,11 @@ export type SidebarData = {
   org: {
     id: string;
     name: string;
-    // True iff org is on Plus tier — gates both the per-venue Guests
-    // link inside venueItems and the cross-venue Guests link in
-    // orgItems. Computed in sidebar.tsx so the client component
-    // doesn't need to know the plan ladder.
-    crmEnabled: boolean;
-    aiEnquiryEnabled: boolean;
-    insightsEnabled: boolean;
-    serviceSummaryEnabled: boolean;
+    // The org's plan tier. Plan-gated nav items derive their locked
+    // state from this via isLocked() so they show locked rather than
+    // hidden. groupCrmEnabled + multiVenue stay separate — they're
+    // structural (org opt-in / venue count), not plan locks.
+    plan: Plan;
     groupCrmEnabled: boolean;
     multiVenue: boolean;
   };
@@ -84,7 +85,11 @@ type Item = {
   href: string;
   label: string;
   icon: LucideIcon;
+  // `show: false` hides the item entirely (structural gates). `locked`
+  // keeps it visible but rendered with a lock + linked to the page,
+  // which shows the upgrade overlay (plan gates).
   show?: boolean | undefined;
+  locked?: boolean | undefined;
 };
 
 type Group = {
@@ -145,7 +150,9 @@ export function SidebarShell({
       href: "/dashboard/guests",
       label: "Guests",
       icon: Users,
-      show: data.org.crmEnabled && data.org.groupCrmEnabled && data.org.multiVenue,
+      // Structural: cross-venue CRM only appears for multi-venue orgs
+      // that opted in. Multi-venue already implies Plus, so no lock.
+      show: data.org.groupCrmEnabled && data.org.multiVenue,
     },
     {
       kind: "group",
@@ -199,7 +206,7 @@ export function SidebarShell({
           href: `/dashboard/venues/${venueId}/guests`,
           label: "Guests",
           icon: Users,
-          show: data.org.crmEnabled,
+          locked: isLocked(data.org.plan, "crm"),
         },
         {
           kind: "item",
@@ -212,14 +219,14 @@ export function SidebarShell({
           href: `/dashboard/venues/${venueId}/reports/insights`,
           label: "Insights",
           icon: TrendingUp,
-          show: data.org.insightsEnabled,
+          locked: isLocked(data.org.plan, "insights"),
         },
         {
           kind: "item",
           href: `/dashboard/venues/${venueId}/service-summary`,
           label: "Service summary",
           icon: Gauge,
-          show: data.org.serviceSummaryEnabled,
+          locked: isLocked(data.org.plan, "serviceSummary"),
         },
         {
           kind: "group",
@@ -232,7 +239,7 @@ export function SidebarShell({
               href: `/dashboard/venues/${venueId}/enquiries`,
               label: "Enquiries",
               icon: Inbox,
-              show: data.org.aiEnquiryEnabled,
+              locked: isLocked(data.org.plan, "enquiries"),
             },
             {
               kind: "item",
@@ -245,15 +252,24 @@ export function SidebarShell({
               href: `/dashboard/venues/${venueId}/campaigns`,
               label: "Campaigns",
               icon: Megaphone,
+              locked: isLocked(data.org.plan, "campaigns"),
             },
           ],
         },
         {
           kind: "group",
+          // groupKey kept as "venue-setup" so existing expand/collapse
+          // state survives the Setup → Settings rename.
           groupKey: "venue-setup",
-          label: "Setup",
-          icon: Wrench,
+          label: "Settings",
+          icon: Settings,
           items: [
+            {
+              kind: "item",
+              href: `/dashboard/venues/${venueId}/settings`,
+              label: "General",
+              icon: Wrench,
+            },
             {
               kind: "item",
               href: `/dashboard/venues/${venueId}/services`,
@@ -265,12 +281,25 @@ export function SidebarShell({
               href: `/dashboard/venues/${venueId}/deposits`,
               label: "Deposits",
               icon: CreditCard,
+              locked: isLocked(data.org.plan, "deposits"),
             },
             {
               kind: "item",
-              href: `/dashboard/venues/${venueId}/settings`,
-              label: "Settings",
-              icon: Settings,
+              href: `/dashboard/venues/${venueId}/settings/messaging`,
+              label: "Messaging",
+              icon: MessageSquare,
+            },
+            {
+              kind: "item",
+              href: `/dashboard/venues/${venueId}/settings/payments`,
+              label: "Payments",
+              icon: Banknote,
+            },
+            {
+              kind: "item",
+              href: `/dashboard/venues/${venueId}/settings/google`,
+              label: "Google",
+              icon: Globe,
             },
           ],
         },
@@ -520,16 +549,20 @@ function NavLink({ item, active, collapsed }: { item: Item; active: boolean; col
   return (
     <Link
       href={item.href}
-      title={collapsed ? item.label : undefined}
+      title={collapsed ? item.label : item.locked ? `${item.label} — upgrade to unlock` : undefined}
       onClick={() => writeFlag(DRAWER_KEY, false)}
       className={cn(
         "rounded-input flex items-center gap-2.5 px-2 py-1.5 text-sm transition",
         active ? "bg-cloud text-ink font-semibold" : "text-charcoal hover:bg-cloud hover:text-ink",
+        item.locked && !active && "text-ash",
         collapsed && "justify-center",
       )}
     >
       <Icon className={cn("h-4 w-4 shrink-0", active && "text-coral")} aria-hidden />
       {!collapsed ? <span className="truncate">{item.label}</span> : null}
+      {!collapsed && item.locked ? (
+        <Lock className="text-ash ml-auto h-3.5 w-3.5 shrink-0" aria-hidden />
+      ) : null}
     </Link>
   );
 }

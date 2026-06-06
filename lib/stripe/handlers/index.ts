@@ -8,5 +8,9 @@ import "./payment-intent-failed";
 import "./charge-refunded";
 import "./setup-intent-succeeded";
 import "./setup-intent-failed";
+// billing phase (platform-account subscriptions)
+import "./billing-checkout";
+import "./billing-subscription";
+import "./billing-invoice";
 
 export {};

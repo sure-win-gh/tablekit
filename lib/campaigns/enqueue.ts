@@ -9,6 +9,8 @@ import "server-only";
 
 import { eq, sql } from "drizzle-orm";
 
+import { estimateCostPence } from "@/lib/billing/usage";
+import { InsufficientCreditError, reserveForCampaign } from "@/lib/billing/credit";
 import { campaigns, campaignSends } from "@/lib/db/schema";
 import { isSegment } from "@/lib/guests/segments";
 import { audit } from "@/lib/server/admin/audit";
@@ -19,7 +21,8 @@ import { resolveRecipientIds } from "./recipients";
 
 export type EnqueueCampaignResult =
   | { ok: true; queued: number }
-  | { ok: false; reason: "not-found" | "already-sent" };
+  | { ok: false; reason: "not-found" | "already-sent" }
+  | { ok: false; reason: "insufficient-credit"; balancePence: number; requiredPence: number };
 
 export async function enqueueCampaign(
   campaignId: string,
@@ -48,6 +51,33 @@ export async function enqueueCampaign(
     segment: isSegment(campaign.segment) ? campaign.segment : "all",
     now: opts.now,
   });
+
+  // Prepaid gate: reserve the estimated cost up front before any send is
+  // queued, so marketing can never exceed paid-for credit. Email is free
+  // (estimate 0 → no-op). Reservation is keyed on the campaign id, so a
+  // retried enqueue doesn't double-charge; reconcileCampaign refunds the
+  // unsent remainder once the campaign drains.
+  //
+  // Narrow leak window: the reserve commits in its own tx before the
+  // fan-out below. If the process dies between them the campaign stays
+  // 'draft' (never drains → reconcile never runs) and the reservation
+  // sits debited. The campaign-id-keyed reserve means re-sending that same
+  // campaign reuses it (no double charge); an abandoned draft's reserve is
+  // recovered by a manual 'adjustment' ledger entry. Acceptable for v1.
+  const estimatePence = estimateCostPence(channel, guestIds.length);
+  try {
+    await reserveForCampaign(campaign.organisationId, campaign.id, estimatePence);
+  } catch (err) {
+    if (err instanceof InsufficientCreditError) {
+      return {
+        ok: false,
+        reason: "insufficient-credit",
+        balancePence: err.balancePence,
+        requiredPence: err.requiredPence,
+      };
+    }
+    throw err;
+  }
 
   const firstAttempt = opts.scheduleAt ?? opts.now;
   if (guestIds.length > 0) {

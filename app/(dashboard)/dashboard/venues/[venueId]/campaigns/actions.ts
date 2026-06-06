@@ -6,10 +6,12 @@ import { z } from "zod";
 
 import { requireRole } from "@/lib/auth/require-role";
 import { InsufficientPlanError, requirePlan } from "@/lib/auth/require-plan";
+import { getBalance } from "@/lib/billing/credit";
 import { enqueueCampaign } from "@/lib/campaigns/enqueue";
 import { processNextCampaignBatch } from "@/lib/campaigns/dispatch";
 import { estimateAudience } from "@/lib/campaigns/recipients";
 import { findUnknownMarketingTags, renderCampaign } from "@/lib/campaigns/render";
+import { withUser } from "@/lib/db/client";
 import { campaigns, venues } from "@/lib/db/schema";
 import { SEGMENTS } from "@/lib/guests/segments";
 import { parseBranding } from "@/lib/messaging/venue-settings";
@@ -126,6 +128,17 @@ export async function createCampaign(
   // Fan out. Scheduled: sends sit dormant until scheduleAt (cron drains).
   // Send-now: drive the worker inline so the first batch lands immediately.
   const r = await enqueueCampaign(campaign.id, scheduleAt ? { now, scheduleAt } : { now });
+  if (!r.ok && r.reason === "insufficient-credit") {
+    // The campaign is saved as a draft; it just couldn't send for lack of
+    // prepaid credit. Tell the operator how much they're short.
+    revalidatePath(`/dashboard/venues/${venueId}/campaigns`);
+    const need = (r.requiredPence / 100).toFixed(2);
+    const have = (r.balancePence / 100).toFixed(2);
+    return {
+      status: "error",
+      message: `Saved as a draft — not enough messaging credit to send (need £${need}, balance £${have}). Top up to send.`,
+    };
+  }
   if (r.ok && !scheduleAt) {
     await processNextCampaignBatch({ limit: 50, now }).catch(() => undefined);
   }
@@ -139,9 +152,11 @@ export async function createCampaign(
 }
 
 // On-demand audience estimate for a (channel, segment). Plus-gated +
-// org-scoped. Called by the composer when channel/segment changes.
+// org-scoped. Called by the composer when channel/segment changes. Also
+// returns the org's current credit balance so the composer can show it and
+// block a send the balance can't cover.
 export type AudienceEstimateResult =
-  | { ok: true; count: number; costPence: number }
+  | { ok: true; count: number; costPence: number; balancePence: number }
   | { ok: false; message: string };
 
 export async function estimateCampaignAudience(input: {
@@ -171,7 +186,8 @@ export async function estimateCampaignAudience(input: {
   if (!venue) return { ok: false, message: "Venue not found." };
 
   const est = await estimateAudience(orgId, vid.data, channel.data, { segment: segment.data });
-  return { ok: true, count: est.count, costPence: est.costPence };
+  const balancePence = await withUser((db) => getBalance(db, orgId));
+  return { ok: true, count: est.count, costPence: est.costPence, balancePence };
 }
 
 // Live preview of campaign copy against a sample guest. Plus-gated.

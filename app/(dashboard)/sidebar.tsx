@@ -1,7 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 
 import { getActiveOrg } from "@/lib/auth/active-org";
-import { hasPlan, toPlan } from "@/lib/auth/plan-level";
+import { toPlan } from "@/lib/auth/plan-level";
 import { withUser } from "@/lib/db/client";
 import { memberships, organisations, users, venues } from "@/lib/db/schema";
 import { supabaseServer } from "@/lib/db/supabase-server";
@@ -73,22 +73,10 @@ export async function Sidebar() {
     org: {
       id: data.org.id,
       name: data.org.name,
-      // CRM (per-venue + cross-venue) is Plus-only. The shell uses
-      // this single boolean rather than re-deriving from plan strings.
-      crmEnabled: hasPlan(toPlan(data.org.plan), "plus"),
-      // AI enquiry inbox is Plus-only. Currently the same boolean as
-      // crmEnabled, but kept distinct so a future tier split (e.g.
-      // AI as a Premium add-on) doesn't require touching every CRM
-      // consumer.
-      aiEnquiryEnabled: hasPlan(toPlan(data.org.plan), "plus"),
-      // Booking Insights surface is Plus-only — extends MVP reports
-      // with lead-time, no-show trend, channel performance, and period
-      // comparison. Kept distinct from crmEnabled so a future split is
-      // a one-line change.
-      insightsEnabled: hasPlan(toPlan(data.org.plan), "plus"),
-      // Service Summary (capacity panel + heatmap + suggestions) is
-      // Plus-only — the operator-maturity capacity-planning surface.
-      serviceSummaryEnabled: hasPlan(toPlan(data.org.plan), "plus"),
+      // The org's plan tier. The shell derives per-feature lock state
+      // from this via lib/auth/entitlements, so nav items render locked
+      // instead of hidden. See docs/specs/plan-gating-paywall.md.
+      plan: toPlan(data.org.plan),
       groupCrmEnabled: data.org.groupCrmEnabled,
       multiVenue: data.venues.length >= 2,
     },

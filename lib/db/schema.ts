@@ -62,7 +62,16 @@ export const organisations = pgTable(
     name: text("name").notNull(),
     slug: citext("slug").notNull().unique(),
     plan: text("plan").notNull().default("free"),
+    // Platform-account Stripe Customer (Tablekit = merchant for the SaaS
+    // subscription + credit top-ups). DISTINCT from guests.stripe_customer_id,
+    // which is a per-guest Customer on the venue's CONNECTED account for
+    // deposits. First writer is lib/billing/checkout.ts. See docs/specs/stripe-billing.md.
     stripeCustomerId: text("stripe_customer_id"),
+    // Prepaid messaging-credit balance in pence. Marketing campaigns are
+    // gated on this (reserve-on-launch); transactional sends never touch it.
+    // Mutated only alongside a billing_credit_ledger row, in one tx, under
+    // a row lock. See lib/billing/credit.ts (PR-2).
+    creditBalancePence: integer("credit_balance_pence").notNull().default(0),
     // Envelope encryption state. `wrappedDek` is this org's DEK sealed
     // with the master key (AES-256-GCM, `iv || tag || ciphertext` = 60
     // bytes). Nullable so organisations predating the crypto phase don't
@@ -1160,6 +1169,10 @@ export const messageUsage = pgTable(
     channel: text("channel").notNull(),
     count: integer("count").notNull().default(0),
     estCostPence: integer("est_cost_pence").notNull().default(0),
+    // High-water mark of pence already reported to the Stripe usage meter
+    // (transactional billing). The meter-sync cron reports est_cost_pence -
+    // reported_pence then advances this. See lib/billing/meter-sync.ts (PR-3).
+    reportedPence: integer("reported_pence").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1170,6 +1183,67 @@ export const messageUsage = pgTable(
       t.channel,
     ),
     index("message_usage_org_idx").on(t.organisationId),
+  ],
+);
+
+// =============================================================================
+// Billing (platform-account subscriptions + prepaid messaging credit)
+// =============================================================================
+//
+// The OTHER side of Stripe from deposits. Deposits use Connect (venue =
+// merchant). These tables are the platform relationship: Tablekit charges
+// the venue its £19/£39 subscription + credit top-ups. organisation_id is
+// the natural top-level key (NOT denormalised from a parent), so there's
+// no enforce_*_org_id trigger — the webhook/adminDb writes it directly.
+// All writes are adminDb-only; RLS grants members SELECT on their own org.
+// See docs/specs/stripe-billing.md.
+
+export const billingSubscriptions = pgTable(
+  "billing_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .unique()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    stripeSubscriptionId: text("stripe_subscription_id").notNull().unique(),
+    // Raw Stripe subscription status (active|trialing|past_due|canceled|...).
+    status: text("status").notNull(),
+    // Plan this subscription's flat price maps to ('core'|'plus'); CHECK in migration.
+    plan: text("plan").notNull(),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  // unique() on the two id columns above already creates the indexes.
+  () => [],
+);
+
+// Append-only credit ledger. The running balance lives denormalised on
+// organisations.credit_balance_pence, bumped in the same tx as each entry.
+// (reason, ref) is unique so a top-up session / campaign reservation /
+// refund applies exactly once (idempotency for webhook + worker retries).
+export const billingCreditLedger = pgTable(
+  "billing_credit_ledger",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    // Signed: +top-up / +refund, −reservation. Constrained by reason in migration.
+    deltaPence: integer("delta_pence").notNull(),
+    // 'topup' | 'campaign_reserve' | 'campaign_refund' | 'adjustment'; CHECK in migration.
+    reason: text("reason").notNull(),
+    // Idempotency handle: Stripe session/pi id (topup), or campaign id
+    // (reserve/refund). NULL only for manual 'adjustment' entries.
+    ref: text("ref"),
+    balanceAfter: integer("balance_after").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("billing_credit_ledger_reason_ref_unique").on(t.reason, t.ref),
+    index("billing_credit_ledger_org_idx").on(t.organisationId, t.createdAt),
   ],
 );
 

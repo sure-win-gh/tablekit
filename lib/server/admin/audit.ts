@@ -71,6 +71,14 @@ export type AuditAction =
   | "stripe.no_show_capture.succeeded"
   | "stripe.no_show_capture.failed"
   | "booking.no_show.captured"
+  // billing phase (platform-account subscriptions + prepaid credit)
+  | "billing.subscription.synced"
+  | "billing.invoice.paid"
+  | "billing.invoice.payment_failed"
+  | "billing.checkout.started"
+  | "billing.credit.topup"
+  | "billing.credit.reserved"
+  | "billing.credit.refunded"
   // messaging phase
   | "message.queued"
   | "message.sent"

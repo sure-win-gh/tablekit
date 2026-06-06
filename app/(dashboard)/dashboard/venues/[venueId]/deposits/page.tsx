@@ -1,5 +1,8 @@
 import { asc, eq } from "drizzle-orm";
 
+import { LockedFeature } from "@/components/billing/locked-feature";
+import { isLocked } from "@/lib/auth/entitlements";
+import { getPlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
 import { depositRules, services, stripeAccounts } from "@/lib/db/schema";
@@ -12,6 +15,10 @@ export const metadata = {
 
 export default async function DepositsPage({ params }: { params: Promise<{ venueId: string }> }) {
   const { orgId } = await requireRole("manager");
+  const plan = await getPlan(orgId);
+  if (isLocked(plan, "deposits")) {
+    return <LockedFeature feature="deposits" currentPlan={plan} />;
+  }
   const { venueId } = await params;
 
   const { rules, serviceOptions, chargesEnabled } = await withUser(async (db) => {

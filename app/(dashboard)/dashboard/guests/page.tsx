@@ -3,7 +3,9 @@ import { Building2, ChevronRight, Users } from "lucide-react";
 import Link from "next/link";
 
 import { Card } from "@/components/ui";
-import { requirePlan } from "@/lib/auth/require-plan";
+import { LockedFeature } from "@/components/billing/locked-feature";
+import { isLocked } from "@/lib/auth/entitlements";
+import { getPlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
 import { organisations } from "@/lib/db/schema";
@@ -22,7 +24,10 @@ export const dynamic = "force-dynamic";
 
 export default async function GuestsPage() {
   const { orgId } = await requireRole("host");
-  await requirePlan(orgId, "plus");
+  const plan = await getPlan(orgId);
+  if (isLocked(plan, "crm")) {
+    return <LockedFeature feature="crm" currentPlan={plan} />;
+  }
 
   const { org, rows } = await withUser(async (db) => {
     const [o] = await db
