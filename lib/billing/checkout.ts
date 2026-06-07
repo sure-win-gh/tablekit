@@ -72,6 +72,13 @@ export async function createSubscriptionCheckout(
     mode: "subscription",
     customer,
     line_items: lineItems,
+    // VAT is added on top of our tax-exclusive prices, computed by Stripe
+    // Tax from the billing address (collected here + saved to the customer
+    // so renewals keep computing it). The subscription inherits this, so
+    // Portal-initiated changes + recurring invoices stay tax-correct.
+    automatic_tax: { enabled: true },
+    billing_address_collection: "required",
+    customer_update: { address: "auto" },
     // organisation_id on BOTH the session and the subscription so the
     // webhook can resolve the org from either event.
     metadata: { organisation_id: orgId },

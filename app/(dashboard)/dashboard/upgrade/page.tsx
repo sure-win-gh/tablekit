@@ -21,7 +21,7 @@ const PLANS: Array<{ plan: Plan; price: string; tagline: string; features: strin
   },
   {
     plan: "core",
-    price: "£19",
+    price: "£29",
     tagline: "Unlimited bookings for a single venue.",
     features: [
       "Everything in Free",
@@ -33,7 +33,7 @@ const PLANS: Array<{ plan: Plan; price: string; tagline: string; features: strin
   },
   {
     plan: "plus",
-    price: "£39",
+    price: "£74",
     tagline: "Multi-venue and the AI toolkit.",
     features: [
       "Everything in Core",
@@ -102,7 +102,7 @@ export default async function UpgradePage({
               </div>
               <div className="flex items-baseline gap-1">
                 <span className="text-ink text-3xl font-bold tracking-tight">{price}</span>
-                {plan !== "free" ? <span className="text-ash text-sm">/ month</span> : null}
+                {plan !== "free" ? <span className="text-ash text-sm">/ month + VAT</span> : null}
               </div>
               <p className="text-charcoal text-sm">{tagline}</p>
               <ul className="flex flex-col gap-1.5">

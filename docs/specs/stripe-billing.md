@@ -1,13 +1,13 @@
 # Spec: Stripe subscription billing + prepaid messaging credit
 
-**Status:** shipped (PR #71 — subscriptions + prepaid credit + usage meter). Code complete; Stripe dashboard config (Prices, platform webhook events, Billing Meter) pending before it can charge — see `docs/playbooks/deploy.md`.
+**Status:** shipped (PR #71 — subscriptions + prepaid credit + usage meter; pricing/VAT follow-up). Test-mode Stripe resources created (Core £29 + Plus £74 prices, at-cost usage Meter + price) and wired in `.env.local`; prices are VAT-exclusive with `automatic_tax`. Remaining for live = live-mode Prices/Meter + the platform webhook endpoint — see `docs/playbooks/deploy.md`.
 **Depends on:** `docs/playbooks/payments.md` (SAQ-A, idempotency, webhooks), `marketing-campaigns.md` (the campaign dispatcher this gates on credit), `messaging.md` (transactional sends, billed monthly), `auth.md` (`requireRole`, `requirePlan`, the `plan` column), `docs/playbooks/deploy.md` (new cron + env)
 
 ## What we're building
 
 The other side of Stripe from deposits. **Deposits use Connect** — the venue is the merchant of record, guests pay the venue. **This is the opposite**: Tablekit is the merchant. Two charges:
 
-1. **A flat monthly subscription** — £19 Core / £39 Plus — on Tablekit's **platform** Stripe account, via hosted **Checkout** (upgrade) and **Customer Portal** (manage/cancel). Platform webhooks keep `organisations.plan` in lockstep with the live subscription, including dunning.
+1. **A flat monthly subscription** — £29 Core / £74 Plus, **VAT-exclusive** (VAT added at checkout via Stripe Tax) — on Tablekit's **platform** Stripe account, via hosted **Checkout** (upgrade) and **Customer Portal** (manage/cancel). Platform webhooks keep `organisations.plan` in lockstep with the live subscription, including dunning.
 2. **Prepaid messaging credit** — operators **top up** a credit balance (one-off hosted Checkout payment). **Marketing campaigns are blocked unless the balance covers their estimated cost**, so a venue can never run up a large SMS/WhatsApp bill we then fail to collect. **Transactional** booking messages (confirmations/reminders) are *never* blocked — they're small, bounded by booking volume, and billed monthly at cost via a Stripe usage meter.
 
 Card entry is **hosted Checkout / Portal only** — no card data on our servers → PCI **SAQ-A**.
@@ -22,7 +22,7 @@ Risk isn't evenly spread. A marketing blast is discretionary, operator-triggered
 |---|---|---|
 | Merchant | the venue | Tablekit |
 | Stripe Customer | `guests.stripe_customer_id` (connected account) | `organisations.stripe_customer_id` (platform account) |
-| What's charged | deposits / no-show fees | £19/£39 subscription + credit top-ups |
+| What's charged | deposits / no-show fees | £29/£74 subscription (+VAT) + credit top-ups |
 | Webhook stream | Connect (`account=acct_*`) | platform (no `account`) |
 
 `organisations.stripe_customer_id` already exists but is currently never written — this spec is its first writer.
@@ -147,7 +147,7 @@ Reused / modified, not new:
 - **Free-tier 50-bookings/month cap** — deferred (separate feature).
 - **Auto-refund of unused prepaid credit** on cancellation — v1 is manual (`adjustment` ledger entries by founder); document the policy, don't automate.
 - **Auto-recharge / low-balance auto-top-up** and balance-threshold email alerts — later; v1 is manual top-up + an in-app low-balance warning only.
-- Annual plans, coupons, VAT beyond Stripe Tax defaults, multi-currency (GBP only).
+- Annual plans, coupons, multi-currency (GBP only). (VAT IS handled — prices are tax-exclusive + `automatic_tax` on Checkout; tax registrations/filing are an operator/Stripe-Tax concern.)
 - In-app/embedded card collection (hosted only, SAQ-A).
 - Reconciling `message_usage` recorded before go-live (meter starts at go-live).
 - Stripe Connect / deposits (unchanged).

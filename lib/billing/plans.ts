@@ -6,8 +6,8 @@
 // price means which plan. See docs/specs/stripe-billing.md.
 //
 // Three prices:
-//   STRIPE_PRICE_CORE   — flat £19/mo recurring (plan='core')
-//   STRIPE_PRICE_PLUS   — flat £39/mo recurring (plan='plus')
+//   STRIPE_PRICE_CORE   — flat £29/mo + VAT recurring (plan='core')
+//   STRIPE_PRICE_PLUS   — flat £74/mo + VAT recurring (plan='plus')
 //   STRIPE_PRICE_USAGE  — metered price tied to the usage Meter, attached
 //                         to every paid subscription so transactional
 //                         sends can be reported against it (PR-3).

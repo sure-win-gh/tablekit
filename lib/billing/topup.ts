@@ -45,6 +45,9 @@ export async function createTopupCheckout(
         price_data: {
           currency: "gbp",
           unit_amount: amountPence,
+          // Tax-exclusive: VAT is added on top at checkout (matches the
+          // subscription prices).
+          tax_behavior: "exclusive",
           product_data: {
             name: "TableKit messaging credit",
             description: "Prepaid SMS/WhatsApp credit (used at cost).",
@@ -52,6 +55,9 @@ export async function createTopupCheckout(
         },
       },
     ],
+    automatic_tax: { enabled: true },
+    billing_address_collection: "required",
+    customer_update: { address: "auto" },
     // kind distinguishes this from subscription checkouts at the webhook.
     metadata: { organisation_id: orgId, kind: "credit_topup" },
     payment_intent_data: { metadata: { organisation_id: orgId, kind: "credit_topup" } },
@@ -68,7 +74,9 @@ export async function createTopupCheckout(
 // the session id (recordTopup → applyEntry → (reason, ref) unique).
 export async function creditTopupFromSession(session: Stripe.Checkout.Session): Promise<void> {
   const orgId = session.metadata?.["organisation_id"];
-  const amount = session.amount_total;
+  // Credit the PRE-VAT amount (amount_subtotal). Prices are tax-exclusive, so
+  // amount_total includes VAT that goes to HMRC, not to the messaging wallet.
+  const amount = session.amount_subtotal;
   if (!orgId || typeof amount !== "number" || amount <= 0) {
     console.warn("[lib/billing/topup.ts] top-up session missing org/amount; skipping", {
       sessionId: session.id,

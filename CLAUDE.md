@@ -9,9 +9,9 @@ A lightweight, freemium table booking and management platform for UK independent
 ### Commercial model
 
 - **Free forever** up to 50 bookings/month.
-- **Core** £19/month (unlimited bookings, deposits, Reserve with Google).
-- **Plus** £39/month (multi-venue, AI enquiry handler, priority support).
-- SMS and Stripe fees are pass-through at cost.
+- **Core** £29/month + VAT (unlimited bookings, deposits, Reserve with Google).
+- **Plus** £74/month + VAT (multi-venue, AI enquiry handler, priority support).
+- SMS and Stripe fees are pass-through at cost. All plan prices are VAT-exclusive (VAT added at checkout via Stripe Tax).
 
 ---
 

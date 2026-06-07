@@ -4,8 +4,8 @@
 //
 // The tier ordering matches CLAUDE.md commercial model:
 //   free  → up to 50 bookings/month, no Plus features
-//   core  → £19/month, deposits + RWG + unlimited bookings
-//   plus  → £39/month, multi-venue + AI enquiry + priority support
+//   core  → £29/month + VAT, deposits + RWG + unlimited bookings
+//   plus  → £74/month + VAT, multi-venue + AI enquiry + priority support
 
 export type Plan = "free" | "core" | "plus";
 
