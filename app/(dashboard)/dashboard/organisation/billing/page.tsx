@@ -8,31 +8,13 @@ import { billingSubscriptions, organisations } from "@/lib/db/schema";
 import { withUser } from "@/lib/db/client";
 import { stripeEnabled } from "@/lib/stripe/client";
 
+import { PLAN_LABEL, PLAN_PRICE, SUBSCRIBED, fmtDate, fmtMoney } from "@/lib/billing/display";
 import { TOPUP_AMOUNTS_PENCE } from "@/lib/billing/topup";
 
 import { openPortal, startCheckout } from "./billing-actions";
 import { startTopup } from "./topup-actions";
 
 export const metadata = { title: "Billing · TableKit" };
-
-function fmtMoney(pence: number): string {
-  return `£${(pence / 100).toFixed(2)}`;
-}
-
-const PLAN_LABEL: Record<string, string> = { free: "Free", core: "Core", plus: "Plus" };
-const PLAN_PRICE: Record<string, string> = {
-  core: "£29/month + VAT",
-  plus: "£74/month + VAT",
-};
-
-// Statuses where the org still has access (past_due keeps access during
-// Stripe's dunning retries).
-const SUBSCRIBED = new Set(["active", "trialing", "past_due"]);
-
-function fmtDate(d: Date | null): string {
-  if (!d) return "—";
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
-}
 
 // Owner-only billing page. Plan upgrades go through hosted Stripe
 // Checkout; managing/cancelling an existing subscription goes through the

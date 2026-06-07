@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
+  CircleUser,
   Clock,
   CreditCard,
   Database,
@@ -160,6 +161,7 @@ export function SidebarShell({
       label: "Admin",
       icon: Shield,
       items: [
+        { kind: "item", href: "/dashboard/settings/account", label: "Account", icon: CircleUser },
         { kind: "item", href: "/dashboard/data", label: "Data", icon: Database },
         {
           kind: "item",
