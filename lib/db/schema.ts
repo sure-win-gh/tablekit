@@ -1192,7 +1192,7 @@ export const messageUsage = pgTable(
 //
 // The OTHER side of Stripe from deposits. Deposits use Connect (venue =
 // merchant). These tables are the platform relationship: Tablekit charges
-// the venue its £19/£39 subscription + credit top-ups. organisation_id is
+// the venue its £29/£74 subscription + credit top-ups. organisation_id is
 // the natural top-level key (NOT denormalised from a parent), so there's
 // no enforce_*_org_id trigger — the webhook/adminDb writes it directly.
 // All writes are adminDb-only; RLS grants members SELECT on their own org.

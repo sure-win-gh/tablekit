@@ -21,8 +21,8 @@ function fmtMoney(pence: number): string {
 
 const PLAN_LABEL: Record<string, string> = { free: "Free", core: "Core", plus: "Plus" };
 const PLAN_PRICE: Record<string, string> = {
-  core: "£19/month",
-  plus: "£39/month",
+  core: "£29/month + VAT",
+  plus: "£74/month + VAT",
 };
 
 // Statuses where the org still has access (past_due keeps access during
@@ -181,7 +181,7 @@ export default async function BillingPage({
                 type="submit"
                 className="rounded-card bg-ink hover:bg-charcoal inline-flex w-fit items-center gap-2 px-3 py-2 text-sm font-medium text-white transition"
               >
-                Upgrade to Core — £19/mo
+                Upgrade to Core — £29/mo + VAT
               </button>
             </form>
             <form action={startCheckout.bind(null, "plus")}>
@@ -189,7 +189,7 @@ export default async function BillingPage({
                 type="submit"
                 className="rounded-card border-ink text-ink hover:bg-cloud inline-flex w-fit items-center gap-2 border px-3 py-2 text-sm font-medium transition"
               >
-                Upgrade to Plus — £39/mo
+                Upgrade to Plus — £74/mo + VAT
               </button>
             </form>
           </div>

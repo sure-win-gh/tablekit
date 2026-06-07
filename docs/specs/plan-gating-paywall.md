@@ -35,7 +35,7 @@ Structural gates stay as-is (hidden, not locked): **Overview** and **cross-venue
 - **`<LockedFeature feature currentPlan />`** (`components/billing/locked-feature.tsx`, server component): a blurred generic placeholder (`blur-sm select-none pointer-events-none`, `aria-hidden`) under a centered upgrade card (coral `Badge` with the min plan, heading, blurb, primary `Button` → `/dashboard/upgrade?feature=<key>`). A compact `inline` variant for in-page sections (Settings messaging). Static — no client JS, can't be dismissed to reveal content.
 - **Page guard pattern:** `requireRole(...)` → `getPlan(orgId)` → `if (isLocked(plan, <feature>)) return <LockedFeature/>` **before** any real query. Replaces the throwing `requirePlan` page guards (and the campaigns `<Upsell>`).
 - **Sidebar:** pass the org `plan` into `SidebarData`; mark plan-gated items `locked` (kept visible) rather than `show:false` (still used for structural hides). `NavLink` renders a trailing lock icon for locked items but still links to the page.
-- **Plans page:** `/dashboard/upgrade` — Free £0 / Core £19 / Plus £39 comparison, current plan highlighted, `?feature=` called out. CTA = "Contact us to upgrade" (mailto). **Real Stripe subscription billing is out of scope** — a later feature.
+- **Plans page:** `/dashboard/upgrade` — Free £0 / Core £29 / Plus £74 comparison, current plan highlighted, `?feature=` called out. CTA = "Contact us to upgrade" (mailto). **Real Stripe subscription billing is out of scope** — a later feature.
 
 ## Security: the lock is UX only
 

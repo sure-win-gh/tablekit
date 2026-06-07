@@ -51,7 +51,7 @@ Existing `reporting.md` deferred week/month/year rollups; Insights is where they
 
 ## Plan tier
 
-Plus tier (£39/mo). The MVP `reporting.md` reports stay on Core; Insights is one of the Plus differentiators alongside multi-venue and AI enquiry.
+Plus tier (£74/mo + VAT). The MVP `reporting.md` reports stay on Core; Insights is one of the Plus differentiators alongside multi-venue and AI enquiry.
 
 ## Out of scope
 

@@ -67,7 +67,7 @@ Rules live in `lib/services/suggestions/{rule}.ts`, each a pure `(serviceContext
 
 ## Plan tier
 
-Plus tier (£39/mo). Capacity planning is the operator-maturity feature; Core users get the existing day-of timeline and floor plan.
+Plus tier (£74/mo + VAT). Capacity planning is the operator-maturity feature; Core users get the existing day-of timeline and floor plan.
 
 ## Out of scope
 
