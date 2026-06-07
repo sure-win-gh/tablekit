@@ -57,7 +57,7 @@ export default async function BillingPage({
   const showCredit = !stripeOff && (isPlus || creditPence > 0);
 
   return (
-    <main className="flex flex-1 flex-col px-8 py-6">
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-8 py-6">
       <nav className="text-ash flex items-center gap-1.5 text-xs">
         <Link href="/dashboard/organisation" className="hover:text-ink">
           Organisation
@@ -109,109 +109,112 @@ export default async function BillingPage({
         </p>
       ) : null}
 
-      <section className="mt-6 flex flex-col gap-2">
-        <h2 className="text-ink text-sm font-semibold tracking-tight">Current plan</h2>
-        <div className="rounded-card border-hairline flex items-center justify-between border bg-white p-4">
-          <div>
-            <p className="text-ink text-lg font-semibold">{PLAN_LABEL[plan] ?? plan}</p>
-            <p className="text-ash text-sm">
-              {plan === "free"
-                ? "Up to 50 bookings/month, no Plus features."
-                : `${PLAN_PRICE[plan] ?? ""}${
-                    isSubscribed && sub
-                      ? sub.cancelAtPeriodEnd
-                        ? ` · cancels on ${fmtDate(sub.currentPeriodEnd)}`
-                        : ` · renews on ${fmtDate(sub.currentPeriodEnd)}`
-                      : ""
-                  }`}
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {stripeOff ? (
-        <p className="rounded-card border-hairline bg-cloud text-ash mt-6 border p-3 text-xs">
-          Billing isn&apos;t configured on this environment yet.
-        </p>
-      ) : isSubscribed ? (
-        <section className="mt-6 flex flex-col gap-2">
-          <h2 className="text-ink text-sm font-semibold tracking-tight">Manage</h2>
-          <p className="text-ash text-sm">
-            Change your card, switch between Core and Plus, or cancel — all through Stripe&apos;s
-            secure portal.
-          </p>
-          <form action={openPortal}>
-            <button
-              type="submit"
-              className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
-            >
-              Manage billing
-              <ChevronRight className="text-stone h-4 w-4" aria-hidden />
-            </button>
-          </form>
-        </section>
-      ) : (
-        <section className="mt-6 flex flex-col gap-2">
-          <h2 className="text-ink text-sm font-semibold tracking-tight">Upgrade</h2>
-          <p className="text-ash text-sm">
-            Unlock unlimited bookings, deposits and Reserve with Google (Core), or multi-venue, the
-            AI enquiry handler and marketing (Plus).
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <form action={startCheckout.bind(null, "core")}>
-              <button
-                type="submit"
-                className="rounded-card bg-ink hover:bg-charcoal inline-flex w-fit items-center gap-2 px-3 py-2 text-sm font-medium text-white transition"
-              >
-                Upgrade to Core — £29/mo + VAT
-              </button>
-            </form>
-            <form action={startCheckout.bind(null, "plus")}>
-              <button
-                type="submit"
-                className="rounded-card border-ink text-ink hover:bg-cloud inline-flex w-fit items-center gap-2 border px-3 py-2 text-sm font-medium transition"
-              >
-                Upgrade to Plus — £74/mo + VAT
-              </button>
-            </form>
-          </div>
-        </section>
-      )}
-
-      {showCredit ? (
-        <section className="mt-8 flex flex-col gap-2">
-          <h2 className="text-ink text-sm font-semibold tracking-tight">Messaging credit</h2>
-          <p className="text-ash text-sm">
-            Prepaid balance for marketing SMS/WhatsApp, charged at cost. A campaign won&apos;t send
-            unless your balance covers it — transactional booking messages are never affected.
-          </p>
-          <div className="rounded-card border-hairline flex items-center justify-between border bg-white p-4">
+      <div className="mt-6 grid items-stretch gap-6 md:grid-cols-2">
+        <section className="rounded-card border-hairline flex h-full flex-col gap-2 border bg-white p-5">
+          <h2 className="text-ink text-sm font-semibold tracking-tight">Current plan</h2>
+          <div className="flex items-center justify-between">
             <div>
-              <p className="text-ink text-lg font-semibold">{fmtMoney(creditPence)}</p>
-              <p className="text-ash text-sm">available credit</p>
+              <p className="text-ink text-lg font-semibold">{PLAN_LABEL[plan] ?? plan}</p>
+              <p className="text-ash text-sm">
+                {plan === "free"
+                  ? "Up to 50 bookings/month, no Plus features."
+                  : `${PLAN_PRICE[plan] ?? ""}${
+                      isSubscribed && sub
+                        ? sub.cancelAtPeriodEnd
+                          ? ` · cancels on ${fmtDate(sub.currentPeriodEnd)}`
+                          : ` · renews on ${fmtDate(sub.currentPeriodEnd)}`
+                        : ""
+                    }`}
+              </p>
             </div>
           </div>
-          {isPlus ? (
-            <div className="mt-1 flex flex-wrap gap-2">
-              {TOPUP_AMOUNTS_PENCE.map((amt) => (
-                <form key={amt} action={startTopup.bind(null, amt)}>
-                  <input type="hidden" name="return_to" value="/dashboard/organisation/billing" />
-                  <button
-                    type="submit"
-                    className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
-                  >
-                    Top up {fmtMoney(amt)}
-                  </button>
-                </form>
-              ))}
-            </div>
-          ) : (
-            <p className="text-ash text-xs">
-              Messaging credit funds marketing campaigns — a Plus-tier feature. Upgrade to top up.
-            </p>
-          )}
         </section>
-      ) : null}
+
+        {stripeOff ? (
+          <p className="rounded-card border-hairline bg-cloud text-ash border p-3 text-xs">
+            Billing isn&apos;t configured on this environment yet.
+          </p>
+        ) : isSubscribed ? (
+          <section className="rounded-card border-hairline flex h-full flex-col gap-2 border bg-white p-5">
+            <h2 className="text-ink text-sm font-semibold tracking-tight">Manage</h2>
+            <p className="text-ash text-sm">
+              Change your card, switch between Core and Plus, or cancel — all through Stripe&apos;s
+              secure portal.
+            </p>
+            <form action={openPortal}>
+              <button
+                type="submit"
+                className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
+              >
+                Manage billing
+                <ChevronRight className="text-stone h-4 w-4" aria-hidden />
+              </button>
+            </form>
+          </section>
+        ) : (
+          <section className="rounded-card border-hairline flex h-full flex-col gap-2 border bg-white p-5">
+            <h2 className="text-ink text-sm font-semibold tracking-tight">Upgrade</h2>
+            <p className="text-ash text-sm">
+              Unlock unlimited bookings, deposits and Reserve with Google (Core), or multi-venue,
+              the AI enquiry handler and marketing (Plus).
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <form action={startCheckout.bind(null, "core")}>
+                <button
+                  type="submit"
+                  className="rounded-card bg-ink hover:bg-charcoal inline-flex w-fit items-center gap-2 px-3 py-2 text-sm font-medium text-white transition"
+                >
+                  Upgrade to Core — £29/mo + VAT
+                </button>
+              </form>
+              <form action={startCheckout.bind(null, "plus")}>
+                <button
+                  type="submit"
+                  className="rounded-card border-ink text-ink hover:bg-cloud inline-flex w-fit items-center gap-2 border px-3 py-2 text-sm font-medium transition"
+                >
+                  Upgrade to Plus — £74/mo + VAT
+                </button>
+              </form>
+            </div>
+          </section>
+        )}
+
+        {showCredit ? (
+          <section className="rounded-card border-hairline flex h-full flex-col gap-2 border bg-white p-5">
+            <h2 className="text-ink text-sm font-semibold tracking-tight">Messaging credit</h2>
+            <p className="text-ash text-sm">
+              Prepaid balance for marketing SMS/WhatsApp, charged at cost. A campaign won&apos;t
+              send unless your balance covers it — transactional booking messages are never
+              affected.
+            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-ink text-lg font-semibold">{fmtMoney(creditPence)}</p>
+                <p className="text-ash text-sm">available credit</p>
+              </div>
+            </div>
+            {isPlus ? (
+              <div className="mt-1 flex flex-wrap gap-2">
+                {TOPUP_AMOUNTS_PENCE.map((amt) => (
+                  <form key={amt} action={startTopup.bind(null, amt)}>
+                    <input type="hidden" name="return_to" value="/dashboard/organisation/billing" />
+                    <button
+                      type="submit"
+                      className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
+                    >
+                      Top up {fmtMoney(amt)}
+                    </button>
+                  </form>
+                ))}
+              </div>
+            ) : (
+              <p className="text-ash text-xs">
+                Messaging credit funds marketing campaigns — a Plus-tier feature. Upgrade to top up.
+              </p>
+            )}
+          </section>
+        ) : null}
+      </div>
     </main>
   );
 }

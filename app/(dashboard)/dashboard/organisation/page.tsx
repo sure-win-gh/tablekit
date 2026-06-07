@@ -64,7 +64,7 @@ export default async function OrganisationPage() {
   const isPlus = hasPlan(toPlan(org.plan), "plus");
 
   return (
-    <main className="flex flex-1 flex-col px-8 py-6">
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-8 py-6">
       <nav className="text-ash flex items-center gap-1.5 text-xs">
         <Link href="/dashboard" className="hover:text-ink">
           Dashboard
@@ -97,95 +97,97 @@ export default async function OrganisationPage() {
         </Link>
       ) : null}
 
-      {isOwner ? (
-        <section className="mt-6 flex flex-col gap-2">
-          <h2 className="text-ink text-sm font-semibold tracking-tight">Billing</h2>
+      <div className="mt-6 grid items-stretch gap-6 md:grid-cols-2">
+        {isOwner ? (
+          <section className="rounded-card border-hairline flex h-full flex-col gap-2 border bg-white p-5">
+            <h2 className="text-ink text-sm font-semibold tracking-tight">Billing</h2>
+            <p className="text-ash text-sm">
+              Your subscription plan and payment method, managed securely through Stripe.
+            </p>
+            <Link
+              href="/dashboard/organisation/billing"
+              className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
+            >
+              <CreditCard className="text-ash h-4 w-4" aria-hidden />
+              Manage billing
+              <ChevronRight className="text-stone h-4 w-4" aria-hidden />
+            </Link>
+          </section>
+        ) : null}
+
+        <section className="rounded-card border-hairline flex h-full flex-col gap-2 border bg-white p-5">
+          <h2 className="text-ink text-sm font-semibold tracking-tight">Group CRM</h2>
           <p className="text-ash text-sm">
-            Your subscription plan and payment method, managed securely through Stripe.
+            When enabled, operators with access to multiple venues see a single guest list across
+            all of them at <span className="font-mono">/dashboard/guests</span>. Marketing consent
+            stays per-venue — opting in at one venue doesn&apos;t opt the guest in at another. Each
+            venue&apos;s own guest list is always available from that venue&apos;s sidebar
+            regardless of this setting.
+          </p>
+          {!isPlus ? (
+            <p className="rounded-card border-hairline bg-cloud text-ash border p-3 text-xs">
+              Group CRM is a Plus-tier feature. The CRM (per-venue and cross-venue) requires the
+              Plus plan; upgrade from the Billing page to enable it.
+            </p>
+          ) : venueCount < 2 ? (
+            <p className="rounded-card border-hairline bg-cloud text-ash border p-3 text-xs">
+              With one venue this aggregate view is the same as the per-venue CRM, so there&apos;s
+              nothing to enable yet. Add another venue and the toggle becomes meaningful.
+            </p>
+          ) : null}
+          <GroupCrmToggle
+            initialEnabled={org.groupCrmEnabled}
+            disabled={!isOwner || !isPlus || venueCount < 2}
+            ownerOnlyHint={!isOwner}
+          />
+        </section>
+
+        <section className="rounded-card border-hairline flex h-full flex-col gap-2 border bg-white p-5">
+          <h2 className="text-ink text-sm font-semibold tracking-tight">Team</h2>
+          <p className="text-ash text-sm">
+            Members of this organisation and pending invitations. Owners can invite teammates by
+            email.
           </p>
           <Link
-            href="/dashboard/organisation/billing"
+            href="/dashboard/organisation/team"
             className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
           >
-            <CreditCard className="text-ash h-4 w-4" aria-hidden />
-            Manage billing
+            <UserPlus className="text-ash h-4 w-4" aria-hidden />
+            Manage team
             <ChevronRight className="text-stone h-4 w-4" aria-hidden />
           </Link>
         </section>
-      ) : null}
 
-      <section className="mt-6 flex flex-col gap-2">
-        <h2 className="text-ink text-sm font-semibold tracking-tight">Group CRM</h2>
-        <p className="text-ash text-sm">
-          When enabled, operators with access to multiple venues see a single guest list across all
-          of them at <span className="font-mono">/dashboard/guests</span>. Marketing consent stays
-          per-venue — opting in at one venue doesn&apos;t opt the guest in at another. Each
-          venue&apos;s own guest list is always available from that venue&apos;s sidebar regardless
-          of this setting.
-        </p>
-        {!isPlus ? (
-          <p className="rounded-card border-hairline bg-cloud text-ash border p-3 text-xs">
-            Group CRM is a Plus-tier feature. The CRM (per-venue and cross-venue) requires the Plus
-            plan; upgrade from the Billing page to enable it.
-          </p>
-        ) : venueCount < 2 ? (
-          <p className="rounded-card border-hairline bg-cloud text-ash border p-3 text-xs">
-            With one venue this aggregate view is the same as the per-venue CRM, so there&apos;s
-            nothing to enable yet. Add another venue and the toggle becomes meaningful.
-          </p>
+        {isPlus && isOwner ? (
+          <section className="rounded-card border-hairline flex h-full flex-col gap-2 border bg-white p-5">
+            <h2 className="text-ink text-sm font-semibold tracking-tight">API access</h2>
+            <p className="text-ash text-sm">
+              Issue Bearer tokens for the public REST API at{" "}
+              <span className="font-mono">api.tablekit.uk/v1</span>. Owner-only.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/dashboard/organisation/api-keys"
+                className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
+              >
+                <KeyRound className="text-ash h-4 w-4" aria-hidden />
+                Manage API keys
+                <ChevronRight className="text-stone h-4 w-4" aria-hidden />
+              </Link>
+              <Link
+                href="/dashboard/organisation/webhooks"
+                className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
+              >
+                <Webhook className="text-ash h-4 w-4" aria-hidden />
+                Manage webhooks
+                <ChevronRight className="text-stone h-4 w-4" aria-hidden />
+              </Link>
+            </div>
+          </section>
         ) : null}
-        <GroupCrmToggle
-          initialEnabled={org.groupCrmEnabled}
-          disabled={!isOwner || !isPlus || venueCount < 2}
-          ownerOnlyHint={!isOwner}
-        />
-      </section>
 
-      {usage ? <UsageSection usage={usage} /> : null}
-
-      <section className="mt-8 flex flex-col gap-2">
-        <h2 className="text-ink text-sm font-semibold tracking-tight">Team</h2>
-        <p className="text-ash text-sm">
-          Members of this organisation and pending invitations. Owners can invite teammates by
-          email.
-        </p>
-        <Link
-          href="/dashboard/organisation/team"
-          className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
-        >
-          <UserPlus className="text-ash h-4 w-4" aria-hidden />
-          Manage team
-          <ChevronRight className="text-stone h-4 w-4" aria-hidden />
-        </Link>
-      </section>
-
-      {isPlus && isOwner ? (
-        <section className="mt-8 flex flex-col gap-2">
-          <h2 className="text-ink text-sm font-semibold tracking-tight">API access</h2>
-          <p className="text-ash text-sm">
-            Issue Bearer tokens for the public REST API at{" "}
-            <span className="font-mono">api.tablekit.uk/v1</span>. Owner-only.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/dashboard/organisation/api-keys"
-              className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
-            >
-              <KeyRound className="text-ash h-4 w-4" aria-hidden />
-              Manage API keys
-              <ChevronRight className="text-stone h-4 w-4" aria-hidden />
-            </Link>
-            <Link
-              href="/dashboard/organisation/webhooks"
-              className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
-            >
-              <Webhook className="text-ash h-4 w-4" aria-hidden />
-              Manage webhooks
-              <ChevronRight className="text-stone h-4 w-4" aria-hidden />
-            </Link>
-          </div>
-        </section>
-      ) : null}
+        {usage ? <UsageSection usage={usage} /> : null}
+      </div>
     </main>
   );
 }
@@ -199,7 +201,7 @@ function fmtCost(pence: number): string {
 function UsageSection({ usage }: { usage: UsageSummary }) {
   const total = usage.rows.reduce((s, r) => s + r.count, 0);
   return (
-    <section className="mt-8 flex flex-col gap-2">
+    <section className="flex flex-col gap-2 md:col-span-2">
       <h2 className="text-ink text-sm font-semibold tracking-tight">Messaging usage</h2>
       <p className="text-ash text-sm">
         Sends this month ({usage.period}). SMS and WhatsApp are billed at cost; email is free.

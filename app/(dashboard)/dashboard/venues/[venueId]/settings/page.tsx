@@ -99,7 +99,7 @@ export default async function VenueSettingsPage({
     : null;
 
   return (
-    <section className="flex flex-col gap-6">
+    <section className="mx-auto flex w-full max-w-3xl flex-col gap-6">
       <div>
         <h2 className="text-ink text-xl font-bold tracking-tight">General</h2>
         <p className="text-ash mt-0.5 text-sm">

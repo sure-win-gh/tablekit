@@ -69,7 +69,7 @@ export default async function AccountPage() {
   const contact = isOwner && !stripeOff ? await getBillingContact(orgId) : null;
 
   return (
-    <main className="flex flex-1 flex-col px-8 py-6">
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-8 py-6">
       <nav className="text-ash flex items-center gap-1.5 text-xs">
         <Link href="/dashboard" className="hover:text-ink">
           Dashboard
@@ -102,98 +102,100 @@ export default async function AccountPage() {
         </Link>
       ) : null}
 
-      {/* Plan & subscription */}
-      <section className="mt-6 flex flex-col gap-2">
-        <h2 className="text-ink text-sm font-semibold tracking-tight">Plan &amp; subscription</h2>
-        <div className="rounded-card border-hairline flex items-center justify-between border bg-white p-4">
-          <div>
-            <p className="text-ink text-lg font-semibold">{PLAN_LABEL[plan] ?? plan}</p>
-            <p className="text-ash text-sm">
-              {plan === "free"
-                ? "Up to 50 bookings/month, no Plus features."
-                : `${PLAN_PRICE[plan] ?? ""}${
-                    isSubscribed && sub
-                      ? sub.cancelAtPeriodEnd
-                        ? ` · cancels on ${fmtDate(sub.currentPeriodEnd)}`
-                        : ` · renews on ${fmtDate(sub.currentPeriodEnd)}`
-                      : ""
-                  }`}
-            </p>
+      <div className="mt-6 grid items-stretch gap-6 md:grid-cols-2">
+        {/* Plan & subscription */}
+        <section className="rounded-card border-hairline flex h-full flex-col gap-2 border bg-white p-5">
+          <h2 className="text-ink text-sm font-semibold tracking-tight">Plan &amp; subscription</h2>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-ink text-lg font-semibold">{PLAN_LABEL[plan] ?? plan}</p>
+              <p className="text-ash text-sm">
+                {plan === "free"
+                  ? "Up to 50 bookings/month, no Plus features."
+                  : `${PLAN_PRICE[plan] ?? ""}${
+                      isSubscribed && sub
+                        ? sub.cancelAtPeriodEnd
+                          ? ` · cancels on ${fmtDate(sub.currentPeriodEnd)}`
+                          : ` · renews on ${fmtDate(sub.currentPeriodEnd)}`
+                        : ""
+                    }`}
+              </p>
+            </div>
           </div>
-        </div>
-        {isOwner ? (
+          {isOwner ? (
+            <Link
+              href={BILLING_HREF}
+              className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
+            >
+              <CreditCard className="text-ash h-4 w-4" aria-hidden />
+              {isSubscribed ? "Manage billing" : "Upgrade or manage billing"}
+              <ChevronRight className="text-stone h-4 w-4" aria-hidden />
+            </Link>
+          ) : (
+            <p className="text-ash text-xs">Only owners can change the plan or payment method.</p>
+          )}
+        </section>
+
+        {/* Billing contact — owner-only, sourced from Stripe */}
+        {isOwner ? <BillingContactSection contact={contact} stripeOff={stripeOff} /> : null}
+
+        {/* Messaging credit */}
+        {isOwner && showCredit ? (
+          <section className="rounded-card border-hairline flex h-full flex-col gap-2 border bg-white p-5">
+            <h2 className="text-ink text-sm font-semibold tracking-tight">Messaging credit</h2>
+            <p className="text-ash text-sm">
+              Prepaid balance for marketing SMS/WhatsApp, charged at cost. Transactional booking
+              messages are never affected.
+            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-ink text-lg font-semibold">{fmtMoney(org.creditPence)}</p>
+                <p className="text-ash text-sm">available credit</p>
+              </div>
+              <Link href={BILLING_HREF} className="text-ash hover:text-ink text-sm">
+                Top up →
+              </Link>
+            </div>
+          </section>
+        ) : null}
+
+        {/* Organisation */}
+        <section className="rounded-card border-hairline flex h-full flex-col gap-2 border bg-white p-5">
+          <h2 className="text-ink text-sm font-semibold tracking-tight">Organisation</h2>
+          <dl className="divide-hairline -mx-1 divide-y text-sm">
+            <Row label="Name" value={org.name} />
+            <Row label="Slug" value={org.slug} mono />
+            <Row label="Plan" value={PLAN_LABEL[plan] ?? plan} />
+            <Row label="Venues" value={String(venueCount)} />
+          </dl>
           <Link
-            href={BILLING_HREF}
+            href="/dashboard/organisation"
             className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
           >
-            <CreditCard className="text-ash h-4 w-4" aria-hidden />
-            {isSubscribed ? "Manage billing" : "Upgrade or manage billing"}
+            <Building2 className="text-ash h-4 w-4" aria-hidden />
+            Manage organisation
             <ChevronRight className="text-stone h-4 w-4" aria-hidden />
           </Link>
-        ) : (
-          <p className="text-ash text-xs">Only owners can change the plan or payment method.</p>
-        )}
-      </section>
-
-      {/* Billing contact — owner-only, sourced from Stripe */}
-      {isOwner ? <BillingContactSection contact={contact} stripeOff={stripeOff} /> : null}
-
-      {/* Messaging credit */}
-      {isOwner && showCredit ? (
-        <section className="mt-8 flex flex-col gap-2">
-          <h2 className="text-ink text-sm font-semibold tracking-tight">Messaging credit</h2>
-          <p className="text-ash text-sm">
-            Prepaid balance for marketing SMS/WhatsApp, charged at cost. Transactional booking
-            messages are never affected.
-          </p>
-          <div className="rounded-card border-hairline flex items-center justify-between border bg-white p-4">
-            <div>
-              <p className="text-ink text-lg font-semibold">{fmtMoney(org.creditPence)}</p>
-              <p className="text-ash text-sm">available credit</p>
-            </div>
-            <Link href={BILLING_HREF} className="text-ash hover:text-ink text-sm">
-              Top up →
-            </Link>
-          </div>
         </section>
-      ) : null}
 
-      {/* Organisation */}
-      <section className="mt-8 flex flex-col gap-2">
-        <h2 className="text-ink text-sm font-semibold tracking-tight">Organisation</h2>
-        <dl className="rounded-card border-hairline divide-hairline divide-y border bg-white text-sm">
-          <Row label="Name" value={org.name} />
-          <Row label="Slug" value={org.slug} mono />
-          <Row label="Plan" value={PLAN_LABEL[plan] ?? plan} />
-          <Row label="Venues" value={String(venueCount)} />
-        </dl>
-        <Link
-          href="/dashboard/organisation"
-          className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
-        >
-          <Building2 className="text-ash h-4 w-4" aria-hidden />
-          Manage organisation
-          <ChevronRight className="text-stone h-4 w-4" aria-hidden />
-        </Link>
-      </section>
-
-      {/* Your details */}
-      <section className="mt-8 flex flex-col gap-2">
-        <h2 className="text-ink text-sm font-semibold tracking-tight">Your details</h2>
-        <dl className="rounded-card border-hairline divide-hairline divide-y border bg-white text-sm">
-          <Row label="Name" value={me?.fullName ?? "—"} />
-          <Row label="Email" value={me?.email ?? "—"} />
-          <Row label="Role" value={role} />
-        </dl>
-        <Link
-          href="/dashboard/settings/security"
-          className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
-        >
-          <Lock className="text-ash h-4 w-4" aria-hidden />
-          Security &amp; two-factor
-          <ChevronRight className="text-stone h-4 w-4" aria-hidden />
-        </Link>
-      </section>
+        {/* Your details */}
+        <section className="rounded-card border-hairline flex h-full flex-col gap-2 border bg-white p-5">
+          <h2 className="text-ink text-sm font-semibold tracking-tight">Your details</h2>
+          <dl className="divide-hairline -mx-1 divide-y text-sm">
+            <Row label="Name" value={me?.fullName ?? "—"} />
+            <Row label="Email" value={me?.email ?? "—"} />
+            <Row label="Role" value={role} />
+          </dl>
+          <Link
+            href="/dashboard/settings/security"
+            className="rounded-card border-hairline hover:border-ink inline-flex w-fit items-center gap-2 border bg-white px-3 py-2 text-sm transition"
+          >
+            <Lock className="text-ash h-4 w-4" aria-hidden />
+            Security &amp; two-factor
+            <ChevronRight className="text-stone h-4 w-4" aria-hidden />
+          </Link>
+        </section>
+      </div>
     </main>
   );
 }
@@ -206,7 +208,7 @@ function BillingContactSection({
   stripeOff: boolean;
 }) {
   return (
-    <section className="mt-8 flex flex-col gap-2">
+    <section className="flex flex-col gap-2">
       <h2 className="text-ink text-sm font-semibold tracking-tight">Billing contact</h2>
       {stripeOff ? (
         <p className="rounded-card border-hairline bg-cloud text-ash border p-3 text-xs">
@@ -218,7 +220,7 @@ function BillingContactSection({
         </p>
       ) : (
         <>
-          <dl className="rounded-card border-hairline divide-hairline divide-y border bg-white text-sm">
+          <dl className="divide-hairline -mx-1 divide-y text-sm">
             <Row label="Name" value={contact.name ?? "—"} />
             <Row label="Email" value={contact.email ?? "—"} />
             <Row label="Phone" value={contact.phone ?? "—"} />
