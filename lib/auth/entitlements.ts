@@ -18,7 +18,8 @@ export type Feature =
   | "campaigns"
   | "apiKeys"
   | "deposits"
-  | "messaging";
+  | "messaging"
+  | "widgetTheming";
 
 export type FeatureMeta = {
   // Human label used in the paywall heading + plans page.
@@ -69,6 +70,11 @@ export const FEATURES: Record<Feature, FeatureMeta> = {
     label: "SMS & WhatsApp",
     minPlan: "core",
     blurb: "Send confirmations and reminders over SMS and WhatsApp, not just email.",
+  },
+  widgetTheming: {
+    label: "Branded booking widget",
+    minPlan: "plus",
+    blurb: "Put your logo and brand colour on the booking page, embed and payment screen.",
   },
 };
 

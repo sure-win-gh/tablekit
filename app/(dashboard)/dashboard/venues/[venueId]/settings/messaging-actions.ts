@@ -138,15 +138,27 @@ export async function updateMessagingSettings(
   if (logoUrlRaw && !z.string().url().safeParse(logoUrlRaw).success) {
     return { status: "error", message: "Logo URL must be a valid URL." };
   }
+  // Match the read-path constraint (parseBranding) so we don't silently
+  // store an http: logo that the widget then drops as mixed content.
+  if (logoUrlRaw && !logoUrlRaw.startsWith("https://")) {
+    return { status: "error", message: "Logo URL must start with https://." };
+  }
   const replyToRaw = (fd.get("reply_to") as string | null)?.trim() ?? "";
   if (replyToRaw && !z.string().email().safeParse(replyToRaw).success) {
     return { status: "error", message: "Reply-to must be a valid email." };
   }
+  // Widget-only corner treatment. Stored for all tiers (free for emails to
+  // ignore); applied to the widget only when the org is on Plus, gated at
+  // render time in lib/branding/theme.ts.
+  const cornerStyleRaw = (fd.get("corner_style") as string | null)?.trim() ?? "";
+  const cornerStyle: "rounded" | "sharp" | null =
+    cornerStyleRaw === "sharp" ? "sharp" : cornerStyleRaw === "rounded" ? "rounded" : null;
   const branding = {
     logoUrl: logoUrlRaw || null,
     brandColour: brandColourRaw || null,
     signature: ((fd.get("signature") as string | null)?.trim() || "").slice(0, 500) || null,
     replyTo: replyToRaw || null,
+    cornerStyle,
   };
 
   const db = adminDb();
