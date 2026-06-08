@@ -9,8 +9,11 @@ import {
   loadPublicVenueByIdOrSlug,
   type PublicShowcaseReview,
 } from "@/lib/public/venue";
+import { hasPlan } from "@/lib/auth/plan-level";
+import { widgetThemeStyle } from "@/lib/branding/theme";
 
 import { BookingForm, SlotPicker } from "./forms";
+import { WidgetHeader, WidgetThemeProvider } from "./branding";
 
 // Public, unauthenticated booking page. Reads go through adminDb
 // helpers in lib/public/venue.ts — RLS doesn't apply to anonymous.
@@ -46,7 +49,7 @@ export default async function PublicBookingPage({
   const sp = await searchParams;
   const lookup = await loadPublicVenueByIdOrSlug(venueIdOrSlug);
   if (!lookup) notFound();
-  const { venue, matchedBy, canonicalSlug } = lookup;
+  const { venue, matchedBy, canonicalSlug, plan, branding } = lookup;
 
   // 308 redirect UUID → slug URL when a slug exists. Preserves search
   // params so a deep-link with ?date=… survives. The iframe embed
@@ -61,23 +64,32 @@ export default async function PublicBookingPage({
     permanentRedirect(`/book/${canonicalSlug}${tail}`);
   }
 
+  // Widget theming is Plus-gated (docs/specs/widget.md). Free/Core resolve
+  // to undefined → default Tablekit styling. Gating is live off the org's
+  // current plan, so a downgrade reverts instantly with no stored drift.
+  const isPlus = hasPlan(plan, "plus");
+  const themeStyle = widgetThemeStyle(branding, { gated: isPlus });
+  const logoUrl = isPlus ? (branding?.logoUrl ?? null) : null;
+
   // Kill switch — operator-facing emergency halt. Renders a venue-
   // specific maintenance message so a guest mid-booking knows it's
   // not them. POST /api/v1/bookings also rejects in this state.
   if (widgetDisabled()) {
     return (
-      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 p-6">
-        <header>
-          <p className="text-coral text-xs font-semibold tracking-wider uppercase">
-            Online booking
+      <WidgetThemeProvider style={themeStyle}>
+        <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 p-6">
+          <header>
+            <p className="text-coral text-xs font-semibold tracking-wider uppercase">
+              Online booking
+            </p>
+            <h1 className="text-ink mt-2 text-3xl font-bold tracking-tight">{venue.name}</h1>
+          </header>
+          <p className="rounded-card border-hairline bg-cloud text-charcoal border p-6 text-sm">
+            Online booking is temporarily unavailable. Please call or email the venue directly to
+            make a reservation. We&apos;ll have this back up shortly.
           </p>
-          <h1 className="text-ink mt-2 text-3xl font-bold tracking-tight">{venue.name}</h1>
-        </header>
-        <p className="rounded-card border-hairline bg-cloud text-charcoal border p-6 text-sm">
-          Online booking is temporarily unavailable. Please call or email the venue directly to make
-          a reservation. We&apos;ll have this back up shortly.
-        </p>
-      </main>
+        </main>
+      </WidgetThemeProvider>
     );
   }
 
@@ -97,44 +109,45 @@ export default async function PublicBookingPage({
   const dateLongUtc = availability.slots[0]?.startAt ?? new Date(`${date}T12:00:00Z`);
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-6">
-      <header>
-        <p className="text-coral text-xs font-semibold tracking-wider uppercase">Book a table</p>
-        <h1 className="text-ink mt-2 text-4xl font-bold tracking-tight">{venue.name}</h1>
-        <p className="text-ash mt-1 text-sm">
-          {formatVenueDateLong(dateLongUtc, { timezone: venue.timezone })}
-        </p>
-      </header>
+    <WidgetThemeProvider style={themeStyle}>
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-6">
+        <WidgetHeader
+          variant="hosted"
+          venueName={venue.name}
+          logoUrl={logoUrl}
+          dateLine={formatVenueDateLong(dateLongUtc, { timezone: venue.timezone })}
+        />
 
-      <SlotPicker
-        venueId={venue.id}
-        date={date}
-        partySize={partySize}
-        slots={availability.slots.map((s) => ({
-          serviceId: s.serviceId,
-          serviceName: s.serviceName,
-          wallStart: s.wallStart,
-        }))}
-        picked={
-          pickedSlot ? { serviceId: pickedSlot.serviceId, wallStart: pickedSlot.wallStart } : null
-        }
-      />
-
-      {pickedSlot ? (
-        <BookingForm
+        <SlotPicker
           venueId={venue.id}
-          serviceId={pickedSlot.serviceId}
           date={date}
-          wallStart={pickedSlot.wallStart}
           partySize={partySize}
-          captchaSitekey={
-            captchaEnabled() ? (process.env["NEXT_PUBLIC_HCAPTCHA_SITEKEY"] ?? null) : null
+          slots={availability.slots.map((s) => ({
+            serviceId: s.serviceId,
+            serviceName: s.serviceName,
+            wallStart: s.wallStart,
+          }))}
+          picked={
+            pickedSlot ? { serviceId: pickedSlot.serviceId, wallStart: pickedSlot.wallStart } : null
           }
         />
-      ) : null}
 
-      {showcase.length > 0 ? <ShowcaseSection reviews={showcase} /> : null}
-    </main>
+        {pickedSlot ? (
+          <BookingForm
+            venueId={venue.id}
+            serviceId={pickedSlot.serviceId}
+            date={date}
+            wallStart={pickedSlot.wallStart}
+            partySize={partySize}
+            captchaSitekey={
+              captchaEnabled() ? (process.env["NEXT_PUBLIC_HCAPTCHA_SITEKEY"] ?? null) : null
+            }
+          />
+        ) : null}
+
+        {showcase.length > 0 ? <ShowcaseSection reviews={showcase} /> : null}
+      </main>
+    </WidgetThemeProvider>
   );
 }
 

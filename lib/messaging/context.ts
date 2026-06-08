@@ -50,6 +50,9 @@ export type VenueBranding = {
   brandColour?: string | null; // hex, e.g. "#c2410c"
   signature?: string | null; // operator sign-off line(s)
   replyTo?: string | null;
+  // Widget-only: corner treatment for the booking surfaces. Ignored by
+  // the email layout. Plus-gated at render time, not stored-gated.
+  cornerStyle?: "rounded" | "sharp" | null;
 };
 
 export type RenderedEmail = {

@@ -111,14 +111,21 @@ export { DEFAULTS as MESSAGING_SETTINGS_DEFAULTS };
 
 // --- Branding ---------------------------------------------------------------
 // Hex colour guard: #RGB or #RRGGBB only — never lets arbitrary CSS into
-// the email layout's inline style.
-const HEX_COLOUR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+// the email layout's inline style or the widget's themed wrapper.
+// Exported so the widget theming helper (lib/branding/theme.ts) and the
+// dashboard form re-check operator input against the same canonical guard.
+export const HEX_COLOUR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+// Logos now load on the public widget over HTTPS (an http: URL would be
+// blocked by CSP / mixed-content anyway) — constrain at the schema too.
+const isHttps = (v: string) => v.startsWith("https://");
 
 const brandingSchema = z.object({
-  logoUrl: z.string().url().max(2048).nullish(),
+  logoUrl: z.string().url().max(2048).refine(isHttps).nullish(),
   brandColour: z.string().regex(HEX_COLOUR).nullish(),
   signature: z.string().max(500).nullish(),
   replyTo: z.string().email().max(254).nullish(),
+  cornerStyle: z.enum(["rounded", "sharp"]).nullish(),
 });
 
 // Parse venues.settings.branding into a typed object, or undefined when
@@ -135,11 +142,14 @@ export function parseBranding(settings: unknown): VenueBranding | undefined {
     // Salvage individual valid fields rather than dropping all branding.
     const raw = root as Record<string, unknown>;
     const out: VenueBranding = {};
-    if (typeof raw["logoUrl"] === "string") out.logoUrl = raw["logoUrl"];
+    if (typeof raw["logoUrl"] === "string" && isHttps(raw["logoUrl"])) out.logoUrl = raw["logoUrl"];
     if (typeof raw["brandColour"] === "string" && HEX_COLOUR.test(raw["brandColour"])) {
       out.brandColour = raw["brandColour"];
     }
     if (typeof raw["signature"] === "string") out.signature = raw["signature"].slice(0, 500);
+    if (raw["cornerStyle"] === "rounded" || raw["cornerStyle"] === "sharp") {
+      out.cornerStyle = raw["cornerStyle"];
+    }
     return Object.keys(out).length > 0 ? out : undefined;
   }
   const b: VenueBranding = {};
@@ -147,5 +157,6 @@ export function parseBranding(settings: unknown): VenueBranding | undefined {
   if (parsed.data.brandColour) b.brandColour = parsed.data.brandColour;
   if (parsed.data.signature) b.signature = parsed.data.signature;
   if (parsed.data.replyTo) b.replyTo = parsed.data.replyTo;
+  if (parsed.data.cornerStyle) b.cornerStyle = parsed.data.cornerStyle;
   return Object.keys(b).length > 0 ? b : undefined;
 }
