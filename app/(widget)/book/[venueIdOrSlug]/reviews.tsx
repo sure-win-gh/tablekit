@@ -38,7 +38,7 @@ export function ReviewsSection({ reviews }: { reviews: PublicReviews }) {
               <p className="mt-2 whitespace-pre-line">{r.comment}</p>
               <p className="text-ash mt-2 text-xs">
                 — {r.author},{" "}
-                {r.submittedAt.toLocaleDateString(undefined, { year: "numeric", month: "short" })}
+                {r.submittedAt.toLocaleDateString("en-GB", { year: "numeric", month: "short" })}
                 {r.externalUrl ? (
                   <>
                     {" · "}

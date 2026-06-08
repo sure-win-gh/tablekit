@@ -181,12 +181,14 @@ export function VenueSettingsForm({
             label="Latitude"
             name="profile_latitude"
             defaultValue={profile.latitude}
+            error={fieldErrors?.["profileLatitude"]?.[0]}
             optional
           />
           <Field
             label="Longitude"
             name="profile_longitude"
             defaultValue={profile.longitude}
+            error={fieldErrors?.["profileLongitude"]?.[0]}
             optional
           />
         </div>

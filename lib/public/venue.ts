@@ -360,8 +360,9 @@ export async function loadPublicReviews(
   const sum = (internalAgg?.sum ?? 0) + (googleAgg?.sum ?? 0);
   const average = count > 0 ? Math.round((sum / count) * 10) / 10 : 0;
 
-  // Decrypt the bounded list only; silent-skip unreadable rows (as the
-  // showcase does) rather than surface placeholders to public visitors.
+  // Decrypt the bounded list only; unreadable rows are dropped from the
+  // output (and logged for ops, never as a placeholder shown to visitors)
+  // — same posture as loadPublicShowcase.
   const decryptItem = async (
     r: {
       id: string;
