@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 
 import { UpgradeBanner } from "@/components/billing/locked-feature";
@@ -183,6 +184,17 @@ export function MessagingSettingsForm({ venueId, events, branding, isPlus }: Pro
             className="border-hairline rounded-md border px-3 py-2 text-sm"
           />
         </label>
+        <p className="text-ash text-xs">
+          {isPlus
+            ? "Your branding shows on your live booking widget."
+            : "Add the booking widget to your website to start taking bookings."}{" "}
+          <Link
+            href={`/dashboard/venues/${venueId}/embed`}
+            className="text-coral font-medium underline underline-offset-2"
+          >
+            Get your embed code &amp; booking link →
+          </Link>
+        </p>
       </fieldset>
 
       <div className="flex items-center gap-3">
