@@ -89,8 +89,9 @@ Before flipping from "private beta" to "public beta":
 - [ ] RLS tests green on every org-scoped table.
 - [ ] Stripe live mode keys in production. Test payment end-to-end.
 - [ ] Webhooks pointing at production URL, signatures verified.
-- [ ] Billing: live Core/Plus Prices created + `STRIPE_PRICE_*` set; platform webhook subscribed to the subscription/invoice events; test an upgrade + cancel end-to-end.
+- [ ] Billing: live-mode Core/Plus + usage Prices created (all `tax_behavior: exclusive`) and all four envs set (`STRIPE_PRICE_CORE/PLUS/USAGE`, `STRIPE_METER_USAGE_EVENT_NAME`); platform webhook subscribed to `checkout.session.completed`, `customer.subscription.*`, `invoice.paid`, `invoice.payment_failed`; test an upgrade + cancel end-to-end. (Test-mode equivalents already exist — recreate in live.)
 - [ ] Billing: usage Meter is `sum`-aggregated at £0.01/unit (so pence bills at cost) before enabling transactional metering.
+- [ ] Billing/VAT: **Stripe Tax active with an origin address + tax registration** configured — `automatic_tax` on Checkout/top-up *errors* without it. Smoke-test that VAT is added on top of the (exclusive) price on both an upgrade and a credit top-up, and that a top-up credits the **pre-VAT** amount.
 - [ ] DPA click-through live, `/legal/sub-processors` page live.
 - [ ] Backups verified (actually restore one to a throwaway DB).
 - [ ] Kill switches tested on staging.
