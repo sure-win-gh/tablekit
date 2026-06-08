@@ -62,7 +62,26 @@ const Schema = z.object({
   // it off here stops the next enquiry without affecting in-flight
   // ones (the parse + persist already happened on those).
   aiEnquiryAutoSendEnabled: z.coerce.boolean().optional(),
+  // Venue profile (booking-page.md) — the rich page's public info. All
+  // optional/empty-tolerant; parseProfile re-validates on read. Empty
+  // string clears a field. Website https + geo bounds checked below.
+  profileDescription: z.string().trim().max(2000).optional(),
+  profileCuisine: z.string().trim().max(80).optional(),
+  profilePriceRange: z.enum(["", "£", "££", "£££", "££££"]).optional(),
+  profileStreet: z.string().trim().max(160).optional(),
+  profileCity: z.string().trim().max(80).optional(),
+  profilePostcode: z.string().trim().max(12).optional(),
+  profilePhone: z.string().trim().max(32).optional(),
+  profileWebsite: z.string().trim().max(2048).optional(),
+  profileLatitude: z.number().finite().min(-90).max(90).optional(),
+  profileLongitude: z.number().finite().min(-180).max(180).optional(),
 });
+
+// Empty form field → undefined (so an unset number isn't coerced to 0,0).
+function numOrUndef(v: FormDataEntryValue | null): number | undefined {
+  const s = (v as string | null)?.trim() ?? "";
+  return s === "" ? undefined : Number(s);
+}
 
 export type UpdateVenueState =
   | { status: "idle" }
@@ -88,6 +107,16 @@ export async function updateVenue(
     escalationThreshold: formData.get("escalation_threshold"),
     escalationEmail: formData.get("escalation_email"),
     aiEnquiryAutoSendEnabled: formData.get("ai_enquiry_auto_send_enabled") === "on",
+    profileDescription: formData.get("profile_description"),
+    profileCuisine: formData.get("profile_cuisine"),
+    profilePriceRange: formData.get("profile_price_range"),
+    profileStreet: formData.get("profile_street"),
+    profileCity: formData.get("profile_city"),
+    profilePostcode: formData.get("profile_postcode"),
+    profilePhone: formData.get("profile_phone"),
+    profileWebsite: formData.get("profile_website"),
+    profileLatitude: numOrUndef(formData.get("profile_latitude")),
+    profileLongitude: numOrUndef(formData.get("profile_longitude")),
   });
 
   if (!parsed.success) {
@@ -146,6 +175,39 @@ export async function updateVenue(
   if (!existing) {
     return { status: "error", message: "Venue not found or not in your organisation." };
   }
+  // Assemble the venue profile slice from the optional fields. Drop empties
+  // so a blank field clears rather than stores "". Website must be https
+  // (matches parseProfile's read-side guard); validate before persist.
+  const website = (parsed.data.profileWebsite ?? "").trim();
+  if (website && !z.string().url().safeParse(website).success) {
+    return {
+      status: "error",
+      message: "Website must be a valid URL.",
+      fieldErrors: { profileWebsite: ["Enter a valid URL or leave blank."] },
+    };
+  }
+  if (website && !website.startsWith("https://")) {
+    return {
+      status: "error",
+      message: "Website must start with https://.",
+      fieldErrors: { profileWebsite: ["Must start with https://."] },
+    };
+  }
+  const address: Record<string, string> = {};
+  if (parsed.data.profileStreet) address["street"] = parsed.data.profileStreet;
+  if (parsed.data.profileCity) address["city"] = parsed.data.profileCity;
+  if (parsed.data.profilePostcode) address["postcode"] = parsed.data.profilePostcode;
+  const profile: Record<string, unknown> = {};
+  if (parsed.data.profileDescription) profile["description"] = parsed.data.profileDescription;
+  if (parsed.data.profileCuisine) profile["cuisine"] = parsed.data.profileCuisine;
+  if (parsed.data.profilePriceRange) profile["priceRange"] = parsed.data.profilePriceRange;
+  if (Object.keys(address).length > 0) profile["address"] = address;
+  if (parsed.data.profilePhone) profile["phone"] = parsed.data.profilePhone;
+  if (website) profile["website"] = website;
+  if (parsed.data.profileLatitude !== undefined) profile["latitude"] = parsed.data.profileLatitude;
+  if (parsed.data.profileLongitude !== undefined)
+    profile["longitude"] = parsed.data.profileLongitude;
+
   const slugChanged = nextSlug !== existing.slug;
   const mergedSettings = {
     ...((existing.settings as Record<string, unknown>) ?? {}),
@@ -157,6 +219,7 @@ export async function updateVenue(
     escalationThreshold: escalationThreshold ?? 2,
     escalationEmail: trimmedEscalationEmail.length > 0 ? trimmedEscalationEmail : null,
     aiEnquiryAutoSendEnabled: parsed.data.aiEnquiryAutoSendEnabled ?? false,
+    profile: Object.keys(profile).length > 0 ? profile : null,
   };
 
   let updated: { id: string } | undefined;
@@ -204,6 +267,7 @@ export async function updateVenue(
       reviewRequestEnabled: mergedSettings.reviewRequestEnabled,
       reviewRequestDelayHours: mergedSettings.reviewRequestDelayHours,
       googlePlaceIdSet: mergedSettings.googlePlaceId !== null,
+      profileSet: mergedSettings.profile !== null,
     },
   });
 

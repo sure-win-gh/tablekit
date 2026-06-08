@@ -24,6 +24,18 @@ type Props = {
   escalationEmail: string;
   showcaseEnabled: boolean;
   aiEnquiryAutoSendEnabled: boolean;
+  profile: {
+    description: string;
+    cuisine: string;
+    priceRange: string;
+    street: string;
+    city: string;
+    postcode: string;
+    phone: string;
+    website: string;
+    latitude: string;
+    longitude: string;
+  };
 };
 
 export function VenueSettingsForm({
@@ -41,6 +53,7 @@ export function VenueSettingsForm({
   escalationEmail,
   showcaseEnabled,
   aiEnquiryAutoSendEnabled,
+  profile,
 }: Props) {
   const [state, formAction, pending] = useActionState(updateVenue, initial);
   const fieldErrors = state.status === "error" ? state.fieldErrors : undefined;
@@ -108,6 +121,80 @@ export function VenueSettingsForm({
           options={LOCALE_OPTIONS}
         />
       </div>
+
+      <fieldset className="border-hairline flex flex-col gap-3 border-t pt-4">
+        <legend className="text-ink text-sm font-semibold">Venue profile</legend>
+        <p className="text-ash text-xs">
+          Shown on your booking page (Core and Plus). Describe the venue, where it is, and how to
+          reach you. Leave any field blank to hide it.
+        </p>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-ink font-medium">Description</span>
+          <textarea
+            name="profile_description"
+            defaultValue={profile.description}
+            maxLength={2000}
+            rows={3}
+            placeholder="A cosy neighbourhood bistro serving seasonal small plates…"
+            className="border-hairline rounded-md border px-3 py-2 text-sm outline-none focus:border-neutral-900"
+          />
+        </label>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Cuisine" name="profile_cuisine" defaultValue={profile.cuisine} optional />
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-ink font-medium">Price range</span>
+            <select
+              name="profile_price_range"
+              defaultValue={profile.priceRange}
+              className="border-hairline rounded-md border px-3 py-2 text-sm outline-none focus:border-neutral-900"
+            >
+              <option value="">—</option>
+              <option value="£">£ (budget)</option>
+              <option value="££">££ (moderate)</option>
+              <option value="£££">£££ (pricey)</option>
+              <option value="££££">££££ (fine dining)</option>
+            </select>
+          </label>
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          <Field label="Street" name="profile_street" defaultValue={profile.street} optional />
+          <Field label="City / town" name="profile_city" defaultValue={profile.city} optional />
+          <Field
+            label="Postcode"
+            name="profile_postcode"
+            defaultValue={profile.postcode}
+            optional
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Phone" name="profile_phone" defaultValue={profile.phone} optional />
+          <Field
+            label="Website"
+            name="profile_website"
+            defaultValue={profile.website}
+            error={fieldErrors?.["profileWebsite"]?.[0]}
+            optional
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Field
+            label="Latitude"
+            name="profile_latitude"
+            defaultValue={profile.latitude}
+            optional
+          />
+          <Field
+            label="Longitude"
+            name="profile_longitude"
+            defaultValue={profile.longitude}
+            optional
+          />
+        </div>
+        <p className="text-ash text-xs">
+          Latitude and longitude are saved for the upcoming map — leave blank for now if you
+          don&apos;t have them.
+        </p>
+      </fieldset>
 
       <fieldset className="border-hairline flex flex-col gap-3 border-t pt-4">
         <legend className="text-ink text-sm font-semibold">Review requests</legend>
