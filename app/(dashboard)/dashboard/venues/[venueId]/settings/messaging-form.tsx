@@ -1,6 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
+
+import { UpgradeBanner } from "@/components/billing/locked-feature";
 
 import { updateMessagingSettings, type MessagingSettingsState } from "./messaging-actions";
 
@@ -32,10 +35,15 @@ type Props = {
     brandColour: string;
     signature: string;
     replyTo: string;
+    cornerStyle: string;
   };
+  // Whether the org is on Plus — controls the widget-theming upsell. The
+  // branding fields stay editable regardless (they drive emails on every
+  // tier); only their application to the widget is Plus-gated.
+  isPlus: boolean;
 };
 
-export function MessagingSettingsForm({ venueId, events, branding }: Props) {
+export function MessagingSettingsForm({ venueId, events, branding, isPlus }: Props) {
   const [state, formAction, pending] = useActionState(updateMessagingSettings, initial);
 
   return (
@@ -115,11 +123,13 @@ export function MessagingSettingsForm({ venueId, events, branding }: Props) {
       ))}
 
       <fieldset className="border-hairline flex flex-col gap-3 border-t pt-4">
-        <legend className="text-ink text-sm font-semibold">Email branding</legend>
+        <legend className="text-ink text-sm font-semibold">Branding</legend>
         <p className="text-ash text-xs">
-          Applied to all guest emails. Leave blank for the default neutral style. SMS and WhatsApp
-          stay plain text.
+          Applied to all guest emails, and — on Plus — to your booking page, embedded widget and
+          payment screen. Leave blank for the default neutral style. SMS and WhatsApp stay plain
+          text.
         </p>
+        {!isPlus ? <UpgradeBanner feature="widgetTheming" /> : null}
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-ink font-medium">Logo URL</span>
           <input
@@ -153,6 +163,17 @@ export function MessagingSettingsForm({ venueId, events, branding }: Props) {
           </label>
         </div>
         <label className="flex flex-col gap-1 text-sm">
+          <span className="text-ink font-medium">Widget corners</span>
+          <select
+            name="corner_style"
+            defaultValue={branding.cornerStyle || "rounded"}
+            className="border-hairline rounded-md border px-3 py-2 text-sm"
+          >
+            <option value="rounded">Rounded (default)</option>
+            <option value="sharp">Sharp</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
           <span className="text-ink font-medium">Email signature</span>
           <textarea
             name="signature"
@@ -163,6 +184,17 @@ export function MessagingSettingsForm({ venueId, events, branding }: Props) {
             className="border-hairline rounded-md border px-3 py-2 text-sm"
           />
         </label>
+        <p className="text-ash text-xs">
+          {isPlus
+            ? "Your branding shows on your live booking widget."
+            : "Add the booking widget to your website to start taking bookings."}{" "}
+          <Link
+            href={`/dashboard/venues/${venueId}/embed`}
+            className="text-coral font-medium underline underline-offset-2"
+          >
+            Get your embed code &amp; booking link →
+          </Link>
+        </p>
       </fieldset>
 
       <div className="flex items-center gap-3">

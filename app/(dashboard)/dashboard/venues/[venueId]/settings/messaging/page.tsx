@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { UpgradeBanner } from "@/components/billing/locked-feature";
 import { isLocked } from "@/lib/auth/entitlements";
+import { hasPlan } from "@/lib/auth/plan-level";
 import { getPlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
@@ -121,11 +122,13 @@ export default async function MessagingSettingsPage({
         <MessagingSettingsForm
           venueId={venue.id}
           events={flowEvents}
+          isPlus={hasPlan(orgPlan, "plus")}
           branding={{
             logoUrl: branding?.logoUrl ?? "",
             brandColour: branding?.brandColour ?? "",
             signature: branding?.signature ?? "",
             replyTo: branding?.replyTo ?? "",
+            cornerStyle: branding?.cornerStyle ?? "",
           }}
         />
         <MessageComposer

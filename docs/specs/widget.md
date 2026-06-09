@@ -39,9 +39,26 @@ Both surfaces use the same React code and the same public API.
 - Post messages between iframe and parent for height resizing only.
 - The shareable page at `book.tablekit.uk/<venue-slug>` is the same React components without the iframe wrapper.
 
+## Operator theming (Plus)
+
+Plus venues brand the booking surfaces via `venues.settings.branding` — the same
+slice that drives email branding:
+
+- **Accent colour** (`brandColour`, hex) — overrides `--color-coral` on the widget,
+  hosted page and Stripe Payment Element. The hover/active shade is derived
+  deterministically (`lib/branding/theme.ts`).
+- **Logo** (`logoUrl`, HTTPS) — replaces the venue-name wordmark in the header.
+- **Corner style** (`cornerStyle`: `rounded` | `sharp`) — overrides the radius tokens.
+
+Threaded as CSS custom properties on a `display:contents` wrapper around the widget
+`<main>`, so the override cascades to every `coral`/radius utility with no per-component
+refactor. Gating is live off the org's plan (`hasPlan(plan, "plus")`) at render time —
+a downgrade reverts to default Tablekit styling with no stored-state change. Free/Core
+keep the default styling; their branding still applies to emails.
+
 ## Out of scope
 
-- Theming by operator beyond a single accent colour (Plus tier later).
+- Advanced theming beyond accent + logo + corner style — fonts, dark mode, custom CSS (later).
 - Embedded payments (card form outside Stripe Checkout) — we are SAQ-A, see `payments.md`.
 
 ## Deferred
