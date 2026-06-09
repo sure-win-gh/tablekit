@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
 import { venueSendingDomains, venues } from "@/lib/db/schema";
+import { parseProfile } from "@/lib/venues/profile";
 
 import { VenueSettingsForm } from "./form";
 import { SendingDomainSection, type SendingDomainRow } from "./sending-domain-section";
@@ -66,6 +67,20 @@ export default async function VenueSettingsPage({
         : "",
   };
 
+  const profile = parseProfile(venue.settings);
+  const profileFields = {
+    description: profile?.description ?? "",
+    cuisine: profile?.cuisine ?? "",
+    priceRange: profile?.priceRange ?? "",
+    street: profile?.address?.street ?? "",
+    city: profile?.address?.city ?? "",
+    postcode: profile?.address?.postcode ?? "",
+    phone: profile?.phone ?? "",
+    website: profile?.website ?? "",
+    latitude: profile?.latitude != null ? String(profile.latitude) : "",
+    longitude: profile?.longitude != null ? String(profile.longitude) : "",
+  };
+
   const showcaseEnabled = settings["showcaseEnabled"] === true;
   // AI enquiry auto-send — Plus tier only on the surface, but we
   // surface the toggle to every venue and let the runner's
@@ -123,6 +138,7 @@ export default async function VenueSettingsPage({
         escalationEmail={escalationSettings.email}
         showcaseEnabled={showcaseEnabled}
         aiEnquiryAutoSendEnabled={aiEnquiryAutoSendEnabled}
+        profile={profileFields}
       />
 
       <SendingDomainSection venueId={venue.id} isOwner={isOwner} row={sendingDomainRow} />

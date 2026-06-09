@@ -5,6 +5,7 @@ import { widgetDisabled } from "@/lib/feature-flags";
 import { captchaEnabled } from "@/lib/public/captcha";
 import {
   loadPublicAvailability,
+  loadPublicReviews,
   loadPublicShowcase,
   loadPublicVenueByIdOrSlug,
   type PublicShowcaseReview,
@@ -14,12 +15,18 @@ import { widgetThemeStyle } from "@/lib/branding/theme";
 
 import { BookingForm, SlotPicker } from "./forms";
 import { WidgetHeader, WidgetThemeProvider } from "./branding";
+import { AboutSection, VenueInfoHeader } from "./profile";
+import { ReviewsSection } from "./reviews";
 
 // Public, unauthenticated booking page. Reads go through adminDb
 // helpers in lib/public/venue.ts — RLS doesn't apply to anonymous.
 // Writes go through /api/v1/bookings, which rate-limits + captcha-
 // verifies before calling the same createBooking domain function
 // the host flow uses.
+//
+// Two layouts share one data load: Free venues get the original simple
+// body; Core+ get the rich TheFork-style page (profile + combined
+// reviews + gallery/map placeholders). See docs/specs/booking-page.md.
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +56,7 @@ export default async function PublicBookingPage({
   const sp = await searchParams;
   const lookup = await loadPublicVenueByIdOrSlug(venueIdOrSlug);
   if (!lookup) notFound();
-  const { venue, matchedBy, canonicalSlug, plan, branding } = lookup;
+  const { venue, matchedBy, canonicalSlug, plan, branding, profile } = lookup;
 
   // 308 redirect UUID → slug URL when a slug exists. Preserves search
   // params so a deep-link with ?date=… survives. The iframe embed
@@ -64,10 +71,10 @@ export default async function PublicBookingPage({
     permanentRedirect(`/book/${canonicalSlug}${tail}`);
   }
 
-  // Widget theming is Plus-gated (docs/specs/widget.md). Free/Core resolve
-  // to undefined → default Tablekit styling. Gating is live off the org's
-  // current plan, so a downgrade reverts instantly with no stored drift.
+  // Widget theming is Plus-gated (orthogonal to the rich-page gate below).
+  // The rich layout is Core+; Free keeps the original simple body.
   const isPlus = hasPlan(plan, "plus");
+  const rich = hasPlan(plan, "core");
   const themeStyle = widgetThemeStyle(branding, { gated: isPlus });
   const logoUrl = isPlus ? (branding?.logoUrl ?? null) : null;
 
@@ -96,10 +103,7 @@ export default async function PublicBookingPage({
   const date = sp.date ?? todayInZone(venue.timezone);
   const partySize = sp.party ? Math.max(1, Math.min(20, Number(sp.party))) : 2;
 
-  const [availability, showcase] = await Promise.all([
-    loadPublicAvailability(venue, { date, partySize }),
-    loadPublicShowcase(venue.id),
-  ]);
+  const availability = await loadPublicAvailability(venue, { date, partySize });
 
   const pickedSlot =
     sp.serviceId && sp.wallStart
@@ -108,6 +112,68 @@ export default async function PublicBookingPage({
 
   const dateLongUtc = availability.slots[0]?.startAt ?? new Date(`${date}T12:00:00Z`);
 
+  // Shared booking controls — identical in both layouts.
+  const slotPicker = (
+    <SlotPicker
+      venueId={venue.id}
+      date={date}
+      partySize={partySize}
+      slots={availability.slots.map((s) => ({
+        serviceId: s.serviceId,
+        serviceName: s.serviceName,
+        wallStart: s.wallStart,
+      }))}
+      picked={
+        pickedSlot ? { serviceId: pickedSlot.serviceId, wallStart: pickedSlot.wallStart } : null
+      }
+    />
+  );
+  const bookingForm = pickedSlot ? (
+    <BookingForm
+      venueId={venue.id}
+      serviceId={pickedSlot.serviceId}
+      date={date}
+      wallStart={pickedSlot.wallStart}
+      partySize={partySize}
+      captchaSitekey={
+        captchaEnabled() ? (process.env["NEXT_PUBLIC_HCAPTCHA_SITEKEY"] ?? null) : null
+      }
+    />
+  ) : null;
+
+  // --- Rich page (Core+) -------------------------------------------------
+  if (rich) {
+    const reviews = await loadPublicReviews(venue.id);
+    return (
+      <WidgetThemeProvider style={themeStyle}>
+        <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 p-6">
+          <VenueInfoHeader
+            venueName={venue.name}
+            logoUrl={logoUrl}
+            profile={profile}
+            average={reviews.average}
+            reviewCount={reviews.count}
+          />
+
+          {/* Phase 2: photo gallery / hero image slot. */}
+
+          <section aria-label="Book a table" className="flex flex-col gap-6">
+            {slotPicker}
+            {bookingForm}
+          </section>
+
+          {profile ? <AboutSection profile={profile} /> : null}
+
+          {/* Phase 4: map slot (uses profile.latitude / profile.longitude). */}
+
+          <ReviewsSection reviews={reviews} />
+        </main>
+      </WidgetThemeProvider>
+    );
+  }
+
+  // --- Simple page (Free) — unchanged ------------------------------------
+  const showcase = await loadPublicShowcase(venue.id);
   return (
     <WidgetThemeProvider style={themeStyle}>
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-6">
@@ -118,32 +184,8 @@ export default async function PublicBookingPage({
           dateLine={formatVenueDateLong(dateLongUtc, { timezone: venue.timezone })}
         />
 
-        <SlotPicker
-          venueId={venue.id}
-          date={date}
-          partySize={partySize}
-          slots={availability.slots.map((s) => ({
-            serviceId: s.serviceId,
-            serviceName: s.serviceName,
-            wallStart: s.wallStart,
-          }))}
-          picked={
-            pickedSlot ? { serviceId: pickedSlot.serviceId, wallStart: pickedSlot.wallStart } : null
-          }
-        />
-
-        {pickedSlot ? (
-          <BookingForm
-            venueId={venue.id}
-            serviceId={pickedSlot.serviceId}
-            date={date}
-            wallStart={pickedSlot.wallStart}
-            partySize={partySize}
-            captchaSitekey={
-              captchaEnabled() ? (process.env["NEXT_PUBLIC_HCAPTCHA_SITEKEY"] ?? null) : null
-            }
-          />
-        ) : null}
+        {slotPicker}
+        {bookingForm}
 
         {showcase.length > 0 ? <ShowcaseSection reviews={showcase} /> : null}
       </main>
