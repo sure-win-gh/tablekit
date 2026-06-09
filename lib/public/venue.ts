@@ -9,7 +9,15 @@ import "server-only";
 
 import { and, desc, eq, gte, isNotNull, isNull, lt, sql } from "drizzle-orm";
 
-import { bookingTables, guests, reviews, services, venueTables, venues } from "@/lib/db/schema";
+import {
+  bookingTables,
+  guests,
+  organisations,
+  reviews,
+  services,
+  venueTables,
+  venues,
+} from "@/lib/db/schema";
 import { adminDb } from "@/lib/server/admin/db";
 import { decryptPii, type Ciphertext } from "@/lib/security/crypto";
 import {
@@ -19,6 +27,9 @@ import {
   type TableSpec,
 } from "@/lib/bookings/availability";
 import { venueLocalDayRange } from "@/lib/bookings/time";
+import { type Plan, toPlan } from "@/lib/auth/plan-level";
+import { parseBranding } from "@/lib/messaging/venue-settings";
+import type { VenueBranding } from "@/lib/messaging/context";
 
 export type PublicVenue = {
   id: string;
@@ -50,6 +61,11 @@ export type VenueLookup = {
   venue: PublicVenue;
   matchedBy: "id" | "slug";
   canonicalSlug: string | null;
+  // Owning org's plan + parsed branding — for widget theming gating only.
+  // Derived here (not in the public PublicVenue DTO) so organisationId and
+  // raw settings never leak into a response payload.
+  plan: Plan;
+  branding: VenueBranding | undefined;
 };
 
 export async function loadPublicVenueByIdOrSlug(idOrSlug: string): Promise<VenueLookup | null> {
@@ -66,8 +82,11 @@ export async function loadPublicVenueByIdOrSlug(idOrSlug: string): Promise<Venue
       timezone: venues.timezone,
       locale: venues.locale,
       slug: venues.slug,
+      plan: organisations.plan,
+      settings: venues.settings,
     })
     .from(venues)
+    .innerJoin(organisations, eq(organisations.id, venues.organisationId))
     .where(where)
     .limit(1);
   if (!row) return null;
@@ -75,6 +94,8 @@ export async function loadPublicVenueByIdOrSlug(idOrSlug: string): Promise<Venue
     venue: { id: row.id, name: row.name, timezone: row.timezone, locale: row.locale },
     matchedBy,
     canonicalSlug: row.slug ?? null,
+    plan: toPlan(row.plan),
+    branding: parseBranding(row.settings),
   };
 }
 

@@ -3,7 +3,7 @@
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { Button, Field, Input, Textarea, cn } from "@/components/ui";
 
@@ -395,8 +395,35 @@ function DepositStep({
 }) {
   const stripe = useMemo(() => getStripe(handoff.stripeAccount), [handoff.stripeAccount]);
   const isHold = handoff.kind === "setup_intent";
+
+  // Mirror the widget's accent + corner radius into the Stripe Payment
+  // Element so the pay button matches the "Confirm booking" button above
+  // it. We read the resolved CSS variables off this section (which sits in
+  // the themed wrapper subtree, so it picks up any per-venue override)
+  // rather than threading props through the booking state machine. Because
+  // --color-coral is globally defined, this resolves to Tablekit coral for
+  // Free/Core and the operator's colour for Plus — consistent on every
+  // tier, never bare Stripe blue. Appearance value only, never injected
+  // CSS — PCI SAQ-A is intact.
+  const rootRef = useRef<HTMLElement>(null);
+  const [appearanceVars, setAppearanceVars] = useState<Record<string, string> | null>(null);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const cs = getComputedStyle(el);
+    const accent = cs.getPropertyValue("--color-coral").trim();
+    const radius = cs.getPropertyValue("--radius-input").trim();
+    const vars: Record<string, string> = {};
+    if (accent) vars["colorPrimary"] = accent;
+    if (radius) vars["borderRadius"] = radius;
+    setAppearanceVars(Object.keys(vars).length > 0 ? vars : null);
+  }, []);
+
   return (
-    <section className="rounded-card border-hairline shadow-panel flex flex-col gap-4 border bg-white p-6">
+    <section
+      ref={rootRef}
+      className="rounded-card border-hairline shadow-panel flex flex-col gap-4 border bg-white p-6"
+    >
       <header>
         <h2 className="text-ink text-lg font-bold tracking-tight">
           {isHold ? "Card required" : "Deposit required"}
@@ -412,7 +439,9 @@ function DepositStep({
         stripe={stripe}
         options={{
           clientSecret: handoff.clientSecret,
-          appearance: { theme: "stripe" },
+          appearance: appearanceVars
+            ? { theme: "stripe", variables: appearanceVars }
+            : { theme: "stripe" },
         }}
       >
         <DepositPaymentForm kind={handoff.kind} onPaid={onPaid} />
