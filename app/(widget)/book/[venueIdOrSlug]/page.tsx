@@ -3,6 +3,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import { widgetDisabled } from "@/lib/feature-flags";
 import { captchaEnabled } from "@/lib/public/captcha";
 import {
+  loadPublicOpeningHours,
   loadPublicPhotos,
   loadPublicReviews,
   loadPublicShowcase,
@@ -106,9 +107,10 @@ export default async function PublicBookingPage({
 
   // --- Rich page (Core+) -------------------------------------------------
   if (rich) {
-    const [reviews, photos] = await Promise.all([
+    const [reviews, photos, openingHours] = await Promise.all([
       loadPublicReviews(venue.id),
       loadPublicPhotos(venue.id),
+      loadPublicOpeningHours(venue.id),
     ]);
     return (
       <WidgetThemeProvider style={themeStyle}>
@@ -125,9 +127,7 @@ export default async function PublicBookingPage({
 
           {wizard}
 
-          {profile ? <AboutSection profile={profile} /> : null}
-
-          {/* Phase 4: map slot (uses profile.latitude / profile.longitude). */}
+          <AboutSection profile={profile ?? {}} openingHours={openingHours} />
 
           <ReviewsSection reviews={reviews} />
         </main>

@@ -547,6 +547,52 @@ export async function loadPublicPhotos(venueId: string): Promise<PublicPhoto[]> 
   }));
 }
 
+// --- Opening hours (rich page) ----------------------------------------------
+
+export type OpeningWindow = { start: string; end: string }; // "HH:MM"
+export type OpeningDay = { key: string; label: string; windows: OpeningWindow[] };
+
+const OPENING_DAYS: { key: string; label: string }[] = [
+  { key: "mon", label: "Monday" },
+  { key: "tue", label: "Tuesday" },
+  { key: "wed", label: "Wednesday" },
+  { key: "thu", label: "Thursday" },
+  { key: "fri", label: "Friday" },
+  { key: "sat", label: "Saturday" },
+  { key: "sun", label: "Sunday" },
+];
+
+// Per-day opening windows derived from the venue's services
+// (services.schedule = { days, start, end }). Mon→Sun; a day with no service
+// is closed (empty windows). Multiple services on a day yield multiple
+// windows, sorted by start. Public, no PII.
+export async function loadPublicOpeningHours(venueId: string): Promise<OpeningDay[]> {
+  const db = adminDb();
+  const rows = await db
+    .select({ schedule: services.schedule })
+    .from(services)
+    .where(eq(services.venueId, venueId));
+
+  const byDay = new Map<string, OpeningWindow[]>();
+  for (const r of rows) {
+    const s = r.schedule as { days?: unknown; start?: unknown; end?: unknown };
+    if (!Array.isArray(s.days) || typeof s.start !== "string" || typeof s.end !== "string")
+      continue;
+    for (const d of s.days) {
+      if (typeof d !== "string") continue;
+      const list = byDay.get(d) ?? [];
+      list.push({ start: s.start, end: s.end });
+      byDay.set(d, list);
+    }
+  }
+
+  return OPENING_DAYS.map(({ key, label }) => ({
+    key,
+    label,
+    windows: (byDay.get(key) ?? []).sort((a, b) => a.start.localeCompare(b.start)),
+  }));
+}
+
 // Resolve the organisation that owns a venue — needed by the API
 // route to scope `createBooking` correctly. Kept separate from
 // `loadPublicVenue` so the organisationId doesn't accidentally leak

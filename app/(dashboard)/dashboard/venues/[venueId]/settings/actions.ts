@@ -75,6 +75,8 @@ const Schema = z.object({
   profileWebsite: z.string().trim().max(2048).optional(),
   profileLatitude: z.number().finite().min(-90).max(90).optional(),
   profileLongitude: z.number().finite().min(-180).max(180).optional(),
+  profileTripadvisorRating: z.number().finite().min(0).max(5).optional(),
+  profileTripadvisorUrl: z.string().trim().max(2048).optional(),
 });
 
 // Empty form field → undefined (so an unset number isn't coerced to 0,0).
@@ -117,6 +119,8 @@ export async function updateVenue(
     profileWebsite: formData.get("profile_website"),
     profileLatitude: numOrUndef(formData.get("profile_latitude")),
     profileLongitude: numOrUndef(formData.get("profile_longitude")),
+    profileTripadvisorRating: numOrUndef(formData.get("profile_tripadvisor_rating")),
+    profileTripadvisorUrl: formData.get("profile_tripadvisor_url"),
   });
 
   if (!parsed.success) {
@@ -193,6 +197,17 @@ export async function updateVenue(
       fieldErrors: { profileWebsite: ["Must start with https://."] },
     };
   }
+  const tripUrl = (parsed.data.profileTripadvisorUrl ?? "").trim();
+  if (
+    tripUrl &&
+    (!z.string().url().safeParse(tripUrl).success || !tripUrl.startsWith("https://"))
+  ) {
+    return {
+      status: "error",
+      message: "TripAdvisor link must be a valid https:// URL.",
+      fieldErrors: { profileTripadvisorUrl: ["Enter a valid https:// URL or leave blank."] },
+    };
+  }
   const address: Record<string, string> = {};
   if (parsed.data.profileStreet) address["street"] = parsed.data.profileStreet;
   if (parsed.data.profileCity) address["city"] = parsed.data.profileCity;
@@ -207,6 +222,9 @@ export async function updateVenue(
   if (parsed.data.profileLatitude !== undefined) profile["latitude"] = parsed.data.profileLatitude;
   if (parsed.data.profileLongitude !== undefined)
     profile["longitude"] = parsed.data.profileLongitude;
+  if (parsed.data.profileTripadvisorRating !== undefined)
+    profile["tripadvisorRating"] = parsed.data.profileTripadvisorRating;
+  if (tripUrl) profile["tripadvisorUrl"] = tripUrl;
 
   const slugChanged = nextSlug !== existing.slug;
   const mergedSettings = {

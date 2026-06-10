@@ -19,7 +19,11 @@ Scope rule: the rich treatment applies to the **hosted `/book` page only**. The 
 | **2 (shipped)** | Photo gallery — public `venue-photos` Supabase Storage bucket + `venue_photos` table (RLS + enforce-org trigger) + dashboard upload/caption/reorder/delete + scroll-snap carousel on the rich page. JPEG/PNG/WebP, ≤5 MB, ≤12/venue. No new sub-processor (Supabase Storage, EU; photos are operator branding, not guest PII). |
 | **3 (shipped)** | Stylised month-grid availability calendar — `loadPublicMonthAvailability` classifies each day open/full/closed/past (one month-occupancy load + pure `findSlots` per day); only open days selectable, prev/next month nav, `month` URL param. |
 | **3.5 (shipped)** | **Conversational booking wizard** — see below. |
-| 4 | Map (from profile geo) + manual TripAdvisor/Google rating badges + opening hours/FAQ + polish. |
+| **4 (shipped)** | Manual **TripAdvisor rating badge** (`profile.tripadvisorRating` + `tripadvisorUrl`, operator-entered — their API excludes us — links out), **opening hours** (`loadPublicOpeningHours` derives per-day windows from `services.schedule`), and a **"Get directions"** map **link-out** (Google Maps URL from `profile.latitude/longitude` or the address). FAQ deferred. |
+
+### Map = link-out, not embed (no new sub-processor)
+
+We deliberately do **not** embed an interactive/static map (which would call a tile/static-map provider on every page view → a new sub-processor + IP egress + CSP/consent concerns on a cookieless widget). Instead the About section shows the address + a **"Get directions"** `<a target="_blank">` to `https://www.google.com/maps/search/?api=1&query=…`. Nothing leaves the page until the guest clicks it (an outbound link the visitor's own browser follows — not sub-processing, per gdpr.md). The same posture as the existing website / TripAdvisor links. A real embedded map would need sub-processor approval first.
 
 ## Booking wizard (all surfaces)
 

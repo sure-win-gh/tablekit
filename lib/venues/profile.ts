@@ -25,8 +25,12 @@ export type VenueProfile = {
   address?: VenueAddress | null;
   phone?: string | null;
   website?: string | null; // https only
-  latitude?: number | null; // stored for the Phase-4 map; not rendered yet
+  latitude?: number | null; // used for the "Get directions" map link
   longitude?: number | null;
+  // Manual TripAdvisor badge — their Content API excludes B2B SaaS, so the
+  // operator types their own rating + page URL; we render a badge linking out.
+  tripadvisorRating?: number | null; // 0–5
+  tripadvisorUrl?: string | null; // https only
 };
 
 const PRICE_RANGES = ["£", "££", "£££", "££££"] as const;
@@ -48,6 +52,8 @@ const profileSchema = z.object({
   website: z.string().url().max(2048).refine(isHttps).nullish(),
   latitude: z.number().min(-90).max(90).nullish(),
   longitude: z.number().min(-180).max(180).nullish(),
+  tripadvisorRating: z.number().min(0).max(5).nullish(),
+  tripadvisorUrl: z.string().url().max(2048).refine(isHttps).nullish(),
 });
 
 function cleanAddress(raw: unknown): VenueAddress | undefined {
@@ -101,6 +107,17 @@ export function parseProfile(settings: unknown): VenueProfile | undefined {
   }
   if (typeof raw["longitude"] === "number" && raw["longitude"] >= -180 && raw["longitude"] <= 180) {
     out.longitude = raw["longitude"];
+  }
+  if (
+    typeof raw["tripadvisorRating"] === "number" &&
+    raw["tripadvisorRating"] >= 0 &&
+    raw["tripadvisorRating"] <= 5
+  ) {
+    out.tripadvisorRating = raw["tripadvisorRating"];
+  }
+  if (typeof raw["tripadvisorUrl"] === "string" && isHttps(raw["tripadvisorUrl"])) {
+    const u = z.string().url().max(2048).safeParse(raw["tripadvisorUrl"]);
+    if (u.success) out.tripadvisorUrl = u.data;
   }
 
   return Object.keys(out).length > 0 ? out : undefined;
