@@ -53,6 +53,10 @@ export function PhotoUploadForm({ venueId, atLimit }: { venueId: string; atLimit
           {pending ? "Uploading…" : "Upload"}
         </button>
       </div>
+      <p className="text-ash text-xs">
+        Only upload photos you have the right to publish. Avoid recognisable customers unless
+        they&apos;ve agreed to appear.
+      </p>
       {atLimit ? (
         <p className="text-ash text-xs">Photo limit reached — delete one to add another.</p>
       ) : null}

@@ -48,6 +48,9 @@ export async function uploadVenuePhoto(
   if (file.size > MAX_PHOTO_BYTES) {
     return err(`Image is too large (max ${(MAX_PHOTO_BYTES / 1_048_576).toFixed(0)}MB).`);
   }
+  // file.type is client-asserted; this allowlist is advisory UX. The real
+  // enforcement is the bucket's allowedMimeTypes (lib/server/admin/storage.ts),
+  // which rejects a spoofed content type at upload.
   const ext = photoExtensionForMime(file.type);
   if (!ext) return err("Use a JPEG, PNG or WebP image.");
 

@@ -23,6 +23,9 @@ export default async function VenuePhotosPage({
   const orgPlan = await getPlan(orgId);
   const { venueId } = await params;
 
+  // Reads go through withUser → RLS scopes both queries to the caller's orgs
+  // (no explicit organisationId filter needed here; the write actions use the
+  // adminDb + explicit org guard instead).
   const data = await withUser(async (db) => {
     const [venue] = await db
       .select({ id: venues.id, name: venues.name })
