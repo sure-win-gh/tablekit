@@ -68,7 +68,8 @@ function TripAdvisorBadge({ rating, url }: { rating: number; url: string | null 
 
 function directionsUrl(profile: VenueProfile): string | null {
   if (profile.latitude != null && profile.longitude != null) {
-    return `https://www.google.com/maps/search/?api=1&query=${profile.latitude},${profile.longitude}`;
+    const q = encodeURIComponent(`${profile.latitude},${profile.longitude}`);
+    return `https://www.google.com/maps/search/?api=1&query=${q}`;
   }
   const addr = [profile.address?.street, profile.address?.city, profile.address?.postcode]
     .filter(Boolean)
