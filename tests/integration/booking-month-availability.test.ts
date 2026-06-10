@@ -23,7 +23,14 @@ const admin = createClient(
 const run = Date.now().toString(36);
 const venuePub = { name: "V", timezone: "Europe/London", locale: "en-GB" };
 
-let ctx: { userId: string; orgId: string; venueId: string };
+let ctx: {
+  userId: string;
+  orgId: string;
+  venueId: string;
+  serviceId: string;
+  areaId: string;
+  tableId: string;
+};
 
 beforeAll(async () => {
   const { data, error } = await admin.auth.admin.createUser({
@@ -48,22 +55,35 @@ beforeAll(async () => {
     .insert(schema.areas)
     .values({ organisationId: org!.id, venueId: venue!.id, name: "Inside" })
     .returning({ id: schema.areas.id });
-  await db.insert(schema.services).values({
-    organisationId: org!.id,
-    venueId: venue!.id,
-    name: "Dinner",
-    schedule: { days: ["fri", "sat"], start: "18:00", end: "22:00" },
-    turnMinutes: 90,
-  });
-  await db.insert(schema.venueTables).values({
-    organisationId: org!.id,
-    venueId: venue!.id,
-    areaId: area!.id,
-    label: "T1",
-    maxCover: 4,
-  });
+  const [service] = await db
+    .insert(schema.services)
+    .values({
+      organisationId: org!.id,
+      venueId: venue!.id,
+      name: "Dinner",
+      schedule: { days: ["fri", "sat"], start: "18:00", end: "22:00" },
+      turnMinutes: 90,
+    })
+    .returning({ id: schema.services.id });
+  const [table] = await db
+    .insert(schema.venueTables)
+    .values({
+      organisationId: org!.id,
+      venueId: venue!.id,
+      areaId: area!.id,
+      label: "T1",
+      maxCover: 4,
+    })
+    .returning({ id: schema.venueTables.id });
 
-  ctx = { userId, orgId: org!.id, venueId: venue!.id };
+  ctx = {
+    userId,
+    orgId: org!.id,
+    venueId: venue!.id,
+    serviceId: service!.id,
+    areaId: area!.id,
+    tableId: table!.id,
+  };
 });
 
 afterAll(async () => {
@@ -97,5 +117,62 @@ describe("loadPublicMonthAvailability", () => {
     );
     expect(Object.keys(m.days).length).toBe(31);
     expect(Object.values(m.days).every((v) => v === "past")).toBe(true);
+  });
+
+  it("marks a fully-booked service day full (and leaves other service days open)", async () => {
+    const { loadPublicMonthAvailability } = await import("@/lib/public/venue");
+    // Fridays in June 2027.
+    const fridays: string[] = [];
+    for (let d = 1; d <= 30; d++) {
+      const ymd = `2027-06-${String(d).padStart(2, "0")}`;
+      if (new Date(`${ymd}T12:00:00Z`).getUTCDay() === 5) fridays.push(ymd);
+    }
+    const blockedFri = fridays[0]!;
+    const openFri = fridays[1]!;
+    // Occupy the only table across the whole service window (18:00–22:00 BST =
+    // 17:00–21:00 UTC in June) so no slot fits → that Friday is "full".
+    const startAt = new Date(`${blockedFri}T17:00:00Z`);
+    const endAt = new Date(`${blockedFri}T21:00:00Z`);
+    const [guest] = await db
+      .insert(schema.guests)
+      .values({
+        organisationId: ctx.orgId,
+        firstName: "Block",
+        lastNameCipher: "c",
+        emailCipher: "c",
+        emailHash: `block_${run}`,
+      })
+      .returning({ id: schema.guests.id });
+    const [booking] = await db
+      .insert(schema.bookings)
+      .values({
+        organisationId: ctx.orgId,
+        venueId: ctx.venueId,
+        serviceId: ctx.serviceId,
+        areaId: ctx.areaId,
+        guestId: guest!.id,
+        partySize: 4,
+        startAt,
+        endAt,
+        status: "confirmed",
+        source: "host",
+      })
+      .returning({ id: schema.bookings.id });
+    await db.insert(schema.bookingTables).values({
+      organisationId: ctx.orgId,
+      bookingId: booking!.id,
+      tableId: ctx.tableId,
+      venueId: ctx.venueId,
+      areaId: ctx.areaId,
+      startAt,
+      endAt,
+    });
+
+    const m = await loadPublicMonthAvailability(
+      { id: ctx.venueId, ...venuePub },
+      { month: "2027-06", partySize: 2 },
+    );
+    expect(m.days[blockedFri]).toBe("full");
+    expect(m.days[openFri]).toBe("open");
   });
 });

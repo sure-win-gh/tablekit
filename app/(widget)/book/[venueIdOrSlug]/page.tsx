@@ -105,8 +105,13 @@ export default async function PublicBookingPage({
     );
   }
 
-  const date = sp.date ?? todayInZone(venue.timezone);
-  const partySize = sp.party ? Math.max(1, Math.min(20, Number(sp.party))) : 2;
+  // Validate untrusted params: a garbage ?date / ?party must not feed
+  // Invalid Date / NaN into availability (which would silently grey the
+  // whole calendar). Fall back to today / party of 2.
+  const date =
+    sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : todayInZone(venue.timezone);
+  const partyNum = Number(sp.party);
+  const partySize = Number.isFinite(partyNum) ? Math.max(1, Math.min(20, partyNum)) : 2;
 
   const availability = await loadPublicAvailability(venue, { date, partySize });
 
@@ -151,8 +156,13 @@ export default async function PublicBookingPage({
 
   // --- Rich page (Core+) -------------------------------------------------
   if (rich) {
-    const month = sp.month && /^\d{4}-\d{2}$/.test(sp.month) ? sp.month : date.slice(0, 7);
     const minMonth = todayInZone(venue.timezone).slice(0, 7);
+    // Accept ?month=YYYY-MM (01–12 only); default to the selected date's
+    // month, then floor to the current month so a stale/hand-edited past
+    // month snaps forward rather than rendering a dead all-greyed grid.
+    const monthParam =
+      sp.month && /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.month) ? sp.month : date.slice(0, 7);
+    const month = monthParam < minMonth ? minMonth : monthParam;
     const [reviews, photos, monthAvailability] = await Promise.all([
       loadPublicReviews(venue.id),
       loadPublicPhotos(venue.id),

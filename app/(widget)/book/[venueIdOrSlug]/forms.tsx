@@ -233,12 +233,15 @@ function MonthCalendar({
           const selectable = status === "open";
           const isSelected = ymd === selectedDate;
           const dayNum = Number(ymd.slice(8, 10));
+          const statusWord =
+            status === "open" ? "available" : status === "full" ? "fully booked" : status;
           return (
             <button
               key={ymd}
               type="button"
               disabled={!selectable}
               aria-current={isSelected ? "date" : undefined}
+              aria-label={`${dayNum}, ${statusWord}`}
               onClick={() => onPick(ymd)}
               className={cn(
                 "rounded-input flex aspect-square items-center justify-center text-sm tabular-nums transition motion-reduce:transition-none",
