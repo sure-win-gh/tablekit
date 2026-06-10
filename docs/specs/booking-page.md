@@ -17,8 +17,18 @@ Scope rule: the rich treatment applies to the **hosted `/book` page only**. The 
 |---|---|
 | **1 (shipped)** | Page shell + venue profile (`settings.profile`) + aggregate rating from Google + internal reviews. Gallery/map placeholders. |
 | **2 (shipped)** | Photo gallery — public `venue-photos` Supabase Storage bucket + `venue_photos` table (RLS + enforce-org trigger) + dashboard upload/caption/reorder/delete + scroll-snap carousel on the rich page. JPEG/PNG/WebP, ≤5 MB, ≤12/venue. No new sub-processor (Supabase Storage, EU; photos are operator branding, not guest PII). |
-| **3 (shipped)** | Stylised month-grid availability calendar on the rich page — `loadPublicMonthAvailability` classifies each day open/full/closed/past (one month-occupancy load + pure `findSlots` per day); only open days selectable, prev/next month nav, `month` URL param. Free/embed keep the native date input. |
+| **3 (shipped)** | Stylised month-grid availability calendar — `loadPublicMonthAvailability` classifies each day open/full/closed/past (one month-occupancy load + pure `findSlots` per day); only open days selectable, prev/next month nav, `month` URL param. |
+| **3.5 (shipped)** | **Conversational booking wizard** — see below. |
 | 4 | Map (from profile geo) + manual TripAdvisor/Google rating badges + opening hours/FAQ + polish. |
+
+## Booking wizard (all surfaces)
+
+The booking flow is a **one-step-at-a-time** sequence — **Party → Date → Time → Details** — on the rich page, the Free page, AND the embed (the calendar is the universal date step; there is no native date input). It's **server-stepped**: the step is derived purely from the present search params by `deriveStep` ([lib/public/wizard-step.ts](lib/public/wizard-step.ts)), so the URL can never desync.
+
+- `party` absent → Party; `party` set / no `date` → Date; `+date` / no slot → Time; `+serviceId+wallStart` → Details.
+- The page no longer defaults `party`/`date` (absence = "not chosen"). A deep link with all params lands on Details; if the slot vanished it falls back to Time.
+- Each choice is an `<a href>` (works pre-hydration) enhanced with `useTransition` → soft client transition + pending dim. Editing a summary chip clears that param and all later ones (clear-forward), so an edit URL *is* a step URL.
+- Orchestrated by `app/(widget)/book/[venueIdOrSlug]/booking-wizard.tsx` (async server component, used by both pages), with `steps.tsx` (Party/Date/Time + `MonthCalendar` + `useWizardNav`) and `summary-trail.tsx` (progress + edit chips). `BookingForm` (Details → deposit → success) is unchanged; the `/api/v1/bookings` contract is untouched.
 
 ## User stories
 
