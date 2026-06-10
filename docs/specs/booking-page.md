@@ -17,7 +17,7 @@ Scope rule: the rich treatment applies to the **hosted `/book` page only**. The 
 |---|---|
 | **1 (shipped)** | Page shell + venue profile (`settings.profile`) + aggregate rating from Google + internal reviews. Gallery/map placeholders. |
 | **2 (shipped)** | Photo gallery — public `venue-photos` Supabase Storage bucket + `venue_photos` table (RLS + enforce-org trigger) + dashboard upload/caption/reorder/delete + scroll-snap carousel on the rich page. JPEG/PNG/WebP, ≤5 MB, ≤12/venue. No new sub-processor (Supabase Storage, EU; photos are operator branding, not guest PII). |
-| 3 | Stylised availability calendar (month grid via `date-fns`), availability-aware days. |
+| **3 (shipped)** | Stylised month-grid availability calendar on the rich page — `loadPublicMonthAvailability` classifies each day open/full/closed/past (one month-occupancy load + pure `findSlots` per day); only open days selectable, prev/next month nav, `month` URL param. Free/embed keep the native date input. |
 | 4 | Map (from profile geo) + manual TripAdvisor/Google rating badges + opening hours/FAQ + polish. |
 
 ## User stories

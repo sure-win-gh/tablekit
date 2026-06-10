@@ -27,7 +27,8 @@ import {
   type Slot,
   type TableSpec,
 } from "@/lib/bookings/availability";
-import { venueLocalDayRange } from "@/lib/bookings/time";
+import { todayInZone, venueLocalDayRange } from "@/lib/bookings/time";
+import { daysInMonth } from "@/lib/services/calendar";
 import { type Plan, toPlan } from "@/lib/auth/plan-level";
 import { parseBranding } from "@/lib/messaging/venue-settings";
 import type { VenueBranding } from "@/lib/messaging/context";
@@ -191,6 +192,109 @@ export async function loadPublicAvailability(
       endAt: s.endAt,
     })),
   };
+}
+
+// --- Month availability (rich page calendar shading) ------------------------
+
+export type DayAvailability = "open" | "full" | "closed" | "past";
+export type MonthAvailability = {
+  month: string; // YYYY-MM
+  days: Record<string, DayAvailability>; // dateYMD -> classification
+};
+
+const DOW_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+
+// Classify every day of a month for the rich page's calendar. Loads services +
+// tables + the whole month's occupancy ONCE, then runs the pure findSlots per
+// day (no per-day DB query). A day is:
+//   past   — before today in the venue zone
+//   closed — no service runs that weekday
+//   full   — services run but every slot is taken for this party size
+//   open   — at least one slot is bookable
+export async function loadPublicMonthAvailability(
+  venue: PublicVenue,
+  input: { month: string; partySize: number },
+): Promise<MonthAvailability> {
+  const db = adminDb();
+  const [yearStr, monthStr] = input.month.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr); // 1-12
+  const dim = daysInMonth(year, month);
+  const firstYmd = `${input.month}-01`;
+  const lastYmd = `${input.month}-${String(dim).padStart(2, "0")}`;
+
+  const [serviceRows, tableRows] = await Promise.all([
+    db
+      .select({
+        id: services.id,
+        name: services.name,
+        schedule: services.schedule,
+        turnMinutes: services.turnMinutes,
+      })
+      .from(services)
+      .where(eq(services.venueId, venue.id)),
+    db
+      .select({
+        id: venueTables.id,
+        areaId: venueTables.areaId,
+        minCover: venueTables.minCover,
+        maxCover: venueTables.maxCover,
+      })
+      .from(venueTables)
+      .where(eq(venueTables.venueId, venue.id)),
+  ]);
+
+  const { startUtc } = venueLocalDayRange(firstYmd, venue.timezone);
+  const { endUtc } = venueLocalDayRange(lastYmd, venue.timezone);
+  // Occupancy across the whole month in one query. findSlots only overlaps
+  // same-day candidate slots, so passing the full month set is correct.
+  const occupied = await db
+    .select({
+      tableId: bookingTables.tableId,
+      startAt: bookingTables.startAt,
+      endAt: bookingTables.endAt,
+    })
+    .from(bookingTables)
+    .where(
+      and(
+        eq(bookingTables.venueId, venue.id),
+        gte(bookingTables.startAt, startUtc),
+        lt(bookingTables.startAt, endUtc),
+      ),
+    );
+
+  const serviceSpecs: ServiceSpec[] = serviceRows.map((s) => ({
+    id: s.id,
+    name: s.name,
+    schedule: s.schedule as ServiceSpec["schedule"],
+    turnMinutes: s.turnMinutes,
+  }));
+  const tableSpecs: TableSpec[] = tableRows;
+  const today = todayInZone(venue.timezone);
+
+  const days: Record<string, DayAvailability> = {};
+  for (let d = 1; d <= dim; d++) {
+    const ymd = `${input.month}-${String(d).padStart(2, "0")}`;
+    if (ymd < today) {
+      days[ymd] = "past";
+      continue;
+    }
+    const dow = DOW_KEYS[new Date(`${ymd}T12:00:00Z`).getUTCDay()]!;
+    if (!serviceSpecs.some((s) => s.schedule.days.includes(dow))) {
+      days[ymd] = "closed";
+      continue;
+    }
+    const slots = findSlots({
+      timezone: venue.timezone,
+      date: ymd,
+      partySize: input.partySize,
+      services: serviceSpecs,
+      tables: tableSpecs,
+      occupied,
+    });
+    days[ymd] = slots.length > 0 ? "open" : "full";
+  }
+  return { month: input.month, days };
 }
 
 export type PublicShowcaseReview = {

@@ -6,8 +6,16 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { Button, Field, Input, Textarea, cn } from "@/components/ui";
+import { monthGridDays } from "@/lib/services/calendar";
+import type { MonthAvailability } from "@/lib/public/venue";
 
 type SlotLite = { serviceId: string; serviceName: string; wallStart: string };
+
+function shiftMonth(month: string, delta: number): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y!, m! - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
 
 // ---------------------------------------------------------------------------
 // Date + party + slot grid — URL driven.
@@ -19,12 +27,18 @@ export function SlotPicker({
   partySize,
   slots,
   picked,
+  monthAvailability,
+  minMonth,
 }: {
   venueId: string;
   date: string;
   partySize: number;
   slots: SlotLite[];
   picked: { serviceId: string; wallStart: string } | null;
+  // Rich page (Core+) only: when present, a stylised month calendar replaces
+  // the native date input. minMonth blocks browsing before the current month.
+  monthAvailability?: MonthAvailability | undefined;
+  minMonth?: string | undefined;
 }) {
   const router = useRouter();
   // Stay on the current path so the same forms work when mounted at
@@ -34,11 +48,19 @@ export function SlotPicker({
   const pathname = usePathname();
 
   function navigate(
-    patch: Partial<{ date: string; party: number; serviceId: string; wallStart: string }>,
+    patch: Partial<{
+      date: string;
+      party: number;
+      serviceId: string;
+      wallStart: string;
+      month: string;
+    }>,
   ) {
     const sp = new URLSearchParams();
     sp.set("date", patch.date ?? date);
     sp.set("party", String(patch.party ?? partySize));
+    const month = patch.month ?? monthAvailability?.month;
+    if (month) sp.set("month", month);
     if (patch.serviceId) sp.set("serviceId", patch.serviceId);
     if (patch.wallStart) sp.set("wallStart", patch.wallStart);
     const base = pathname ?? `/book/${venueId}`;
@@ -55,29 +77,57 @@ export function SlotPicker({
   return (
     <section className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-4">
-        <Field label="Date" htmlFor="bk-date">
-          <Input
-            id="bk-date"
-            type="date"
-            value={date}
-            onChange={(e) => navigate({ date: e.target.value })}
-            size="sm"
-            className="w-auto"
-          />
-        </Field>
-        <Field label="Party size" htmlFor="bk-party">
-          <Input
-            id="bk-party"
-            type="number"
-            min={1}
-            max={20}
-            value={partySize}
-            onChange={(e) => navigate({ party: Number(e.target.value) })}
-            size="sm"
-            className="w-20"
-          />
-        </Field>
+        {monthAvailability ? (
+          <Field label="Party size" htmlFor="bk-party">
+            <Input
+              id="bk-party"
+              type="number"
+              min={1}
+              max={20}
+              value={partySize}
+              onChange={(e) => navigate({ party: Number(e.target.value) })}
+              size="sm"
+              className="w-20"
+            />
+          </Field>
+        ) : (
+          <>
+            <Field label="Date" htmlFor="bk-date">
+              <Input
+                id="bk-date"
+                type="date"
+                value={date}
+                onChange={(e) => navigate({ date: e.target.value })}
+                size="sm"
+                className="w-auto"
+              />
+            </Field>
+            <Field label="Party size" htmlFor="bk-party">
+              <Input
+                id="bk-party"
+                type="number"
+                min={1}
+                max={20}
+                value={partySize}
+                onChange={(e) => navigate({ party: Number(e.target.value) })}
+                size="sm"
+                className="w-20"
+              />
+            </Field>
+          </>
+        )}
       </div>
+
+      {monthAvailability ? (
+        <MonthCalendar
+          month={monthAvailability.month}
+          days={monthAvailability.days}
+          selectedDate={date}
+          minMonth={minMonth}
+          onPick={(ymd) => navigate({ date: ymd, month: ymd.slice(0, 7) })}
+          onMonth={(m) => navigate({ month: m })}
+        />
+      ) : null}
 
       {slots.length === 0 ? (
         <p className="rounded-card border-hairline text-ash border border-dashed p-4 text-sm">
@@ -115,6 +165,100 @@ export function SlotPicker({
         </div>
       )}
     </section>
+  );
+}
+
+// Stylised month-grid calendar (rich page). Day cells are shaded by the
+// availability classification; only "open" days are selectable. Monday-start
+// to match monthGridDays. No extra fetch — the classification is precomputed
+// server-side.
+const DOW_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+
+function MonthCalendar({
+  month,
+  days,
+  selectedDate,
+  minMonth,
+  onPick,
+  onMonth,
+}: {
+  month: string; // YYYY-MM
+  days: MonthAvailability["days"];
+  selectedDate: string;
+  minMonth?: string | undefined;
+  onPick: (ymd: string) => void;
+  onMonth: (month: string) => void;
+}) {
+  const weeks = monthGridDays(`${month}-01`);
+  const monthLabel = new Date(`${month}-01T12:00:00Z`).toLocaleDateString("en-GB", {
+    month: "long",
+    year: "numeric",
+  });
+  const prevMonth = shiftMonth(month, -1);
+  const nextMonth = shiftMonth(month, 1);
+  const canGoBack = minMonth ? prevMonth >= minMonth : true;
+
+  return (
+    <div className="border-hairline rounded-card flex flex-col gap-2 border p-3">
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => canGoBack && onMonth(prevMonth)}
+          disabled={!canGoBack}
+          aria-label="Previous month"
+          className="border-hairline text-ink hover:border-ink rounded border px-2 py-1 text-sm disabled:opacity-30"
+        >
+          ←
+        </button>
+        <span className="text-ink text-sm font-semibold">{monthLabel}</span>
+        <button
+          type="button"
+          onClick={() => onMonth(nextMonth)}
+          aria-label="Next month"
+          className="border-hairline text-ink hover:border-ink rounded border px-2 py-1 text-sm"
+        >
+          →
+        </button>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1">
+        {DOW_LABELS.map((d) => (
+          <div key={d} className="text-ash pb-1 text-center text-[11px] font-medium">
+            {d}
+          </div>
+        ))}
+        {weeks.flat().map((ymd, i) => {
+          if (ymd == null) return <div key={`pad-${i}`} aria-hidden />;
+          const status = days[ymd] ?? "closed";
+          const selectable = status === "open";
+          const isSelected = ymd === selectedDate;
+          const dayNum = Number(ymd.slice(8, 10));
+          const statusWord =
+            status === "open" ? "available" : status === "full" ? "fully booked" : status;
+          return (
+            <button
+              key={ymd}
+              type="button"
+              disabled={!selectable}
+              aria-current={isSelected ? "date" : undefined}
+              aria-label={`${dayNum}, ${statusWord}`}
+              onClick={() => onPick(ymd)}
+              className={cn(
+                "rounded-input flex aspect-square items-center justify-center text-sm tabular-nums transition motion-reduce:transition-none",
+                selectable
+                  ? isSelected
+                    ? "border-ink bg-ink border text-white"
+                    : "border-hairline text-ink hover:border-ink border"
+                  : "text-stone cursor-default border border-transparent",
+                status === "full" && !isSelected && "line-through",
+              )}
+            >
+              {dayNum}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
