@@ -43,7 +43,9 @@ export function WidgetHeader({
 }: {
   venueName: string;
   logoUrl: string | null;
-  dateLine: string;
+  // Optional sub-line. The wizard surfaces the chosen date via the summary
+  // trail instead, so the booking pages omit it.
+  dateLine?: string | undefined;
   variant: HeaderVariant;
 }) {
   const hosted = variant === "hosted";
@@ -74,7 +76,9 @@ export function WidgetHeader({
           {venueName}
         </h1>
       )}
-      <p className={hosted ? "text-ash mt-1 text-sm" : "text-ash mt-0.5 text-xs"}>{dateLine}</p>
+      {dateLine ? (
+        <p className={hosted ? "text-ash mt-1 text-sm" : "text-ash mt-0.5 text-xs"}>{dateLine}</p>
+      ) : null}
     </header>
   );
 }

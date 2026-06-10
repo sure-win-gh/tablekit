@@ -1,20 +1,19 @@
 import { notFound } from "next/navigation";
 
-import { formatVenueDateLong, todayInZone } from "@/lib/bookings/time";
 import { widgetDisabled } from "@/lib/feature-flags";
 import { captchaEnabled } from "@/lib/public/captcha";
-import { loadPublicAvailability, loadPublicVenueByIdOrSlug } from "@/lib/public/venue";
+import { loadPublicVenueByIdOrSlug } from "@/lib/public/venue";
 import { hasPlan } from "@/lib/auth/plan-level";
 import { widgetThemeStyle } from "@/lib/branding/theme";
 
-import { BookingForm, SlotPicker } from "../../book/[venueIdOrSlug]/forms";
 import { WidgetHeader, WidgetThemeProvider } from "../../book/[venueIdOrSlug]/branding";
+import { BookingWizard } from "../../book/[venueIdOrSlug]/booking-wizard";
 import { EmbedAutoHeight } from "./auto-height";
 
-// Iframe target for the embeddable widget. Mirrors /book/<venueId>
-// but skips the showcase reviews + the cookie banner (parent site
-// owns cookie consent) and mounts EmbedAutoHeight so the loader can
-// size the iframe to content.
+// Iframe target for the embeddable widget. Runs the same conversational
+// booking wizard as the hosted page, minus the cookie banner (parent site
+// owns consent) and plus EmbedAutoHeight so the loader sizes the iframe to the
+// changing step height.
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +22,7 @@ type SearchParams = {
   party?: string;
   serviceId?: string;
   wallStart?: string;
+  month?: string;
 };
 
 export async function generateMetadata({ params }: { params: Promise<{ venueIdOrSlug: string }> }) {
@@ -43,16 +43,17 @@ export default async function EmbedBookingPage({
   const lookup = await loadPublicVenueByIdOrSlug(venueIdOrSlug);
   if (!lookup) notFound();
   const { venue, plan, branding } = lookup;
-  // The embed deliberately does NOT redirect UUID → slug — the iframe
-  // URL is set once by the loader script and a redirect would flash
-  // the iframe.
+  // The embed deliberately does NOT redirect UUID → slug — the iframe URL is
+  // set once by the loader script and a redirect would flash the iframe.
 
-  // Plus-gated theming (see the hosted page for rationale). The themed
-  // wrapper uses display:contents so EmbedAutoHeight still measures the
-  // exact content height.
+  // Plus-gated theming. The themed wrapper uses display:contents so
+  // EmbedAutoHeight still measures the exact content height.
   const isPlus = hasPlan(plan, "plus");
   const themeStyle = widgetThemeStyle(branding, { gated: isPlus });
   const logoUrl = isPlus ? (branding?.logoUrl ?? null) : null;
+  const captchaSitekey = captchaEnabled()
+    ? (process.env["NEXT_PUBLIC_HCAPTCHA_SITEKEY"] ?? null)
+    : null;
 
   if (widgetDisabled()) {
     return (
@@ -68,54 +69,17 @@ export default async function EmbedBookingPage({
     );
   }
 
-  const date = sp.date ?? todayInZone(venue.timezone);
-  const partySize = sp.party ? Math.max(1, Math.min(20, Number(sp.party))) : 2;
-
-  const availability = await loadPublicAvailability(venue, { date, partySize });
-
-  const pickedSlot =
-    sp.serviceId && sp.wallStart
-      ? availability.slots.find((s) => s.serviceId === sp.serviceId && s.wallStart === sp.wallStart)
-      : undefined;
-
-  const dateLongUtc = availability.slots[0]?.startAt ?? new Date(`${date}T12:00:00Z`);
-
   return (
     <WidgetThemeProvider style={themeStyle}>
       <main className="mx-auto flex w-full max-w-2xl flex-col gap-5 p-4">
-        <WidgetHeader
-          variant="embed"
-          venueName={venue.name}
-          logoUrl={logoUrl}
-          dateLine={formatVenueDateLong(dateLongUtc, { timezone: venue.timezone })}
-        />
+        <WidgetHeader variant="embed" venueName={venue.name} logoUrl={logoUrl} />
 
-        <SlotPicker
-          venueId={venue.id}
-          date={date}
-          partySize={partySize}
-          slots={availability.slots.map((s) => ({
-            serviceId: s.serviceId,
-            serviceName: s.serviceName,
-            wallStart: s.wallStart,
-          }))}
-          picked={
-            pickedSlot ? { serviceId: pickedSlot.serviceId, wallStart: pickedSlot.wallStart } : null
-          }
+        <BookingWizard
+          venue={venue}
+          basePath={`/embed/${venueIdOrSlug}`}
+          captchaSitekey={captchaSitekey}
+          sp={sp}
         />
-
-        {pickedSlot ? (
-          <BookingForm
-            venueId={venue.id}
-            serviceId={pickedSlot.serviceId}
-            date={date}
-            wallStart={pickedSlot.wallStart}
-            partySize={partySize}
-            captchaSitekey={
-              captchaEnabled() ? (process.env["NEXT_PUBLIC_HCAPTCHA_SITEKEY"] ?? null) : null
-            }
-          />
-        ) : null}
 
         <EmbedAutoHeight />
       </main>

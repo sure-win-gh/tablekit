@@ -8,11 +8,11 @@
 export type WizardStep = "party" | "date" | "time" | "details";
 
 export type WizardParams = {
-  party?: number;
-  date?: string; // YYYY-MM-DD
-  month?: string; // YYYY-MM (date-step calendar browsing only)
-  serviceId?: string;
-  wallStart?: string; // HH:MM
+  party?: number | undefined;
+  date?: string | undefined; // YYYY-MM-DD
+  month?: string | undefined; // YYYY-MM (date-step calendar browsing only)
+  serviceId?: string | undefined;
+  wallStart?: string | undefined; // HH:MM
 };
 
 export type RawSearchParams = {
