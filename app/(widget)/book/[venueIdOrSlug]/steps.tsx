@@ -5,7 +5,7 @@ import { useState, useTransition, type MouseEvent, type ReactNode } from "react"
 
 import { cn } from "@/components/ui";
 import { monthGridDays } from "@/lib/services/calendar";
-import { buildStepUrl, type WizardParams } from "@/lib/public/wizard-step";
+import { addMonths, buildStepUrl, type WizardParams } from "@/lib/public/wizard-step";
 import type { MonthAvailability } from "@/lib/public/venue";
 
 type SlotLite = { serviceId: string; serviceName: string; wallStart: string };
@@ -21,7 +21,9 @@ function useWizardNav(): { linkProps: (p: WizardParams) => LinkProps; pending: b
   const base = pathname ?? "";
   const linkProps = (params: WizardParams): LinkProps => {
     const qs = buildStepUrl(params);
-    const href = qs ? `${base}?${qs}` : base || "?";
+    // qs is always non-empty in practice (every nav carries at least party);
+    // the bare-base fallback matches the server's empty-params edit URL.
+    const href = qs ? `${base}?${qs}` : base;
     return {
       href,
       onClick: (e) => {
@@ -115,20 +117,16 @@ export function PartyStep() {
 // ---------------------------------------------------------------------------
 const DOW_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
-function shiftMonth(month: string, delta: number): string {
-  const [y, m] = month.split("-").map(Number);
-  const d = new Date(Date.UTC(y!, m! - 1 + delta, 1));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
 export function DateStep({
   party,
   monthAvailability,
   minMonth,
+  maxMonth,
 }: {
   party: number;
   monthAvailability: MonthAvailability;
   minMonth: string;
+  maxMonth: string;
 }) {
   const { linkProps, pending } = useWizardNav();
   return (
@@ -137,6 +135,7 @@ export function DateStep({
         month={monthAvailability.month}
         days={monthAvailability.days}
         minMonth={minMonth}
+        maxMonth={maxMonth}
         dayLink={(ymd) => linkProps({ party, date: ymd, month: ymd.slice(0, 7) })}
         monthLink={(m) => linkProps({ party, month: m })}
       />
@@ -148,12 +147,14 @@ function MonthCalendar({
   month,
   days,
   minMonth,
+  maxMonth,
   dayLink,
   monthLink,
 }: {
   month: string;
   days: MonthAvailability["days"];
   minMonth: string;
+  maxMonth: string;
   dayLink: (ymd: string) => LinkProps;
   monthLink: (m: string) => LinkProps;
 }) {
@@ -162,11 +163,13 @@ function MonthCalendar({
     month: "long",
     year: "numeric",
   });
-  const prevMonth = shiftMonth(month, -1);
-  const nextMonth = shiftMonth(month, 1);
+  const prevMonth = addMonths(month, -1);
+  const nextMonth = addMonths(month, 1);
   const canGoBack = prevMonth >= minMonth;
+  const canGoForward = nextMonth <= maxMonth;
   const navBtn =
     "border-hairline text-ink hover:border-ink rounded border px-2 py-1 text-sm transition";
+  const navDisabled = cn(navBtn, "text-stone opacity-30");
   const cellBase =
     "rounded-input flex aspect-square items-center justify-center text-sm tabular-nums transition motion-reduce:transition-none";
 
@@ -178,14 +181,20 @@ function MonthCalendar({
             ←
           </a>
         ) : (
-          <span aria-hidden className={cn(navBtn, "text-stone opacity-30")}>
+          <span aria-hidden className={navDisabled}>
             ←
           </span>
         )}
         <span className="text-ink text-sm font-semibold">{monthLabel}</span>
-        <a {...monthLink(nextMonth)} aria-label="Next month" className={navBtn}>
-          →
-        </a>
+        {canGoForward ? (
+          <a {...monthLink(nextMonth)} aria-label="Next month" className={navBtn}>
+            →
+          </a>
+        ) : (
+          <span aria-hidden className={navDisabled}>
+            →
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-7 gap-1">

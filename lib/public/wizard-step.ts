@@ -40,9 +40,25 @@ export function validMonth(raw: string | undefined): string | undefined {
   return raw && MONTH_RE.test(raw) ? raw : undefined;
 }
 
-// month / minMonth are "YYYY-MM"; lexicographic compare == chronological.
+// How far ahead a guest may browse the calendar — bounds the public,
+// unauthenticated month-availability load so a crafted ?month= can't walk
+// arbitrarily far forward and amplify DB work.
+export const MAX_MONTHS_AHEAD = 12;
+
+// "YYYY-MM" month arithmetic. App/SSR + client code (no workflow-script Date ban).
+export function addMonths(month: string, n: number): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y!, m! - 1 + n, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+// month / min / max are "YYYY-MM"; lexicographic compare == chronological.
 export function floorMonth(month: string, minMonth: string): string {
   return month < minMonth ? minMonth : month;
+}
+
+export function clampMonth(month: string, minMonth: string, maxMonth: string): string {
+  return month < minMonth ? minMonth : month > maxMonth ? maxMonth : month;
 }
 
 // Derive the canonical step plus the in-scope, forward-only params. Any param

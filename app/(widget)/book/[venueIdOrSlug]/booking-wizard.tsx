@@ -11,7 +11,13 @@ import {
   loadPublicMonthAvailability,
   type PublicVenue,
 } from "@/lib/public/venue";
-import { deriveStep, floorMonth, type RawSearchParams } from "@/lib/public/wizard-step";
+import {
+  addMonths,
+  clampMonth,
+  deriveStep,
+  MAX_MONTHS_AHEAD,
+  type RawSearchParams,
+} from "@/lib/public/wizard-step";
 
 import { BookingForm } from "./forms";
 import { DateStep, PartyStep, TimeStep } from "./steps";
@@ -30,14 +36,19 @@ export async function BookingWizard({
 }) {
   const { step, params } = deriveStep(sp);
   const currentMonth = todayInZone(venue.timezone).slice(0, 7);
+  const maxMonth = addMonths(currentMonth, MAX_MONTHS_AHEAD);
 
+  // params.party!/date! are sound: deriveStep guarantees party for every
+  // non-party step and date for time/details (see lib/public/wizard-step.ts).
   let effectiveStep = step;
   let body: ReactNode;
 
   if (step === "party") {
     body = <PartyStep />;
   } else if (step === "date") {
-    const month = floorMonth(params.month ?? currentMonth, currentMonth);
+    // Clamp the browse month to [currentMonth, currentMonth + 12] so a crafted
+    // ?month= can't push the public availability load arbitrarily far out.
+    const month = clampMonth(params.month ?? currentMonth, currentMonth, maxMonth);
     const monthAvailability = await loadPublicMonthAvailability(venue, {
       month,
       partySize: params.party!,
@@ -47,6 +58,7 @@ export async function BookingWizard({
         party={params.party!}
         monthAvailability={monthAvailability}
         minMonth={currentMonth}
+        maxMonth={maxMonth}
       />
     );
   } else {
