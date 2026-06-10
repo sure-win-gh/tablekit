@@ -99,12 +99,12 @@ export async function uploadVenuePhoto(
   return { status: "saved" };
 }
 
-export async function deleteVenuePhoto(
-  _prev: PhotoActionState,
-  formData: FormData,
-): Promise<PhotoActionState> {
+// Plain form actions (single FormData arg) — server-rendered forms in the
+// photos manager post directly to these. They operate on already-valid rows
+// so they no-op silently on a bad payload rather than surfacing field errors.
+export async function deleteVenuePhoto(formData: FormData): Promise<void> {
   const photoId = z.uuid().safeParse(formData.get("photo_id"));
-  if (!photoId.success) return err("Invalid photo.");
+  if (!photoId.success) return;
   const { orgId, userId } = await requireRole("manager");
   const db = adminDb();
   const [photo] = await db
@@ -116,7 +116,7 @@ export async function deleteVenuePhoto(
     .from(venuePhotos)
     .where(and(eq(venuePhotos.id, photoId.data), eq(venuePhotos.organisationId, orgId)))
     .limit(1);
-  if (!photo) return err("Photo not found or not in your organisation.");
+  if (!photo) return;
 
   await db
     .delete(venuePhotos)
@@ -133,20 +133,16 @@ export async function deleteVenuePhoto(
     targetId: photo.venueId,
   });
   revalidatePath(`/dashboard/venues/${photo.venueId}/photos`, "layout");
-  return { status: "saved" };
 }
 
-export async function reorderVenuePhotos(
-  _prev: PhotoActionState,
-  formData: FormData,
-): Promise<PhotoActionState> {
+export async function reorderVenuePhotos(formData: FormData): Promise<void> {
   const guard = await guardVenue(formData.get("venue_id"));
-  if (!guard.ok) return err("Venue not found or not in your organisation.");
+  if (!guard.ok) return;
   const { venueId, orgId } = guard;
 
   const ids = ((formData.get("order") as string | null) ?? "").split(",").filter(Boolean);
   const parsed = z.array(z.uuid()).safeParse(ids);
-  if (!parsed.success || parsed.data.length === 0) return err("Invalid order.");
+  if (!parsed.success || parsed.data.length === 0) return;
 
   const db = adminDb();
   await db.transaction(async (tx) => {
@@ -164,5 +160,4 @@ export async function reorderVenuePhotos(
     }
   });
   revalidatePath(`/dashboard/venues/${venueId}/photos`, "layout");
-  return { status: "saved" };
 }
