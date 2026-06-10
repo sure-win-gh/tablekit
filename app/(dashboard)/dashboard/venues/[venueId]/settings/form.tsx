@@ -35,6 +35,8 @@ type Props = {
     website: string;
     latitude: string;
     longitude: string;
+    tripadvisorRating: string;
+    tripadvisorUrl: string;
   };
 };
 
@@ -193,8 +195,28 @@ export function VenueSettingsForm({
           />
         </div>
         <p className="text-ash text-xs">
-          Latitude and longitude are saved for the upcoming map — leave blank for now if you
-          don&apos;t have them.
+          Latitude and longitude power the &quot;Get directions&quot; link on your booking page —
+          leave blank if you don&apos;t have them (the address still links out).
+        </p>
+        <div className="grid grid-cols-2 gap-4">
+          <Field
+            label="TripAdvisor rating (0–5)"
+            name="profile_tripadvisor_rating"
+            defaultValue={profile.tripadvisorRating}
+            error={fieldErrors?.["profileTripadvisorRating"]?.[0]}
+            optional
+          />
+          <Field
+            label="TripAdvisor page URL"
+            name="profile_tripadvisor_url"
+            defaultValue={profile.tripadvisorUrl}
+            error={fieldErrors?.["profileTripadvisorUrl"]?.[0]}
+            optional
+          />
+        </div>
+        <p className="text-ash text-xs">
+          We can&apos;t pull TripAdvisor reviews automatically, so enter your rating and page link
+          to show a badge that links to your TripAdvisor profile.
         </p>
       </fieldset>
 

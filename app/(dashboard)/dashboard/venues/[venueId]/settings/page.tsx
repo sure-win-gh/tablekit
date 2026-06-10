@@ -79,6 +79,8 @@ export default async function VenueSettingsPage({
     website: profile?.website ?? "",
     latitude: profile?.latitude != null ? String(profile.latitude) : "",
     longitude: profile?.longitude != null ? String(profile.longitude) : "",
+    tripadvisorRating: profile?.tripadvisorRating != null ? String(profile.tripadvisorRating) : "",
+    tripadvisorUrl: profile?.tripadvisorUrl ?? "",
   };
 
   const showcaseEnabled = settings["showcaseEnabled"] === true;

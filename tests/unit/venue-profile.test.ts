@@ -69,4 +69,21 @@ describe("parseProfile", () => {
     const p = parseProfile({ profile: { address: { city: "", street: "" } } });
     expect(p?.address).toBeUndefined();
   });
+
+  it("parses a TripAdvisor rating + https url", () => {
+    const p = parseProfile({
+      profile: { tripadvisorRating: 4.5, tripadvisorUrl: "https://www.tripadvisor.co.uk/r" },
+    });
+    expect(p?.tripadvisorRating).toBe(4.5);
+    expect(p?.tripadvisorUrl).toBe("https://www.tripadvisor.co.uk/r");
+  });
+
+  it("drops an out-of-range TripAdvisor rating and a non-https url", () => {
+    const p = parseProfile({
+      profile: { tripadvisorRating: 9, tripadvisorUrl: "http://x.com", cuisine: "Thai" },
+    });
+    expect(p?.tripadvisorRating).toBeUndefined();
+    expect(p?.tripadvisorUrl).toBeUndefined();
+    expect(p?.cuisine).toBe("Thai");
+  });
 });
