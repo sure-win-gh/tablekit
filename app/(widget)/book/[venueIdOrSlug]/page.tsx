@@ -5,6 +5,7 @@ import { widgetDisabled } from "@/lib/feature-flags";
 import { captchaEnabled } from "@/lib/public/captcha";
 import {
   loadPublicAvailability,
+  loadPublicMonthAvailability,
   loadPublicPhotos,
   loadPublicReviews,
   loadPublicShowcase,
@@ -37,6 +38,7 @@ type SearchParams = {
   party?: string;
   serviceId?: string;
   wallStart?: string;
+  month?: string;
 };
 
 export async function generateMetadata({ params }: { params: Promise<{ venueIdOrSlug: string }> }) {
@@ -69,6 +71,7 @@ export default async function PublicBookingPage({
     if (sp.party) qs.set("party", sp.party);
     if (sp.serviceId) qs.set("serviceId", sp.serviceId);
     if (sp.wallStart) qs.set("wallStart", sp.wallStart);
+    if (sp.month) qs.set("month", sp.month);
     const tail = qs.toString() ? `?${qs.toString()}` : "";
     permanentRedirect(`/book/${canonicalSlug}${tail}`);
   }
@@ -114,20 +117,23 @@ export default async function PublicBookingPage({
 
   const dateLongUtc = availability.slots[0]?.startAt ?? new Date(`${date}T12:00:00Z`);
 
-  // Shared booking controls — identical in both layouts.
+  // Shared slot data. The Free layout uses the native date input; the rich
+  // layout swaps in the month calendar (monthAvailability passed below).
+  const slotsLite = availability.slots.map((s) => ({
+    serviceId: s.serviceId,
+    serviceName: s.serviceName,
+    wallStart: s.wallStart,
+  }));
+  const pickedLite = pickedSlot
+    ? { serviceId: pickedSlot.serviceId, wallStart: pickedSlot.wallStart }
+    : null;
   const slotPicker = (
     <SlotPicker
       venueId={venue.id}
       date={date}
       partySize={partySize}
-      slots={availability.slots.map((s) => ({
-        serviceId: s.serviceId,
-        serviceName: s.serviceName,
-        wallStart: s.wallStart,
-      }))}
-      picked={
-        pickedSlot ? { serviceId: pickedSlot.serviceId, wallStart: pickedSlot.wallStart } : null
-      }
+      slots={slotsLite}
+      picked={pickedLite}
     />
   );
   const bookingForm = pickedSlot ? (
@@ -145,9 +151,12 @@ export default async function PublicBookingPage({
 
   // --- Rich page (Core+) -------------------------------------------------
   if (rich) {
-    const [reviews, photos] = await Promise.all([
+    const month = sp.month && /^\d{4}-\d{2}$/.test(sp.month) ? sp.month : date.slice(0, 7);
+    const minMonth = todayInZone(venue.timezone).slice(0, 7);
+    const [reviews, photos, monthAvailability] = await Promise.all([
       loadPublicReviews(venue.id),
       loadPublicPhotos(venue.id),
+      loadPublicMonthAvailability(venue, { month, partySize }),
     ]);
     return (
       <WidgetThemeProvider style={themeStyle}>
@@ -163,7 +172,15 @@ export default async function PublicBookingPage({
           {photos.length > 0 ? <PhotoGallery photos={photos} venueName={venue.name} /> : null}
 
           <section aria-label="Book a table" className="flex flex-col gap-6">
-            {slotPicker}
+            <SlotPicker
+              venueId={venue.id}
+              date={date}
+              partySize={partySize}
+              slots={slotsLite}
+              picked={pickedLite}
+              monthAvailability={monthAvailability}
+              minMonth={minMonth}
+            />
             {bookingForm}
           </section>
 
