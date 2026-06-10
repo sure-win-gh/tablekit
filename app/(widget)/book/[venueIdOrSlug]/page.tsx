@@ -5,6 +5,7 @@ import { widgetDisabled } from "@/lib/feature-flags";
 import { captchaEnabled } from "@/lib/public/captcha";
 import {
   loadPublicAvailability,
+  loadPublicPhotos,
   loadPublicReviews,
   loadPublicShowcase,
   loadPublicVenueByIdOrSlug,
@@ -17,6 +18,7 @@ import { BookingForm, SlotPicker } from "./forms";
 import { WidgetHeader, WidgetThemeProvider } from "./branding";
 import { AboutSection, VenueInfoHeader } from "./profile";
 import { ReviewsSection } from "./reviews";
+import { PhotoGallery } from "./gallery";
 
 // Public, unauthenticated booking page. Reads go through adminDb
 // helpers in lib/public/venue.ts — RLS doesn't apply to anonymous.
@@ -143,7 +145,10 @@ export default async function PublicBookingPage({
 
   // --- Rich page (Core+) -------------------------------------------------
   if (rich) {
-    const reviews = await loadPublicReviews(venue.id);
+    const [reviews, photos] = await Promise.all([
+      loadPublicReviews(venue.id),
+      loadPublicPhotos(venue.id),
+    ]);
     return (
       <WidgetThemeProvider style={themeStyle}>
         <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 p-6">
@@ -155,7 +160,7 @@ export default async function PublicBookingPage({
             reviewCount={reviews.count}
           />
 
-          {/* Phase 2: photo gallery / hero image slot. */}
+          {photos.length > 0 ? <PhotoGallery photos={photos} venueName={venue.name} /> : null}
 
           <section aria-label="Book a table" className="flex flex-col gap-6">
             {slotPicker}

@@ -17,6 +17,7 @@ import {
   Gauge,
   Globe,
   Hourglass,
+  Images,
   Inbox,
   LayoutDashboard,
   Lock,
@@ -277,6 +278,12 @@ export function SidebarShell({
               href: `/dashboard/venues/${venueId}/services`,
               label: "Services",
               icon: UtensilsCrossed,
+            },
+            {
+              kind: "item",
+              href: `/dashboard/venues/${venueId}/photos`,
+              label: "Photos",
+              icon: Images,
             },
             {
               kind: "item",

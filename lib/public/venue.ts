@@ -7,7 +7,7 @@
 
 import "server-only";
 
-import { and, desc, eq, gte, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, isNull, lt, sql } from "drizzle-orm";
 
 import {
   bookingTables,
@@ -15,6 +15,7 @@ import {
   organisations,
   reviews,
   services,
+  venuePhotos,
   venueTables,
   venues,
 } from "@/lib/db/schema";
@@ -31,6 +32,7 @@ import { type Plan, toPlan } from "@/lib/auth/plan-level";
 import { parseBranding } from "@/lib/messaging/venue-settings";
 import type { VenueBranding } from "@/lib/messaging/context";
 import { parseProfile, type VenueProfile } from "@/lib/venues/profile";
+import { venuePhotoPublicUrl } from "@/lib/venues/photos";
 
 export type PublicVenue = {
   id: string;
@@ -410,6 +412,35 @@ export async function loadPublicReviews(
     bySource: { internal: internalAgg?.count ?? 0, google: googleAgg?.count ?? 0 },
     items,
   };
+}
+
+// --- Rich page photos (Core+) -----------------------------------------------
+
+export type PublicPhoto = {
+  id: string;
+  url: string; // public bucket URL — venue photos are operator branding, public
+  caption: string | null;
+};
+
+// Ordered gallery photos for the rich booking page. The bucket is public, so
+// we return well-known object URLs (no signed-URL minting). storage_path is
+// internal and never leaves this function.
+export async function loadPublicPhotos(venueId: string): Promise<PublicPhoto[]> {
+  const db = adminDb();
+  const rows = await db
+    .select({
+      id: venuePhotos.id,
+      storagePath: venuePhotos.storagePath,
+      caption: venuePhotos.caption,
+    })
+    .from(venuePhotos)
+    .where(eq(venuePhotos.venueId, venueId))
+    .orderBy(asc(venuePhotos.sortOrder), asc(venuePhotos.createdAt));
+  return rows.map((r) => ({
+    id: r.id,
+    url: venuePhotoPublicUrl(r.storagePath),
+    caption: r.caption,
+  }));
 }
 
 // Resolve the organisation that owns a venue — needed by the API

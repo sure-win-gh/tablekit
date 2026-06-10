@@ -1058,6 +1058,41 @@ export const messageTemplates = pgTable(
 );
 
 // =============================================================================
+// Venue photos (booking-page Phase 2)
+// =============================================================================
+//
+// Operator-uploaded gallery images for the rich (Core+) booking page. The
+// file itself lives in the public `venue-photos` Supabase Storage bucket;
+// this row holds the storage path + display order. Not guest PII — same
+// plaintext posture as the venue profile. organisation_id is synced from the
+// parent venue by enforce_venue_photos_org_id; RLS scopes reads to org
+// members. Writes go through the dashboard action via adminDb() (org-guarded).
+export const venuePhotos = pgTable(
+  "venue_photos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Populated by enforce_venue_photos_org_id from the parent venue.
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    // Path within the public `venue-photos` bucket, e.g. "<venueId>/<uuid>.webp".
+    storagePath: text("storage_path").notNull(),
+    // Optional operator caption / alt text.
+    caption: text("caption"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("venue_photos_storage_path_unique").on(t.storagePath),
+    index("venue_photos_org_idx").on(t.organisationId),
+    index("venue_photos_venue_sort_idx").on(t.venueId, t.sortOrder),
+  ],
+);
+
+// =============================================================================
 // Marketing campaigns (Phase 3 — Plus tier)
 // =============================================================================
 //

@@ -15,8 +15,8 @@ Scope rule: the rich treatment applies to the **hosted `/book` page only**. The 
 
 | Phase | Deliverable |
 |---|---|
-| **1** | Page shell + venue profile (`settings.profile`) + aggregate rating from Google + internal reviews. Gallery/map placeholders. |
-| 2 | Photo gallery — Supabase Storage bucket + `venue_photos` table (RLS) + dashboard upload/reorder + hero/carousel. |
+| **1 (shipped)** | Page shell + venue profile (`settings.profile`) + aggregate rating from Google + internal reviews. Gallery/map placeholders. |
+| **2 (shipped)** | Photo gallery — public `venue-photos` Supabase Storage bucket + `venue_photos` table (RLS + enforce-org trigger) + dashboard upload/caption/reorder/delete + scroll-snap carousel on the rich page. JPEG/PNG/WebP, ≤5 MB, ≤12/venue. No new sub-processor (Supabase Storage, EU; photos are operator branding, not guest PII). |
 | 3 | Stylised availability calendar (month grid via `date-fns`), availability-aware days. |
 | 4 | Map (from profile geo) + manual TripAdvisor/Google rating badges + opening hours/FAQ + polish. |
 
