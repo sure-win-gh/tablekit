@@ -5,20 +5,14 @@ import { LockedFeature } from "@/components/billing/locked-feature";
 import { isLocked } from "@/lib/auth/entitlements";
 import { getPlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
-import { todayInZone } from "@/lib/bookings/time";
 import { withUser } from "@/lib/db/client";
 import { venues } from "@/lib/db/schema";
-import { parseFilter } from "@/lib/reports/filter";
 import { getGuestEngagementReport } from "@/lib/reports/guest-engagement";
 import { getChannelPerformanceReport } from "@/lib/reports/insights/channel-performance";
-import {
-  overallNoShowRate,
-  previousEquivalentBounds,
-  sameDayShare,
-  totalBookings,
-} from "@/lib/reports/insights/compare";
+import { overallNoShowRate, sameDayShare, totalBookings } from "@/lib/reports/insights/compare";
 import { getLeadTimeReport } from "@/lib/reports/insights/lead-time";
 import { getNoShowTrendReport } from "@/lib/reports/insights/no-show-trend";
+import { parseRange, resolveRange } from "@/lib/reports/insights/ranges";
 
 import {
   type CompareMetric,
@@ -32,7 +26,7 @@ import {
 
 export const metadata = { title: "Insights · TableKit" };
 
-type SearchParams = { from?: string; to?: string; compare?: string };
+type SearchParams = { range?: string; compare?: string };
 
 export default async function InsightsPage({
   params,
@@ -48,8 +42,10 @@ export default async function InsightsPage({
   }
 
   const { venueId } = await params;
-  const { from: fromParam, to: toParam, compare: compareParam } = await searchParams;
-  const compare = compareParam === "true";
+  const { range: rangeParam, compare: compareParam } = await searchParams;
+  const range = parseRange(rangeParam);
+  // Comparison is on by default; only an explicit ?compare=false hides it.
+  const compare = compareParam !== "false";
 
   const venue = await withUser(async (db) => {
     const rows = await db
@@ -61,40 +57,25 @@ export default async function InsightsPage({
   });
   if (!venue) notFound();
 
-  const today = todayInZone(venue.timezone);
-  const toDate = toParam ?? today;
-  const fromDate = fromParam ?? shiftDate(toDate, -29);
+  const { current, previous, fromDate, toDate } = resolveRange(range, venue.timezone, new Date());
 
-  const parsed = parseFilter({ venueId, fromDate, toDate, timezone: venue.timezone });
-  if (!parsed.ok) {
-    return (
-      <section className="flex flex-col gap-4">
-        <DateRangeNav venueId={venueId} fromDate={fromDate} toDate={toDate} compare={compare} />
-        <p className="rounded-card border-rose/30 bg-rose/5 text-rose border p-4 text-sm">
-          Invalid date range — pick a from/to where from ≤ to and both are YYYY-MM-DD.
-        </p>
-      </section>
-    );
-  }
-
-  const { bounds } = parsed;
   // Serial inside a single transaction — one pg client per tx, same as the
   // MVP reports page.
   const { leadTime, noShowTrend, channels, engagement } = await withUser(async (db) => ({
-    leadTime: await getLeadTimeReport(db, venueId, bounds),
-    noShowTrend: await getNoShowTrendReport(db, venueId, bounds),
-    channels: await getChannelPerformanceReport(db, venueId, bounds),
-    engagement: await getGuestEngagementReport(db, orgId, venueId, bounds, new Date()),
+    leadTime: await getLeadTimeReport(db, venueId, current),
+    noShowTrend: await getNoShowTrendReport(db, venueId, current),
+    channels: await getChannelPerformanceReport(db, venueId, current),
+    engagement: await getGuestEngagementReport(db, orgId, venueId, current, new Date()),
   }));
 
   // Compare overlay: re-run only the two queries that feed the headline
-  // band against the previous equal-length window. Channel performance
+  // band against the previous equal-elapsed window (resolved time-aware,
+  // so an incomplete period compares like-for-like). Channel performance
   // isn't part of the band, so it's skipped.
-  const comparison = compare ? previousEquivalentBounds(bounds) : null;
-  const compareMetrics: CompareMetric[] | null = comparison
+  const compareMetrics: CompareMetric[] | null = compare
     ? await withUser(async (db): Promise<CompareMetric[]> => {
-        const prevLeadTime = await getLeadTimeReport(db, venueId, comparison.bounds);
-        const prevNoShow = await getNoShowTrendReport(db, venueId, comparison.bounds);
+        const prevLeadTime = await getLeadTimeReport(db, venueId, previous);
+        const prevNoShow = await getNoShowTrendReport(db, venueId, previous);
         return [
           {
             label: "Bookings",
@@ -134,12 +115,10 @@ export default async function InsightsPage({
             winning. Times are in this venue&apos;s local zone.
           </p>
         </div>
-        <DateRangeNav venueId={venueId} fromDate={fromDate} toDate={toDate} compare={compare} />
+        <DateRangeNav venueId={venueId} range={range} compare={compare} />
       </div>
 
-      {compareMetrics && comparison ? (
-        <ComparisonBand metrics={compareMetrics} partial={comparison.partial} />
-      ) : null}
+      {compareMetrics ? <ComparisonBand metrics={compareMetrics} /> : null}
 
       <LeadTimeCard rows={leadTime} downloadHref={`${exportBase}/lead-time${queryString}`} />
       <NoShowTrendCard
@@ -153,14 +132,4 @@ export default async function InsightsPage({
       <GuestEngagementCard report={engagement} />
     </section>
   );
-}
-
-// Add a number of days to a YYYY-MM-DD string, in calendar terms. Used
-// for the default 30-day range; small enough that DST drift doesn't
-// matter (parseFilter does proper venue-zone math).
-function shiftDate(ymd: string, days: number): string {
-  const [y = "1970", m = "01", d = "01"] = ymd.split("-");
-  const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
 }

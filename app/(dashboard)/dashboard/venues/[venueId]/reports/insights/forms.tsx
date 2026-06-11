@@ -17,8 +17,17 @@ import {
   YAxis,
 } from "recharts";
 
-import { Card, CardBody, CardDescription, CardHeader, CardTitle, Input, cn } from "@/components/ui";
+import {
+  Card,
+  CardBody,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Select,
+  cn,
+} from "@/components/ui";
 import type { GuestEngagementReport } from "@/lib/reports/guest-engagement";
+import { RANGE_KEYS, RANGE_LABELS, type RangeKey } from "@/lib/reports/insights/ranges";
 import {
   GRANULARITIES,
   type ChannelPerformanceRow,
@@ -35,44 +44,34 @@ import {
 // ---------------------------------------------------------------------------
 export function DateRangeNav({
   venueId,
-  fromDate,
-  toDate,
+  range,
   compare,
 }: {
   venueId: string;
-  fromDate: string;
-  toDate: string;
+  range: RangeKey;
   compare: boolean;
 }) {
   const router = useRouter();
-  const push = (next: { from?: string; to?: string; compare?: boolean }) => {
-    const f = next.from ?? fromDate;
-    const t = next.to ?? toDate;
+  const push = (next: { range?: RangeKey; compare?: boolean }) => {
+    const rg = next.range ?? range;
     const c = next.compare ?? compare;
-    router.push(`/dashboard/venues/${venueId}/reports/insights?from=${f}&to=${t}&compare=${c}`);
+    router.push(`/dashboard/venues/${venueId}/reports/insights?range=${rg}&compare=${c}`);
   };
   return (
     <div className="flex items-center gap-2 text-xs">
-      <label className="text-ash flex items-center gap-1.5">
-        From
-        <Input
-          type="date"
-          value={fromDate}
-          onChange={(e) => push({ from: e.target.value })}
-          size="sm"
-          className="w-auto"
-        />
-      </label>
-      <label className="text-ash flex items-center gap-1.5">
-        To
-        <Input
-          type="date"
-          value={toDate}
-          onChange={(e) => push({ to: e.target.value })}
-          size="sm"
-          className="w-auto"
-        />
-      </label>
+      <Select
+        value={range}
+        onChange={(e) => push({ range: e.target.value as RangeKey })}
+        size="sm"
+        className="w-auto"
+        aria-label="Date range"
+      >
+        {RANGE_KEYS.map((k) => (
+          <option key={k} value={k}>
+            {RANGE_LABELS[k]}
+          </option>
+        ))}
+      </Select>
       <button
         type="button"
         aria-pressed={compare}
@@ -134,13 +133,7 @@ function DeltaBadge({ metric }: { metric: CompareMetric }) {
   return <span className={cn("text-xs font-semibold tabular-nums", tone)}>{text}</span>;
 }
 
-export function ComparisonBand({
-  metrics,
-  partial,
-}: {
-  metrics: CompareMetric[];
-  partial: boolean;
-}) {
+export function ComparisonBand({ metrics }: { metrics: CompareMetric[] }) {
   return (
     <Card>
       <CardBody>
@@ -148,11 +141,7 @@ export function ComparisonBand({
           <span className="text-ash text-xs font-semibold tracking-wide uppercase">
             vs previous period
           </span>
-          {partial ? (
-            <span className="text-ash text-[11px]">
-              current period is to date — last day still in progress
-            </span>
-          ) : null}
+          <span className="text-ash text-[11px]">each period measured to the same point</span>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {metrics.map((m) => (
