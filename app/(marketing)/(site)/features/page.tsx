@@ -31,6 +31,7 @@ export default function FeaturesPage() {
       <Section tone="white" className="pt-14 pb-8 sm:pt-20" aria-labelledby="features-heading">
         <SectionHeading
           id="features-heading"
+          level={1}
           eyebrow="Features"
           title="Built to fill tables, not tick boxes"
           lead="Every feature earns its place by saving you time, covers or money. Grouped by the plan it comes with."

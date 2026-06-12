@@ -28,6 +28,7 @@ export default function PricingPage() {
       <Section tone="white" className="pt-14 pb-8 sm:pt-20" aria-labelledby="pricing-heading">
         <SectionHeading
           id="pricing-heading"
+          level={1}
           eyebrow="Pricing"
           title="One flat price. Keep every cover."
           lead={`Start free for up to ${PRICING.freeBookingLimit} bookings a month. Paid plans are £29 and £74 + VAT — never a fee per cover. Cancel anytime.`}
