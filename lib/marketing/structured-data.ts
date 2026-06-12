@@ -72,7 +72,9 @@ export function faqPageLd(faqs: Faq[]): Record<string, unknown> {
   };
 }
 
-export function breadcrumbLd(items: Array<{ name: string; path: string }>): Record<string, unknown> {
+export function breadcrumbLd(
+  items: Array<{ name: string; path: string }>,
+): Record<string, unknown> {
   return {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",

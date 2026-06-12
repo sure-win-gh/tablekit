@@ -8,7 +8,7 @@ export function Steps() {
     <ol className="mt-12 grid gap-8 sm:grid-cols-3">
       {HOW_IT_WORKS.map((step) => (
         <li key={step.step} className="flex flex-col gap-3">
-          <span className="bg-coral text-white flex size-10 items-center justify-center rounded-pill text-base font-bold">
+          <span className="bg-coral rounded-pill flex size-10 items-center justify-center text-base font-bold text-white">
             {step.step}
           </span>
           <h3 className="text-ink text-lg font-semibold tracking-tight">{step.title}</h3>

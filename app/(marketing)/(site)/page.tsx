@@ -46,20 +46,15 @@ export default function HomePage() {
               Fill more tables. Lose fewer to no-shows.
             </h1>
             <p className="text-ash mt-5 text-lg text-pretty">
-              TableKit is table booking built for independent cafés, pubs and restaurants. Free
-              for up to {PRICING.freeBookingLimit} bookings a month, paid plans from £29 + VAT —
-              with no per-cover fees and no long contracts.
+              TableKit is table booking built for independent cafés, pubs and restaurants. Free for
+              up to {PRICING.freeBookingLimit} bookings a month, paid plans from £29 + VAT — with no
+              per-cover fees and no long contracts.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <CtaLink href={SIGNUP_HREF} size="lg">
                 Start free — no card needed
               </CtaLink>
-              <CtaLink
-                href={DEMO_HREF}
-                variant="secondary"
-                size="lg"
-                external={DEMO_IS_EXTERNAL}
-              >
+              <CtaLink href={DEMO_HREF} variant="secondary" size="lg" external={DEMO_IS_EXTERNAL}>
                 Book a 15-min demo
               </CtaLink>
             </div>
@@ -135,10 +130,22 @@ export default function HomePage() {
         />
         <ul className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { h: "No card to start", p: "Sign up free and take real bookings without entering a card." },
-            { h: "Cancel anytime", p: "Month-to-month on every paid plan. No contract, no exit fee." },
-            { h: "UK/EU data residency", p: "Your guests' data stays in the UK/EU, encrypted at rest." },
-            { h: "GDPR-ready", p: "Marketing consent off by default; data-subject requests built in." },
+            {
+              h: "No card to start",
+              p: "Sign up free and take real bookings without entering a card.",
+            },
+            {
+              h: "Cancel anytime",
+              p: "Month-to-month on every paid plan. No contract, no exit fee.",
+            },
+            {
+              h: "UK/EU data residency",
+              p: "Your guests' data stays in the UK/EU, encrypted at rest.",
+            },
+            {
+              h: "GDPR-ready",
+              p: "Marketing consent off by default; data-subject requests built in.",
+            },
           ].map((item) => (
             <li key={item.h} className="rounded-card border-hairline border bg-white p-5">
               <h3 className="text-ink font-semibold tracking-tight">{item.h}</h3>
@@ -171,7 +178,11 @@ export default function HomePage() {
 
       {/* FAQ */}
       <Section tone="white" aria-labelledby="faq-heading">
-        <SectionHeading id="faq-heading" eyebrow="Questions" title="Good questions, honest answers" />
+        <SectionHeading
+          id="faq-heading"
+          eyebrow="Questions"
+          title="Good questions, honest answers"
+        />
         <div className="mt-10">
           <Faq items={HOME_FAQ} />
         </div>

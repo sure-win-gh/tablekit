@@ -32,10 +32,7 @@ export function FeatureMatrix() {
         <tbody>
           {FEATURES.map((feature) => (
             <tr key={feature.slug} className="border-hairline border-b last:border-0">
-              <th
-                scope="row"
-                className="text-charcoal px-4 py-3 text-left text-sm font-medium"
-              >
+              <th scope="row" className="text-charcoal px-4 py-3 text-left text-sm font-medium">
                 <span className="flex items-center gap-2">
                   {feature.name}
                   {feature.status === "coming-soon" && <Badge tone="neutral">Soon</Badge>}

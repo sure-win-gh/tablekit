@@ -20,7 +20,7 @@ export function SiteHeader() {
       <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-6">
         <Link
           href="/"
-          className="text-ink rounded-input text-lg font-bold tracking-tight focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
+          className="text-ink rounded-input focus-visible:ring-ink text-lg font-bold tracking-tight focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
         >
           {SITE.name}
         </Link>
@@ -54,7 +54,7 @@ export function SiteHeader() {
         <details className="group relative md:hidden">
           <summary
             aria-label="Open menu"
-            className="text-ink rounded-input border-hairline flex size-10 cursor-pointer list-none items-center justify-center border [&::-webkit-details-marker]:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+            className="text-ink rounded-input border-hairline focus-visible:ring-ink flex size-10 cursor-pointer list-none items-center justify-center border focus:outline-none focus-visible:ring-2 [&::-webkit-details-marker]:hidden"
           >
             <Menu className="size-5" aria-hidden />
           </summary>

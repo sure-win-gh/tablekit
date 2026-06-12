@@ -40,9 +40,7 @@ export function PricingTiers() {
                     <span className="text-ink text-4xl font-bold tracking-tight">
                       £{plan.pricePerMonth}
                     </span>
-                    <span className="text-ash text-sm font-medium">
-                      {PRICING.vatNote} / month
-                    </span>
+                    <span className="text-ash text-sm font-medium">{PRICING.vatNote} / month</span>
                   </>
                 )}
               </p>

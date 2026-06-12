@@ -15,12 +15,9 @@ export function FeatureCard({ feature }: { feature: MarketingFeature }) {
   const isLink = feature.status === "live";
 
   const inner = (
-    <Card
-      padding="lg"
-      className="flex h-full flex-col gap-3 transition group-hover:border-ink/30"
-    >
+    <Card padding="lg" className="group-hover:border-ink/30 flex h-full flex-col gap-3 transition">
       <div className="flex items-center justify-between">
-        <span className="bg-coral/10 text-coral flex size-10 items-center justify-center rounded-pill">
+        <span className="bg-coral/10 text-coral rounded-pill flex size-10 items-center justify-center">
           <MarketingIcon name={feature.icon} className="size-5" />
         </span>
         <TierBadge tier={feature.tier} />
@@ -32,7 +29,10 @@ export function FeatureCard({ feature }: { feature: MarketingFeature }) {
       {isLink ? (
         <span className="text-coral inline-flex items-center gap-1 text-sm font-semibold">
           {feature.name}
-          <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none" aria-hidden />
+          <ArrowRight
+            className="size-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none"
+            aria-hidden
+          />
         </span>
       ) : (
         <span className="text-mute text-sm font-medium">Coming soon</span>
@@ -45,7 +45,7 @@ export function FeatureCard({ feature }: { feature: MarketingFeature }) {
   return (
     <Link
       href={`/features/${feature.slug}`}
-      className="group rounded-card focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
+      className="group rounded-card focus-visible:ring-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
     >
       {inner}
     </Link>

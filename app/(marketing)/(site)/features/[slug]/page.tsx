@@ -69,7 +69,7 @@ export default async function FeaturePage({ params }: { params: Promise<{ slug: 
         <div className="grid items-center gap-12 lg:grid-cols-2">
           <div>
             <div className="mb-4 flex items-center gap-3">
-              <span className="bg-coral/10 text-coral flex size-11 items-center justify-center rounded-pill">
+              <span className="bg-coral/10 text-coral rounded-pill flex size-11 items-center justify-center">
                 <MarketingIcon name={feature.icon} className="size-6" />
               </span>
               <TierBadge tier={feature.tier} />
@@ -87,9 +87,7 @@ export default async function FeaturePage({ params }: { params: Promise<{ slug: 
               </CtaLink>
             </div>
             <TrustLine className="mt-6" />
-            <p className="text-mute mt-4 text-sm">
-              Included on the {plan.name} plan and above.
-            </p>
+            <p className="text-mute mt-4 text-sm">Included on the {plan.name} plan and above.</p>
           </div>
           <Placeholder
             caption={`App screenshot — ${feature.name} in the real TableKit dashboard`}
