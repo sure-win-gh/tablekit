@@ -25,7 +25,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-const ICONS: Record<string, LucideIcon> = {
+const ICONS = {
   ArrowLeftRight,
   Building2,
   CalendarCheck,
@@ -44,17 +44,22 @@ const ICONS: Record<string, LucideIcon> = {
   TrendingUp,
   Users,
   Webhook,
-};
+} satisfies Record<string, LucideIcon>;
+
+// The set of valid icon names. Typing the registry's `icon` field as this
+// (rather than `string`) makes a typo a compile error, as the comment above
+// promises.
+export type IconName = keyof typeof ICONS;
 
 export function MarketingIcon({
   name,
   className,
   "aria-hidden": ariaHidden = true,
 }: {
-  name: string;
+  name: IconName;
   className?: string;
   "aria-hidden"?: boolean;
 }) {
-  const Icon = ICONS[name] ?? Sparkles;
+  const Icon = ICONS[name];
   return <Icon className={className} aria-hidden={ariaHidden} />;
 }

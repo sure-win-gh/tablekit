@@ -10,6 +10,7 @@
 //
 // Copy is benefit-led: lead with the operator outcome, then the feature.
 
+import type { IconName } from "./icon";
 import type { Tier } from "./tiers";
 
 export type MarketingFeature = {
@@ -21,7 +22,7 @@ export type MarketingFeature = {
   spec: string; // matching docs/specs file, e.g. "payments-deposits.md"
   status: "live" | "coming-soon";
   showOnHome: boolean; // surfaces in the home highlights grid
-  icon: string; // lucide icon name (see ./icon)
+  icon: IconName; // lucide icon name (see ./icon) — typo = compile error
   // Optional deep-dive copy. `outcome` is the benefit-led headline; the
   // page falls back to `tagline` when it's absent.
   outcome?: string;
