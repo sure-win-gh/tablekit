@@ -16,7 +16,24 @@ Every spec must contain these sections, in this order:
 5. **Data model** — SQL DDL for new or modified tables.
 6. **API surface** — routes / server actions added or changed.
 7. **Acceptance criteria** — a checklist with measurable, testable items.
-8. **Out of scope** — what this spec deliberately does not cover.
+8. **Marketing impact** — how this feature reaches the marketing site (template below).
+9. **Out of scope** — what this spec deliberately does not cover.
+
+## Marketing impact section
+
+Every spec carries this near the end, before "Out of scope". It keeps the marketing site
+(`lib/marketing/features.ts` + `/features/<slug>`) in sync as features ship — see
+`docs/playbooks/marketing-frontend.md`. Internal/infra specs answer "no" and stop there.
+
+```md
+## Marketing impact
+
+- **Customer-visible:** yes | no (internal/infra)
+- **Tier:** free | core | plus
+- **Registry entry:** add/update `lib/marketing/features.ts` slug `<slug>`
+- **Benefit line:** "<the outcome an operator cares about>"
+- **Needs feature page:** yes (`/features/<slug>`) | no (highlight/matrix only)
+```
 
 ## Rules
 
@@ -25,4 +42,5 @@ Every spec must contain these sections, in this order:
 - If it touches PII, reference `docs/playbooks/gdpr.md` in Depends on.
 - If it touches cards/payments, reference `docs/playbooks/payments.md`.
 - If it introduces new infrastructure, update `docs/playbooks/deploy.md` in the same PR.
+- If the feature is customer-visible, the Marketing impact section must name the `lib/marketing/features.ts` slug it adds or updates — `/ship` enforces this.
 - Don't start implementing anything. This command only writes the spec and stops.
