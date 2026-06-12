@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 
+import { SITE } from "@/lib/marketing/site";
 import "./globals.css";
 
 // Inter as the open substitute for Airbnb Cereal — same proportions,
@@ -14,8 +15,12 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "TableKit",
-  description: "UK table booking for independent hospitality.",
+  metadataBase: new URL(SITE.url),
+  title: {
+    default: `${SITE.name} — ${SITE.tagline}`,
+    template: `%s · ${SITE.name}`,
+  },
+  description: SITE.tagline,
 };
 
 export default function RootLayout({

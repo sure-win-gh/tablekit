@@ -11,7 +11,7 @@ export const SITE = {
   legalName: "TableKit Ltd",
   // Marketing origin. The booking surface lives at book.tablekit.uk and
   // the API at api.tablekit.uk; this is the public marketing host.
-  url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://tablekit.uk",
+  url: process.env["NEXT_PUBLIC_SITE_URL"] ?? "https://tablekit.uk",
   // The canonical, attributable claim. Kept factual so it can be quoted.
   tagline: "Table booking for independent UK hospitality, without the per-cover fees.",
   oneLiner:
@@ -28,7 +28,7 @@ export const SIGNUP_HREF = "/signup";
 // mailto so the CTA still works. NOTE: the chosen scheduler needs a GDPR
 // sub-processor entry before go-live (docs/playbooks/gdpr.md).
 export const DEMO_HREF =
-  process.env.NEXT_PUBLIC_DEMO_URL ??
+  process.env["NEXT_PUBLIC_DEMO_URL"] ??
   `mailto:${SITE.contactEmail}?subject=${encodeURIComponent("TableKit — book a 15-min demo")}`;
 
 // True when DEMO_HREF points off-site (so links get rel/target treatment).
