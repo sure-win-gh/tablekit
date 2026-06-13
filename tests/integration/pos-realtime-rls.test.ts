@@ -78,14 +78,12 @@ beforeAll(async () => {
     email: `rt-b-guest-${run}@example.com`,
   });
   if (!gB.ok) throw new Error("guest upsert failed");
-  await db
-    .insert(schema.guestSpendSummary)
-    .values({
-      guestId: gB.guestId,
-      organisationId: orgB!.id,
-      orderCount: 2,
-      totalSpendMinor: 4000,
-    });
+  await db.insert(schema.guestSpendSummary).values({
+    guestId: gB.guestId,
+    organisationId: orgB!.id,
+    orderCount: 2,
+    totalSpendMinor: 4000,
+  });
 
   ctx = { userAId, userBId, orgAId: orgA!.id, orgBId: orgB!.id, guestBId: gB.guestId };
 });
