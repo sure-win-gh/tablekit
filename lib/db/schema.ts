@@ -17,6 +17,7 @@
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
+  bigint,
   boolean,
   char,
   customType,
@@ -86,6 +87,10 @@ export const organisations = pgTable(
     // org-scoped; the flag controls UI surfaces (group-wide guests
     // list, "also visited at" hints) rather than the data model.
     groupCrmEnabled: boolean("group_crm_enabled").notNull().default(false),
+    // Per-org override for the POS order/spend retention sweep, in months.
+    // NULL → the code default (24 months) applies. Mirrors the configurable
+    // window on the campaign-send sweep. See lib/pos/retention.ts.
+    posRetentionMonths: integer("pos_retention_months"),
     // Outreach pre-populated accounts: NULL until the prospect claims via
     // the magic link in their outreach email; set to the claim timestamp
     // on success. Normal signups backfill to created_at in the migration
@@ -1959,5 +1964,169 @@ export const apiRequestLog = pgTable(
     index("api_request_log_org_created_idx").on(t.organisationId, t.createdAt.desc()),
     // Retention sweep — by raw created_at across orgs.
     index("api_request_log_created_at_idx").on(t.createdAt),
+  ],
+);
+
+// =============================================================================
+// POS integrations (Plus tier) — order history + spend on guest profiles
+// =============================================================================
+//
+// Inbound-only: we ingest completed orders from a venue's till (Square,
+// Lightspeed K-Series, or a generic signed-webhook/CSV path) and attach
+// spend to the matching guest. Read-only — we never write back to the POS,
+// and we never touch card data (PCI SAQ-A: the ingest layer drops any
+// card-number-shaped field before persistence). See docs/specs/pos-integrations.md.
+//
+// All four tables carry a denormalised organisation_id populated by a
+// BEFORE INSERT/UPDATE trigger from the parent (venue / connection / guest),
+// so a crafted payload can't plant a row under another org. RLS gives
+// members SELECT on their org's rows; there is NO authenticated write
+// policy — every write flows through adminDb() from a signature-verified
+// webhook handler or cron. Mirrors the venue_photos posture.
+
+export const posProvider = pgEnum("pos_provider", ["square", "lightspeed_k", "generic"]);
+
+// One connection per (venue, provider). Holds the OAuth grant + webhook
+// secret, all envelope-encrypted via crypto.encryptPii — treat the cipher
+// columns as credentials: never log, never surface in an error message.
+export const posConnections = pgTable(
+  "pos_connections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    provider: posProvider("provider").notNull(),
+    // Square merchant/location id, Lightspeed business id. Not secret.
+    externalAccountId: text("external_account_id"),
+    accessTokenCipher: text("access_token_cipher"),
+    refreshTokenCipher: text("refresh_token_cipher"),
+    tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }),
+    // For the generic inbound HMAC path + Lightspeed verification.
+    webhookSecretCipher: text("webhook_secret_cipher"),
+    // Art. 9 opt-in gate. Itemised orders can reveal special-category
+    // data (alcohol volume, dietary/health patterns), so line-item
+    // ingest is OFF until the venue explicitly opts in and confirms an
+    // Art. 9(2) basis. See docs/playbooks/gdpr.md §Special-category.
+    lineItemsEnabled: boolean("line_items_enabled").notNull().default(false),
+    art9BasisConfirmedAt: timestamp("art9_basis_confirmed_at", { withTimezone: true }),
+    // 'active' | 'paused' | 'revoked' | 'error' — constrained in the migration.
+    status: text("status").notNull().default("active"),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("pos_connections_venue_provider_unique").on(t.venueId, t.provider),
+    index("pos_connections_org_idx").on(t.organisationId),
+  ],
+);
+
+// Idempotency ledger for every inbound POS webhook. Dedup primitive is
+// INSERT ON CONFLICT (provider, external_event_id) DO NOTHING — a replay
+// is a no-op. Mirrors stripe_events / inbound_webhook_events.
+export const posWebhookEvents = pgTable(
+  "pos_webhook_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => posConnections.id, { onDelete: "cascade" }),
+    provider: posProvider("provider").notNull(),
+    // The POS's own event id.
+    externalEventId: text("external_event_id").notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("pos_webhook_events_provider_event_unique").on(t.provider, t.externalEventId),
+    index("pos_webhook_events_org_idx").on(t.organisationId),
+    index("pos_webhook_events_connection_idx").on(t.connectionId),
+  ],
+);
+
+// Normalised completed orders — one row per till order/check. Money columns
+// are plain integer pence: not PII on their own, so they stay queryable for
+// the "top guests by spend" sort. The sensitive thing is the LINKAGE to a
+// named guest, protected by RLS + the encrypted guest row. payment_method_label
+// is a display label only ('Visa ••4242', 'Cash') — never a card number.
+export const posOrders = pgTable(
+  "pos_orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => posConnections.id, { onDelete: "cascade" }),
+    provider: posProvider("provider").notNull(),
+    // The till's order/check id — dedupe key within a connection.
+    externalOrderId: text("external_order_id").notNull(),
+    // Nullable: matched to a guest when possible, else an unmatched order
+    // (still counted in venue revenue). De-linked (set null) on DSAR erasure.
+    guestId: uuid("guest_id").references(() => guests.id, { onDelete: "set null" }),
+    bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+    totalMinor: integer("total_minor").notNull(),
+    tipMinor: integer("tip_minor").notNull().default(0),
+    taxMinor: integer("tax_minor"),
+    currency: char("currency", { length: 3 }).notNull().default("GBP"),
+    coverCount: integer("cover_count"),
+    paymentMethodLabel: text("payment_method_label"),
+    // Envelope-encrypted JSON, optional. Only written when the connection
+    // has lineItemsEnabled (Art. 9 opt-in). Nulled on DSAR erasure.
+    lineItemsCipher: text("line_items_cipher"),
+    closedAt: timestamp("closed_at", { withTimezone: true }).notNull(),
+    // 'email_hash' | 'phone_hash' | 'booking' | 'manual' | null
+    matchMethod: text("match_method"),
+    // Opaque pointer for support/debug — no PII.
+    rawProviderRef: text("raw_provider_ref"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("pos_orders_connection_external_unique").on(t.connectionId, t.externalOrderId),
+    index("pos_orders_org_venue_closed_idx").on(t.organisationId, t.venueId, t.closedAt),
+    index("pos_orders_guest_idx")
+      .on(t.guestId)
+      .where(sql`${t.guestId} is not null`),
+  ],
+);
+
+// Denormalised per-guest spend rollup (read-hot; recomputed on order upsert).
+// A cache — always rebuildable from pos_orders, never the source of truth.
+// guest_id is the PK (one summary per guest); organisation_id denormalised
+// for RLS + the "top guests by spend" index.
+export const guestSpendSummary = pgTable(
+  "guest_spend_summary",
+  {
+    guestId: uuid("guest_id")
+      .primaryKey()
+      .references(() => guests.id, { onDelete: "cascade" }),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    orderCount: integer("order_count").notNull().default(0),
+    totalSpendMinor: bigint("total_spend_minor", { mode: "number" }).notNull().default(0),
+    avgSpendMinor: integer("avg_spend_minor").notNull().default(0),
+    lastOrderAt: timestamp("last_order_at", { withTimezone: true }),
+    firstOrderAt: timestamp("first_order_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("guest_spend_summary_org_total_idx").on(t.organisationId, t.totalSpendMinor.desc()),
   ],
 );
