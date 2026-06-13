@@ -1,6 +1,6 @@
 # Spec: Guest insights & segmentation (Plus tier)
 
-**Status:** draft — Phase 4 of the Automation & Engagement plan.
+**Status:** shipped (PR #70) — Phase 4 of the Automation & Engagement plan.
 **Depends on:** `marketing-campaigns.md`, `booking-insights.md`, `reporting.md`, `guests.md`, `docs/playbooks/gdpr.md`
 
 ## What we're building

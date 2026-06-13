@@ -1,6 +1,6 @@
 # Spec: WhatsApp transactional channel
 
-**Status:** draft — Phase 1 of the Automation & Engagement plan.
+**Status:** shipped (PR #70) — Phase 1 of the Automation & Engagement plan. Dormant until enabled per-venue; Meta non-EU sub-processor (SCCs/TRA + 30-day notice) is a go-live gate before first real send.
 **Depends on:** `messaging.md`, `guests.md`, `docs/playbooks/gdpr.md`
 
 ## What we're building

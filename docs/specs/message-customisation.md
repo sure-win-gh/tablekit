@@ -1,6 +1,6 @@
 # Spec: Message customisation (content & flow control)
 
-**Status:** draft — Phase 2 of the Automation & Engagement plan.
+**Status:** shipped (PR #70) — Phase 2 of the Automation & Engagement plan.
 **Depends on:** `messaging.md`, `whatsapp.md`, `guests.md`, `docs/playbooks/gdpr.md`
 
 ## What we're building
