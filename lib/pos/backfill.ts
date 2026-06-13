@@ -17,6 +17,7 @@ import "server-only";
 import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { posConnections } from "@/lib/db/schema";
+import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 
 import { ingestOrder } from "./ingest";
@@ -77,6 +78,14 @@ export async function runPosBackfill(opts?: { maxConnections?: number }): Promis
       .set({ lastSyncedAt: sql`now()`, updatedAt: sql`now()` })
       .where(eq(posConnections.id, connectionId));
     connectionsProcessed++;
+
+    await audit.log({
+      organisationId: ctx.organisationId,
+      action: "pos.backfill.swept",
+      targetType: "pos_connection",
+      targetId: connectionId,
+      metadata: { ordersIngested: page.length },
+    });
   }
 
   return { connectionsProcessed, ordersIngested };

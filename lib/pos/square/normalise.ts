@@ -88,7 +88,13 @@ export function normaliseSquarePayment(
 
   return {
     provider: "square",
-    externalOrderId: payment.order_id ?? payment.id,
+    // Key on the PAYMENT id, not order_id: a split-bill check emits one
+    // payment.updated per payment that all share order_id, so keying on
+    // order_id would collapse them onto one row and the last payment would
+    // overwrite the total (under-counting spend). One row per settled payment
+    // keeps gross spend correct; order_id is kept on raw_provider_ref for
+    // grouping. Re-delivery of the same payment.id upserts idempotently.
+    externalOrderId: payment.id,
     totalMinor: total,
     tipMinor: amount(payment.tip_money),
     taxMinor: order?.total_tax_money?.amount != null ? amount(order.total_tax_money) : null,
@@ -98,8 +104,8 @@ export function normaliseSquarePayment(
     closedAt,
     customerEmail: payment.buyer_email_address ?? null,
     customerPhone: null,
-    bookingRef: null,
+    bookingRef: payment.order_id ?? null,
     lineItems,
-    rawProviderRef: payment.id,
+    rawProviderRef: payment.order_id ?? payment.id,
   };
 }

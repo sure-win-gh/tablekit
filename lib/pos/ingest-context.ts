@@ -5,7 +5,7 @@
 
 import "server-only";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { organisations, posConnections } from "@/lib/db/schema";
 import { adminDb } from "@/lib/server/admin/db";
@@ -17,6 +17,9 @@ export type IngestContext = {
   organisationId: string;
   venueId: string;
   provider: PosProvider;
+  // EFFECTIVE Art. 9 gate: line items may be stored ONLY when the connection
+  // opted in AND a venue confirmed an Art. 9(2) basis. This couples the two
+  // columns so no caller can persist itemisation on line_items_enabled alone.
   lineItemsEnabled: boolean;
   groupCrmEnabled: boolean;
   status: string;
@@ -29,7 +32,7 @@ function selectCtx() {
       organisationId: posConnections.organisationId,
       venueId: posConnections.venueId,
       provider: posConnections.provider,
-      lineItemsEnabled: posConnections.lineItemsEnabled,
+      lineItemsEnabled: sql<boolean>`(${posConnections.lineItemsEnabled} and ${posConnections.art9BasisConfirmedAt} is not null)`,
       groupCrmEnabled: organisations.groupCrmEnabled,
       status: posConnections.status,
     })

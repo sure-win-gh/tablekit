@@ -4,13 +4,10 @@
 
 import "server-only";
 
-import { eq } from "drizzle-orm";
-
-import { posWebhookEvents } from "@/lib/db/schema";
 import { loadPosConnectionSecrets } from "@/lib/pos/connection";
 import { ingestOrder } from "@/lib/pos/ingest";
 import { loadIngestContextByAccount } from "@/lib/pos/ingest-context";
-import { adminDb } from "@/lib/server/admin/db";
+import { claimPosWebhookEvent, markPosWebhookProcessed } from "@/lib/pos/webhook-dedupe";
 
 import { isLightspeedEnabled } from "./oauth";
 import {
@@ -22,7 +19,14 @@ import { verifyLightspeedSignature } from "./verify";
 
 export type LightspeedWebhookOutcome = {
   status: number;
-  result: "ingested" | "duplicate" | "ignored" | "no-connection" | "bad-signature" | "disabled";
+  result:
+    | "ingested"
+    | "duplicate"
+    | "ignored"
+    | "no-connection"
+    | "bad-signature"
+    | "bad-request"
+    | "disabled";
 };
 
 export async function handleLightspeedWebhook(
@@ -38,7 +42,7 @@ export async function handleLightspeedWebhook(
   try {
     event = JSON.parse(rawBody) as LightspeedEvent;
   } catch {
-    return { status: 400, result: "bad-signature" };
+    return { status: 400, result: "bad-request" };
   }
 
   const businessId = event.business_id;
@@ -62,23 +66,13 @@ export async function handleLightspeedWebhook(
     return { status: 400, result: "bad-signature" };
   }
 
-  const db = adminDb();
-  const [eventRow] = await db
-    .insert(posWebhookEvents)
-    .values({
-      organisationId: ctx.organisationId,
-      connectionId: ctx.connectionId,
-      provider: "lightspeed_k",
-      externalEventId: eventId,
-    })
-    .onConflictDoNothing({
-      target: [posWebhookEvents.provider, posWebhookEvents.externalEventId],
-    })
-    .returning({ id: posWebhookEvents.id });
-
-  if (!eventRow) {
-    return { status: 200, result: "duplicate" };
-  }
+  const claim = await claimPosWebhookEvent({
+    organisationId: ctx.organisationId,
+    connectionId: ctx.connectionId,
+    provider: "lightspeed_k",
+    externalEventId: eventId,
+  });
+  if (claim.status === "duplicate") return { status: 200, result: "duplicate" };
 
   const normalised = normaliseLightspeedAccount(account, ctx.lineItemsEnabled);
   await ingestOrder({
@@ -90,10 +84,6 @@ export async function handleLightspeedWebhook(
     order: normalised,
   });
 
-  await db
-    .update(posWebhookEvents)
-    .set({ processedAt: new Date() })
-    .where(eq(posWebhookEvents.id, eventRow.id));
-
+  await markPosWebhookProcessed(claim.eventRowId);
   return { status: 200, result: "ingested" };
 }

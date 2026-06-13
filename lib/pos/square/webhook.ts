@@ -8,13 +8,10 @@
 
 import "server-only";
 
-import { eq } from "drizzle-orm";
-
-import { posWebhookEvents } from "@/lib/db/schema";
-import { adminDb } from "@/lib/server/admin/db";
 import { ingestOrder } from "@/lib/pos/ingest";
 import { loadIngestContextByAccount } from "@/lib/pos/ingest-context";
 import { loadPosConnectionSecrets } from "@/lib/pos/connection";
+import { claimPosWebhookEvent, markPosWebhookProcessed } from "@/lib/pos/webhook-dedupe";
 
 import { fetchSquareOrder } from "./oauth";
 import {
@@ -32,6 +29,7 @@ export type SquareWebhookOutcome = {
     | "ignored"
     | "no-connection"
     | "bad-signature"
+    | "bad-request"
     | "not-configured";
 };
 
@@ -53,7 +51,7 @@ export async function handleSquareWebhook(
   try {
     event = JSON.parse(rawBody) as SquareWebhookEvent;
   } catch {
-    return { status: 400, result: "bad-signature" };
+    return { status: 400, result: "bad-request" };
   }
 
   const payment = event.data?.object?.payment;
@@ -68,29 +66,19 @@ export async function handleSquareWebhook(
     return { status: 200, result: "no-connection" };
   }
 
-  // Idempotency: first writer wins. A replay yields no returned row.
-  const db = adminDb();
-  const [eventRow] = await db
-    .insert(posWebhookEvents)
-    .values({
-      // organisation_id rewritten by the enforce trigger from the connection.
-      organisationId: ctx.organisationId,
-      connectionId: ctx.connectionId,
-      provider: "square",
-      externalEventId: eventId,
-    })
-    .onConflictDoNothing({
-      target: [posWebhookEvents.provider, posWebhookEvents.externalEventId],
-    })
-    .returning({ id: posWebhookEvents.id });
-
-  if (!eventRow) {
-    return { status: 200, result: "duplicate" };
-  }
+  // Idempotency claim. A true duplicate (already processed) short-circuits;
+  // a claimed-but-unprocessed event (prior crash) is recovered + re-ingested.
+  const claim = await claimPosWebhookEvent({
+    organisationId: ctx.organisationId,
+    connectionId: ctx.connectionId,
+    provider: "square",
+    externalEventId: eventId,
+  });
+  if (claim.status === "duplicate") return { status: 200, result: "duplicate" };
 
   // Only fetch the parent order (line items / tax) when the connection has
-  // opted in to itemisation (Art. 9 gate) — otherwise totals come straight
-  // from the payment.
+  // opted in to itemisation (Art. 9 gate, already AND'd with
+  // art9_basis_confirmed_at) — otherwise totals come straight from the payment.
   let order = null;
   if (ctx.lineItemsEnabled && payment.order_id) {
     const secrets = await loadPosConnectionSecrets(ctx.connectionId);
@@ -109,10 +97,6 @@ export async function handleSquareWebhook(
     order: normalised,
   });
 
-  await db
-    .update(posWebhookEvents)
-    .set({ processedAt: new Date() })
-    .where(eq(posWebhookEvents.id, eventRow.id));
-
+  await markPosWebhookProcessed(claim.eventRowId);
   return { status: 200, result: "ingested" };
 }

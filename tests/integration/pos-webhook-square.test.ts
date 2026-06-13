@@ -97,7 +97,7 @@ describe("Square webhook", () => {
       .where(
         and(
           eq(schema.posOrders.connectionId, ctx.connId),
-          eq(schema.posOrders.externalOrderId, `order-${run}`),
+          eq(schema.posOrders.externalOrderId, `pay-order-${run}`),
         ),
       );
     expect(order?.total).toBe(5500);
@@ -112,7 +112,7 @@ describe("Square webhook", () => {
     const rows = await db
       .select({ id: schema.posOrders.id })
       .from(schema.posOrders)
-      .where(eq(schema.posOrders.externalOrderId, `order-forged-${run}`));
+      .where(eq(schema.posOrders.externalOrderId, `pay-order-forged-${run}`));
     expect(rows).toHaveLength(0);
   });
 
@@ -127,7 +127,7 @@ describe("Square webhook", () => {
     const rows = await db
       .select({ id: schema.posOrders.id })
       .from(schema.posOrders)
-      .where(eq(schema.posOrders.externalOrderId, `order-replay-${run}`));
+      .where(eq(schema.posOrders.externalOrderId, `pay-order-replay-${run}`));
     expect(rows).toHaveLength(1);
   });
 });
