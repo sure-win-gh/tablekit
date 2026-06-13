@@ -62,6 +62,7 @@ export async function upsertGuest(
     // value for.
     const patch: {
       phoneCipher?: string;
+      phoneHash?: string;
       marketingConsentAt?: Date;
       marketingConsentEmailAt?: Date;
       firstName?: string;
@@ -70,6 +71,8 @@ export async function upsertGuest(
 
     if (input.phone !== undefined && existing.phoneCipher === null) {
       patch.phoneCipher = await encryptPii(organisationId, input.phone);
+      // Deterministic phone lookup hash, same HMAC as email_hash.
+      patch.phoneHash = hashForLookup(input.phone, "phone");
     }
     if (input.marketingConsentAt && existing.marketingConsentAt === null) {
       // Mirror to both the legacy single-channel column and the new
@@ -102,6 +105,7 @@ export async function upsertGuest(
   const lastNameCipher = await encryptPii(organisationId, input.lastName);
   const emailCipher = await encryptPii(organisationId, input.email);
   const phoneCipher = input.phone ? await encryptPii(organisationId, input.phone) : null;
+  const phoneHash = input.phone ? hashForLookup(input.phone, "phone") : null;
 
   const [inserted] = await db
     .insert(guests)
@@ -112,6 +116,7 @@ export async function upsertGuest(
       emailCipher,
       emailHash,
       phoneCipher,
+      phoneHash,
       marketingConsentAt: input.marketingConsentAt ?? null,
       marketingConsentEmailAt: input.marketingConsentAt ?? null,
     })

@@ -351,6 +351,13 @@
       "when": 1781346559584,
       "tag": "0049_legal_luke_cage",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1781349560698,
+      "tag": "0050_curious_havok",
+      "breakpoints": true
     }
   ]
 }

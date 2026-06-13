@@ -3,21 +3,19 @@
 // No plaintext scans (same discipline as guests.md). Precedence:
 //   1. email_hash — hash the POS-supplied email with the SAME
 //      hashForLookup(value,"email") that populates guests.email_hash, and
-//      match within the org. When group CRM is OFF, the match is
-//      venue-scoped: the guest must have a realised booking at this venue
-//      (mirrors the per-venue guest lens in guests.md / multi-venue.md);
-//      when ON, any guest in the org matches.
-//   2. booking — tie the settled check to a single booking at the same
+//      match within the org.
+//   2. phone_hash — same, via hashForLookup(value,"phone") against
+//      guests.phone_hash (added in migration 0050 + backfilled).
+//   3. booking — tie the settled check to a single booking at the same
 //      venue whose service window contains closed_at, and adopt that
 //      booking's guest. Conservative: only links when exactly one
 //      candidate exists, to avoid mis-attribution.
-//   3. else null — an unmatched order (still counted in venue revenue).
+//   4. else null — an unmatched order (still counted in venue revenue).
 //
-// NOTE — phone_hash matching is specced but DEFERRED: the guests table has
-// no phone_hash column today (only email_hash + phone_cipher). Adding it
-// needs a migration + an offline backfill (decrypt phone_cipher → re-hash),
-// which is out of this commit's no-new-schema scope. match_method keeps
-// 'phone_hash' in its union for forward-compat; v1 never produces it.
+// For both hash matches: when group CRM is OFF the match is venue-scoped
+// (the guest must have a realised booking at this venue — mirrors the
+// per-venue guest lens in guests.md / multi-venue.md); when ON, any guest
+// in the org matches.
 
 import "server-only";
 
@@ -70,16 +68,34 @@ export async function matchOrder(params: MatchOrderParams): Promise<MatchResult>
       )
       .limit(1);
 
-    if (guest) {
-      if (groupCrmEnabled || (await guestHasVenueBooking(guest.id, venueId))) {
-        return { guestId: guest.id, bookingId: null, matchMethod: "email_hash" };
-      }
-      // Venue-scoped + no booking at this venue → fall through to booking
-      // matching rather than attributing cross-venue spend.
+    if (guest && (groupCrmEnabled || (await guestHasVenueBooking(guest.id, venueId)))) {
+      return { guestId: guest.id, bookingId: null, matchMethod: "email_hash" };
+    }
+    // Venue-scoped + no booking at this venue → fall through rather than
+    // attributing cross-venue spend.
+  }
+
+  // 2 — phone hash.
+  if (order.customerPhone) {
+    const phoneHash = hashForLookup(order.customerPhone, "phone");
+    const [guest] = await db
+      .select({ id: guests.id })
+      .from(guests)
+      .where(
+        and(
+          eq(guests.organisationId, organisationId),
+          eq(guests.phoneHash, phoneHash),
+          isNull(guests.erasedAt),
+        ),
+      )
+      .limit(1);
+
+    if (guest && (groupCrmEnabled || (await guestHasVenueBooking(guest.id, venueId)))) {
+      return { guestId: guest.id, bookingId: null, matchMethod: "phone_hash" };
     }
   }
 
-  // 2 — booking link (same venue, service window contains closed_at).
+  // 3 — booking link (same venue, service window contains closed_at).
   const windowStart = new Date(order.closedAt.getTime() - CLOSE_GRACE_MS);
   const candidates = await db
     .select({ id: bookings.id, guestId: bookings.guestId })

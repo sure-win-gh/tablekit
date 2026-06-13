@@ -436,6 +436,12 @@ export const guests = pgTable(
     emailCipher: text("email_cipher").notNull(),
     emailHash: text("email_hash").notNull(),
     phoneCipher: text("phone_cipher"),
+    // Deterministic lookup hash for the phone, same HMAC as email_hash
+    // (hashForLookup(value,"phone")). Nullable: only set when a phone is
+    // known, and backfilled for pre-existing rows. Enables POS phone-hash
+    // matching + "find guest by phone" without decrypting. Not unique —
+    // email_hash remains the dedup key; two profiles may share a number.
+    phoneHash: text("phone_hash"),
     // Stripe Customer id on the org's connected account (cus_*). Null
     // until the guest's first payment flow. Reused across subsequent
     // bookings so repeat guests don't clutter the operator's Stripe
@@ -519,6 +525,11 @@ export const guests = pgTable(
       .on(t.organisationId, t.emailHash)
       .where(sql`${t.erasedAt} is null`),
     index("guests_org_idx").on(t.organisationId),
+    // Phone lookup path (POS phone-hash match). Partial — only rows that
+    // actually carry a phone hash.
+    index("guests_org_phone_hash_idx")
+      .on(t.organisationId, t.phoneHash)
+      .where(sql`${t.phoneHash} is not null`),
   ],
 );
 
