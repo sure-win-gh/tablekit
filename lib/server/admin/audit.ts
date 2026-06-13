@@ -136,6 +136,14 @@ export type AuditAction =
   | "webhook_subscription.created"
   | "webhook_subscription.revoked"
   | "webhook_subscription.delivery_replayed"
+  // pos-integrations phase
+  | "pos.connection.created"
+  | "pos.connection.disconnected"
+  | "pos.order.ingested"
+  | "pos.order.manual_attached"
+  | "pos.order.dsar_scrubbed"
+  | "pos.retention.swept"
+  | "pos.backfill.swept"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
@@ -167,7 +175,9 @@ export type AuditTargetType =
   | "import_job"
   | "enquiry"
   | "api_key"
-  | "webhook_subscription";
+  | "webhook_subscription"
+  | "pos_connection"
+  | "pos_order";
 
 export type AuditInput = {
   organisationId: string;
