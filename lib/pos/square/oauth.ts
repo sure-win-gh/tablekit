@@ -98,6 +98,42 @@ export async function exchangeSquareCode(input: {
   };
 }
 
+// Refresh an access token. Square rotates the refresh token on use, so the
+// caller MUST persist the returned refresh token too. Throws on failure (the
+// caller marks the connection errored).
+export async function refreshSquareToken(refreshToken: string): Promise<SquareTokens> {
+  const id = squareClientId();
+  const secret = squareClientSecret();
+  if (!id || !secret) throw new Error("lib/pos/square/oauth.ts: Square OAuth not configured");
+
+  const res = await fetch(new URL("/oauth2/token", squareApiBase()), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Square-Version": SQUARE_VERSION },
+    body: JSON.stringify({
+      client_id: id,
+      client_secret: secret,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`Square token refresh failed (${res.status})`);
+  const json = (await res.json()) as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_at?: string;
+    merchant_id?: string;
+  };
+  if (!json.access_token) throw new Error("Square token refresh returned malformed body");
+  return {
+    accessToken: json.access_token,
+    // Square may or may not rotate; fall back to the supplied token.
+    refreshToken: json.refresh_token ?? refreshToken,
+    expiresAt: json.expires_at ? new Date(json.expires_at) : null,
+    merchantId: json.merchant_id ?? null,
+  };
+}
+
 // Fetch a parent order for line items / tax. Only called when line-item
 // ingest is enabled for the connection. Returns null on any failure — the
 // payment-derived totals are still ingested.

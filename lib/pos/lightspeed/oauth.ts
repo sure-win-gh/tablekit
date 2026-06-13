@@ -101,3 +101,37 @@ export async function exchangeLightspeedCode(input: {
     webhookSecret: json.webhook_secret ?? null,
   };
 }
+
+// Refresh an access token. Throws on failure (caller marks the connection
+// errored). The webhook secret + business id don't change on refresh.
+export async function refreshLightspeedToken(refreshToken: string): Promise<LightspeedTokens> {
+  const id = lightspeedClientId();
+  const secret = lightspeedClientSecret();
+  if (!id || !secret) throw new Error("lib/pos/lightspeed/oauth.ts: not configured");
+
+  const res = await fetch(new URL("/oauth/token", lightspeedApiBase()), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: id,
+      client_secret: secret,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`Lightspeed token refresh failed (${res.status})`);
+  const json = (await res.json()) as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+  };
+  if (!json.access_token) throw new Error("Lightspeed token refresh returned malformed body");
+  return {
+    accessToken: json.access_token,
+    refreshToken: json.refresh_token ?? refreshToken,
+    expiresAt: json.expires_in ? new Date(Date.now() + json.expires_in * 1000) : null,
+    businessId: null,
+    webhookSecret: null,
+  };
+}

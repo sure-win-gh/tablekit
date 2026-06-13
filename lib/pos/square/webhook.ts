@@ -8,9 +8,9 @@
 
 import "server-only";
 
+import { getActivePosAccessToken } from "@/lib/pos/active-connection";
 import { ingestOrder } from "@/lib/pos/ingest";
 import { loadIngestContextByAccount } from "@/lib/pos/ingest-context";
-import { loadPosConnectionSecrets } from "@/lib/pos/connection";
 import { claimPosWebhookEvent, markPosWebhookProcessed } from "@/lib/pos/webhook-dedupe";
 
 import { fetchSquareOrder } from "./oauth";
@@ -81,9 +81,12 @@ export async function handleSquareWebhook(
   // art9_basis_confirmed_at) — otherwise totals come straight from the payment.
   let order = null;
   if (ctx.lineItemsEnabled && payment.order_id) {
-    const secrets = await loadPosConnectionSecrets(ctx.connectionId);
-    if (secrets?.accessToken) {
-      order = await fetchSquareOrder(secrets.accessToken, payment.order_id);
+    // getActivePosAccessToken refreshes the token if it's expired (and marks
+    // the connection errored if it can't), so the order fetch always uses a
+    // live token.
+    const accessToken = await getActivePosAccessToken(ctx.connectionId);
+    if (accessToken) {
+      order = await fetchSquareOrder(accessToken, payment.order_id);
     }
   }
 
