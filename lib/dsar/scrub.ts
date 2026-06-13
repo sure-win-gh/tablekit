@@ -16,7 +16,15 @@ import "server-only";
 
 import { and, eq, isNull, sql } from "drizzle-orm";
 
-import { bookings, campaignSends, dsarRequests, guests, reviews } from "@/lib/db/schema";
+import {
+  bookings,
+  campaignSends,
+  dsarRequests,
+  guestSpendSummary,
+  guests,
+  posOrders,
+  reviews,
+} from "@/lib/db/schema";
 import { encryptPii } from "@/lib/security/crypto";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
@@ -31,6 +39,7 @@ export type RunErasureScrubResult =
       alreadyScrubbed: boolean;
       guestId: string | null;
       reviewsScrubbed: number;
+      posOrdersDelinked: number;
     }
   | { ok: false; reason: "not-found" | "wrong-kind" | "wrong-status" };
 
@@ -63,6 +72,7 @@ export async function runErasureScrub(input: RunErasureScrubInput): Promise<RunE
       alreadyScrubbed: true,
       guestId: dsar.guestId,
       reviewsScrubbed: 0,
+      posOrdersDelinked: 0,
     };
   }
 
@@ -79,6 +89,7 @@ export async function runErasureScrub(input: RunErasureScrubInput): Promise<RunE
   // ↔ recovery_offer_at) CHECK constraints require nulling each pair
   // together — this single UPDATE satisfies both.
   let reviewsScrubbed = 0;
+  let posOrdersDelinked = 0;
   await db.transaction(async (tx) => {
     if (dsar.guestId) {
       await tx
@@ -148,6 +159,26 @@ export async function runErasureScrub(input: RunErasureScrubInput): Promise<RunE
         .where(and(eq(reviews.guestId, dsar.guestId), eq(reviews.source, "internal")))
         .returning({ id: reviews.id });
       reviewsScrubbed = updated.length;
+
+      // POS orders: de-link from the guest (the order row survives as
+      // anonymous venue revenue) and null line_items_cipher — itemised
+      // orders are Art. 9 data and must not outlive erasure. match_method
+      // is also cleared so no inference of how the link was made remains.
+      const delinked = await tx
+        .update(posOrders)
+        .set({
+          guestId: sql`NULL`,
+          matchMethod: sql`NULL`,
+          lineItemsCipher: sql`NULL`,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(posOrders.guestId, dsar.guestId))
+        .returning({ id: posOrders.id });
+      posOrdersDelinked = delinked.length;
+
+      // The spend rollup is a per-guest cache — delete it outright (it is
+      // rebuildable from pos_orders, but those are now de-linked).
+      await tx.delete(guestSpendSummary).where(eq(guestSpendSummary.guestId, dsar.guestId));
     }
 
     await tx
@@ -167,13 +198,23 @@ export async function runErasureScrub(input: RunErasureScrubInput): Promise<RunE
       metadata: { dsarId: dsar.id, reviewsScrubbed },
     });
   }
+  if (dsar.guestId && posOrdersDelinked > 0) {
+    await audit.log({
+      organisationId: dsar.organisationId,
+      actorUserId: null,
+      action: "pos.order.dsar_scrubbed",
+      targetType: "guest",
+      targetId: dsar.guestId,
+      metadata: { dsarId: dsar.id, posOrdersDelinked },
+    });
+  }
   await audit.log({
     organisationId: dsar.organisationId,
     actorUserId: null,
     action: "dsar.scrubbed",
     targetType: "dsar_request",
     targetId: dsar.id,
-    metadata: { guestId: dsar.guestId, reviewsScrubbed },
+    metadata: { guestId: dsar.guestId, reviewsScrubbed, posOrdersDelinked },
   });
 
   return {
@@ -181,5 +222,6 @@ export async function runErasureScrub(input: RunErasureScrubInput): Promise<RunE
     alreadyScrubbed: false,
     guestId: dsar.guestId,
     reviewsScrubbed,
+    posOrdersDelinked,
   };
 }
