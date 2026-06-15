@@ -101,3 +101,4 @@ Before flipping from "private beta" to "public beta":
 - [ ] Cookie banner / privacy notice on widget and dashboard.
 - [ ] `/.well-known/security.txt` published.
 - [ ] Domain email (SPF, DKIM, DMARC) configured for `@tablekit.uk`.
+- [ ] **POS guest-hash backfill (migration 0050):** after the deploy that applies `0050_curious_havok.sql`, run `DATABASE_URL="<prod>" pnpm db:backfill-phone-hash --dry-run` then without `--dry-run` to populate `guests.phone_hash` for pre-0050 guests, so POS phone-hash matching works for existing guests. Idempotent + resumable; the script prints the target DB host (no credentials) so you can confirm prod-not-dev before writing. Do this before connecting the first venue's till. (New guests get the hash automatically via `upsertGuest`; email-hash + booking matching already work without it.)

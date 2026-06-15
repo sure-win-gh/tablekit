@@ -18,6 +18,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
+    "db:backfill-phone-hash": "tsx --conditions=react-server scripts/backfill-phone-hash.ts",
     "check:rls": "tsx scripts/check-rls.ts",
     "test": "vitest run",
     "test:watch": "vitest",
