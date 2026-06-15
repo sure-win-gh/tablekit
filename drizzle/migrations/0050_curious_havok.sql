@@ -1,0 +1,2 @@
+ALTER TABLE "guests" ADD COLUMN "phone_hash" text;--> statement-breakpoint
+CREATE INDEX "guests_org_phone_hash_idx" ON "guests" USING btree ("organisation_id","phone_hash") WHERE "guests"."phone_hash" is not null;

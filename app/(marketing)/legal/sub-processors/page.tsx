@@ -42,6 +42,24 @@ const ROWS: Row[] = [
     region: "EU (Ireland)",
     dpa: "Signed",
   },
+  {
+    name: "Google (Business Profile API)",
+    purpose: "Review sync + operator replies",
+    region: "Global (review data already public; OAuth tokens encrypted)",
+    dpa: "Signed",
+  },
+  {
+    name: "Square",
+    purpose: "POS order/spend ingest (Plus tier)",
+    region: "Global (US-HQ) — non-EU; SCCs / UK IDTA + TRA before first use",
+    dpa: "Pending (Plus, pre-launch)",
+  },
+  {
+    name: "Lightspeed (Restaurant K-Series)",
+    purpose: "POS order/spend ingest (Plus tier, partner-gated)",
+    region: "Confirmed at onboarding; SCCs / UK IDTA + TRA if non-EEA",
+    dpa: "Pending (Plus, pre-launch)",
+  },
   { name: "Sentry", purpose: "Error tracking", region: "EU", dpa: "Signed" },
   {
     name: "Cloudflare",
@@ -51,7 +69,7 @@ const ROWS: Row[] = [
   },
 ];
 
-const LAST_UPDATED = "2026-06-01";
+const LAST_UPDATED = "2026-06-13";
 
 export default function SubProcessorsPage() {
   return (

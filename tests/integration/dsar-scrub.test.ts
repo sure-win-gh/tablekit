@@ -35,6 +35,7 @@ type Ctx = {
   guestId: string;
   bookingId: string;
   internalReviewId: string;
+  posOrderId: string;
 };
 let ctx: Ctx;
 
@@ -183,6 +184,43 @@ beforeAll(async () => {
     openedAt: sql`now()`,
   });
 
+  // A POS connection + an order linked to the guest, with encrypted line
+  // items (Art. 9), plus the spend-summary cache. The scrub must de-link
+  // the order (keep the row), null its line items, and delete the summary.
+  const [posConn] = await db
+    .insert(schema.posConnections)
+    .values({
+      organisationId: org.id,
+      venueId: venue.id,
+      provider: "generic",
+      lineItemsEnabled: true,
+    })
+    .returning({ id: schema.posConnections.id });
+  const [posOrder] = await db
+    .insert(schema.posOrders)
+    .values({
+      organisationId: org.id,
+      venueId: venue.id,
+      connectionId: posConn!.id,
+      provider: "generic",
+      externalOrderId: `dsar-order-${run}`,
+      guestId: guest.id,
+      totalMinor: 4200,
+      closedAt: sql`now() - interval '7 days'`,
+      matchMethod: "email_hash",
+      lineItemsCipher: await encryptPii(
+        org.id,
+        JSON.stringify([{ name: "Wine", quantity: 1, totalMinor: 3000 }]),
+      ),
+    })
+    .returning({ id: schema.posOrders.id });
+  await db.insert(schema.guestSpendSummary).values({
+    guestId: guest.id,
+    organisationId: org.id,
+    orderCount: 1,
+    totalSpendMinor: 4200,
+  });
+
   ctx = {
     userId,
     orgId: org.id,
@@ -190,6 +228,7 @@ beforeAll(async () => {
     guestId: guest.id,
     bookingId: booking.id,
     internalReviewId: internalReview.id,
+    posOrderId: posOrder!.id,
   };
 });
 
@@ -297,6 +336,30 @@ describe("runErasureScrub", () => {
     expect(bookingAfter?.dietaryNotesCipher).toBeNull();
     // highChairs is a non-PII int; row retained, count preserved.
     expect(bookingAfter?.highChairs).toBe(2);
+
+    // POS order de-linked: the row survives (anonymous venue revenue) but
+    // guest_id + match_method + line_items_cipher (Art. 9) are nulled.
+    expect(r.posOrdersDelinked).toBe(1);
+    const [posOrderAfter] = await db
+      .select({
+        guestId: schema.posOrders.guestId,
+        matchMethod: schema.posOrders.matchMethod,
+        lineItemsCipher: schema.posOrders.lineItemsCipher,
+        totalMinor: schema.posOrders.totalMinor,
+      })
+      .from(schema.posOrders)
+      .where(eq(schema.posOrders.id, ctx.posOrderId));
+    expect(posOrderAfter?.guestId).toBeNull();
+    expect(posOrderAfter?.matchMethod).toBeNull();
+    expect(posOrderAfter?.lineItemsCipher).toBeNull();
+    expect(posOrderAfter?.totalMinor).toBe(4200); // revenue retained
+
+    // The spend-summary cache for the guest is deleted outright.
+    const summaryAfter = await db
+      .select({ guestId: schema.guestSpendSummary.guestId })
+      .from(schema.guestSpendSummary)
+      .where(eq(schema.guestSpendSummary.guestId, ctx.guestId));
+    expect(summaryAfter).toHaveLength(0);
 
     // Internal review scrubbed — both consistency-check pairs nulled
     // together so the CHECK constraints pass.

@@ -344,6 +344,20 @@
       "when": 1781009349929,
       "tag": "0048_greedy_george_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1781346559584,
+      "tag": "0049_legal_luke_cage",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1781349560698,
+      "tag": "0050_curious_havok",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,6 @@
 # Spec: Marketing campaigns (Plus tier)
 
-**Status:** draft — Phase 3 of the Automation & Engagement plan.
+**Status:** shipped (PR #70) — Phase 3 of the Automation & Engagement plan.
 **Depends on:** `messaging.md`, `whatsapp.md`, `message-customisation.md`, `guests.md`, `docs/playbooks/gdpr.md`, `docs/playbooks/payments.md`
 
 ## What we're building

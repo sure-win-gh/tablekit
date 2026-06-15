@@ -48,6 +48,14 @@
     {
       "path": "/api/cron/billing-meter-sync",
       "schedule": "40 5 * * *"
+    },
+    {
+      "path": "/api/cron/pos-backfill",
+      "schedule": "50 5 * * *"
+    },
+    {
+      "path": "/api/cron/pos-retention",
+      "schedule": "10 6 * * *"
     }
   ]
 }
