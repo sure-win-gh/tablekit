@@ -62,6 +62,18 @@ const ROWS: Row[] = [
   },
   { name: "Sentry", purpose: "Error tracking", region: "EU", dpa: "Signed" },
   {
+    name: "Upstash (Redis)",
+    purpose: "Rate limiting / abuse prevention (no booking data)",
+    region: "EU region",
+    dpa: "Signed",
+  },
+  {
+    name: "Slack (Salesforce)",
+    purpose: "Operational alerting (no guest data in alerts)",
+    region: "Global (US) — non-EU; SCCs / UK IDTA in place; alerts PII-free by policy",
+    dpa: "Signed",
+  },
+  {
     name: "Cloudflare",
     purpose: "DNS, WAF, edge cache (no PII routed)",
     region: "Global",
@@ -69,7 +81,7 @@ const ROWS: Row[] = [
   },
 ];
 
-const LAST_UPDATED = "2026-06-13";
+const LAST_UPDATED = "2026-06-19";
 
 export default function SubProcessorsPage() {
   return (

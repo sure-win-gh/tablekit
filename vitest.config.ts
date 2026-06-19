@@ -4,7 +4,13 @@ import { resolve } from "node:path";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["tests/unit/**/*.test.ts", "tests/unit/**/*.test.tsx"],
+    include: [
+      "tests/unit/**/*.test.ts",
+      "tests/unit/**/*.test.tsx",
+      // Fast, dependency-free security tests (e.g. the GDPR-mandated
+      // Sentry PII scrubber) run in the same pass as unit tests.
+      "tests/security/**/*.test.ts",
+    ],
     exclude: ["node_modules", ".next", "tests/e2e/**"],
     setupFiles: ["tests/unit/setup.ts"],
     globals: false,
