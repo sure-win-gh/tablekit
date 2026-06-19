@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import { Button, Field, Input, cn } from "@/components/ui";
@@ -55,6 +56,14 @@ export function LoginForm() {
               autoComplete="current-password"
               required
             />
+            <div className="mt-1.5 text-right">
+              <Link
+                href="/forgot-password"
+                className="text-ash hover:text-ink text-sm underline underline-offset-4"
+              >
+                Forgot password?
+              </Link>
+            </div>
           </Field>
         ) : null}
 

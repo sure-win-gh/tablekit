@@ -217,6 +217,36 @@ export const outreachClaims = pgTable(
   (t) => [index("outreach_claims_created_at_idx").on(t.createdAt.desc())],
 );
 
+// Self-service + support-triggered password reset tokens. Platform-level
+// (not tenant-scoped), same RLS posture as outreach_claims: deny-all to
+// authenticated/anon — every read/write goes through adminDb() from the
+// reset server actions. We persist only the SHA-256 hash of the token;
+// the plaintext lives in the emailed URL only. No email column —
+// user_id is enough, and storing less PII is the point (gdpr.md). See
+// docs/specs/password-reset.md.
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // sha256 hex of the base64url token (plaintext never stored).
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    // Single-use: set on a successful reset; resolve ignores used rows.
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    // NULL = self-serve. Set to the platform admin who triggered the
+    // reset on the user's behalf (support flow) — forensics + email copy.
+    // SET NULL on that admin's user erasure (preserve the token row).
+    initiatedByAdminId: uuid("initiated_by_admin_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("password_reset_tokens_user_idx").on(t.userId)],
+);
+
 // Append-only log of security-relevant events. Per gdpr.md retention
 // table: 2 years. Inserts are restricted by RLS — writes go through
 // the audit.log() helper under lib/server/admin/.

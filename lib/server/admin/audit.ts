@@ -24,6 +24,8 @@ export type AuditAction =
   | "signup"
   | "login.success"
   | "login.failure"
+  | "password_reset.requested"
+  | "password_reset.completed"
   // venues phase
   | "venue.created"
   | "venue.updated"

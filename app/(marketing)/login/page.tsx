@@ -6,12 +6,26 @@ export const metadata = {
   title: "Sign in · TableKit",
 };
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ reset?: string }>;
+}) {
+  const { reset } = await searchParams;
   return (
     <main className="flex flex-1 flex-col items-center justify-center p-6">
       <div className="w-full max-w-md">
         <h1 className="text-ink text-3xl font-bold tracking-tight">Sign in</h1>
         <p className="text-ash mt-1.5 text-sm">Use your password, or ask for a one-time link.</p>
+        {reset === "1" ? (
+          <div
+            role="status"
+            className="rounded-card border-hairline bg-cloud text-charcoal mt-6 border p-4 text-sm"
+          >
+            <p className="text-ink font-semibold">Password updated.</p>
+            <p className="mt-1">Sign in with your new password.</p>
+          </div>
+        ) : null}
         <div className="mt-8">
           <LoginForm />
         </div>

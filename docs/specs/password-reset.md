@@ -1,6 +1,6 @@
 # Spec: Password reset
 
-**Status:** Draft (security audit P2 — requirement #2).
+**Status:** In progress (security audit P2 — requirement #2).
 
 ## Depends on
 
@@ -22,6 +22,8 @@ are version-controlled and tested); Supabase only performs the final password wr
 - As an operator, I can follow that link within 15 minutes and set a new password.
 - As an operator, I cannot reuse a reset link once it has set a password.
 - As a stranger, I cannot tell from the response whether an email belongs to a real account.
+- As support (platform admin), I can trigger a reset email to a user who can't self-serve —
+  sent to their address on file — without ever seeing or setting their password.
 
 ## Data model
 
@@ -35,6 +37,7 @@ create table password_reset_tokens (
   token_hash  text not null unique,             -- sha256 hex of the base64url token
   expires_at  timestamptz not null,             -- now() + 15 min
   used_at     timestamptz,                       -- single-use: set on successful reset
+  initiated_by_admin_id uuid references users(id) on delete set null, -- NULL = self-serve
   created_at  timestamptz not null default now()
 );
 create index password_reset_tokens_user_idx on password_reset_tokens (user_id);
@@ -70,6 +73,29 @@ user first, enforced in `lib/auth/password-reset.ts` (mirrors `lib/auth/invitati
   wrapper carries only a bland error code, never the raw SDK error (`gdpr.md` §logs).
 - **Cleanup** a daily Vercel cron deletes `used_at`-set or expired rows older than 24h.
 
+## Admin-initiated reset (support)
+
+For users who can't self-serve. Support **triggers** the same flow; it never sees, sets, or
+routes the password. Strictly gated and audited.
+
+- **Action** `triggerPasswordReset({ userId, reason })` in the `(admin)` route group, behind
+  `requirePlatformAdmin()` (ADMIN_EMAILS allowlist + the edge `proxy.ts` 404 — re-checked in the
+  action). Resolves the user, rate-limits per-admin (blast-radius cap), mints the **same** token
+  with `initiated_by_admin_id` set, and emails the reset link **to the user's address on file**
+  — an admin-supplied destination is never honoured.
+- **UI** — a "Send password reset" control on the existing org detail page
+  `app/(admin)/admin/venues/[orgId]/page.tsx` (it already lists members + emails). The on-file
+  email is shown read-only; it is the destination, not an input. A reason / ticket ref is required.
+- **Audit** — `platform_audit_log` via `platformAudit.log("password_reset.triggered", …)` (actor
+  = admin email, target = user, metadata = reason) **and** the org `audit_log`
+  (`password_reset.requested`, metadata `{ via: "admin" }`) so the operator sees it too.
+- **Completion is identical** to self-serve: same `/reset-password` page, same single-use +
+  session revocation. The user finishes from their own inbox.
+- **Not built** (deliberate, to keep the account-takeover surface closed): support setting/seeing
+  a password or a temp credential; support changing the destination email; any in-tool "lost
+  email access" recovery — that case is a documented out-of-band manual identity-verification
+  procedure that still ends in verifying a new address.
+
 ## Acceptance criteria
 
 - [ ] Requesting a reset for an unknown email returns the **same** neutral response as a known
@@ -85,6 +111,9 @@ user first, enforced in `lib/auth/password-reset.ts` (mirrors `lib/auth/invitati
       integration test (CLAUDE.md rule 3).
 - [ ] `password_reset.requested` and `password_reset.completed` are written to the audit log.
 - [ ] `/login` links to `/forgot-password`; happy path covered by a Playwright smoke test.
+- [ ] Admin trigger is gated by `requirePlatformAdmin()`; a non-allowlisted caller is rejected.
+- [ ] Admin trigger mints with `initiated_by_admin_id` set, sends to the **on-file** email only,
+      and writes both a `platform_audit_log` and an org `audit_log` row.
 
 ## Marketing impact
 
@@ -95,3 +124,5 @@ user first, enforced in `lib/auth/password-reset.ts` (mirrors `lib/auth/invitati
 - Changing your password while logged in (a separate `/dashboard/settings/security` flow).
 - Passkey/WebAuthn and SSO/SAML (tracked in `auth.md` out-of-scope).
 - Magic-link login (already exists) and email-address change.
+- Support setting/seeing a password, changing the reset destination email, or any in-tool
+  recovery when the user has also lost email access (handled out-of-band — see above).
