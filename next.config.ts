@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 // Content-Security-Policy for the public booking surfaces.
 //
@@ -87,4 +88,25 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Wrap with Sentry so production source maps upload during the Vercel
+// build and stack traces are readable. All upload behaviour is gated
+// on SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_PROJECT being present —
+// with no token the wrapper is inert, so local `next build` and CI
+// without Sentry secrets behave exactly as before.
+//
+// silent: only log upload output in CI. widenClientFileUpload: better
+// stack frames. tunnelRoute: routes browser events through our own
+// origin so ad-blockers don't drop them.
+export default withSentryConfig(nextConfig, {
+  // Spread the env-derived options only when set: under
+  // exactOptionalPropertyTypes these keys are typed `string`, not
+  // `string | undefined`, so passing an absent var explicitly is a type
+  // error (and the wrapper treats absent and undefined identically).
+  ...(process.env["SENTRY_ORG"] ? { org: process.env["SENTRY_ORG"] } : {}),
+  ...(process.env["SENTRY_PROJECT"] ? { project: process.env["SENTRY_PROJECT"] } : {}),
+  ...(process.env["SENTRY_AUTH_TOKEN"] ? { authToken: process.env["SENTRY_AUTH_TOKEN"] } : {}),
+  silent: !process.env["CI"],
+  widenClientFileUpload: true,
+  tunnelRoute: "/monitoring",
+  disableLogger: true,
+});

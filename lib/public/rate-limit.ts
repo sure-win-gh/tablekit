@@ -71,6 +71,63 @@ export async function rateLimit(
   }
 }
 
+/**
+ * Read-only check of a bucket's current fill without recording a hit.
+ *
+ * Use where an attempt should only *count* on failure — the per-account
+ * login throttle peeks before auth (blocking once the window is full),
+ * then calls `rateLimit` to record a hit only when auth actually fails.
+ * That way a member's successful logins never consume their own budget,
+ * while credential-stuffing one account still trips at the limit.
+ *
+ * Same fail-open posture as `rateLimit`. Blocks at `count >= limit`
+ * (whereas `rateLimit` uses `> limit` because it counts after adding the
+ * current hit) — both allow exactly `limit` hits per window.
+ */
+export async function peekRateLimit(
+  bucket: string,
+  limit: number,
+  windowSec: number,
+): Promise<RateLimitResult> {
+  const upstashUrl = process.env["UPSTASH_REDIS_REST_URL"];
+  const upstashToken = process.env["UPSTASH_REDIS_REST_TOKEN"];
+  if (!upstashUrl || !upstashToken) {
+    return { ok: true, remaining: limit };
+  }
+
+  const windowStart = Date.now() - windowSec * 1000;
+  const key = `rl:${bucket}`;
+  const pipeline = [
+    ["ZREMRANGEBYSCORE", key, "0", String(windowStart)],
+    ["ZCARD", key],
+  ];
+
+  try {
+    const res = await fetch(`${upstashUrl}/pipeline`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${upstashToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(pipeline),
+      signal: AbortSignal.timeout(1500),
+    });
+    if (!res.ok) {
+      return { ok: true, remaining: limit };
+    }
+    const data = (await res.json()) as Array<{ result: number | string }>;
+    const zcardEntry = data[1];
+    const count =
+      typeof zcardEntry?.result === "number" ? zcardEntry.result : Number(zcardEntry?.result ?? 0);
+    if (count >= limit) {
+      return { ok: false, remaining: 0, retryAfterSec: windowSec };
+    }
+    return { ok: true, remaining: Math.max(0, limit - count) };
+  } catch {
+    return { ok: true, remaining: limit };
+  }
+}
+
 // Helpful extractor — pulls the client IP from request headers. Works
 // behind Cloudflare (`cf-connecting-ip`) and Vercel (`x-forwarded-for`).
 // Falls back to a shared "unknown" bucket; callers use that as a last

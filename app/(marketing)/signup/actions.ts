@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
@@ -7,8 +8,14 @@ import { makeOrgSlug } from "@/lib/auth/slug";
 import { setActiveOrg } from "@/lib/auth/active-org";
 import { supabaseServer } from "@/lib/db/supabase-server";
 import { memberships, organisations } from "@/lib/db/schema";
+import { ipFromHeaders, rateLimit } from "@/lib/public/rate-limit";
 import { adminDb } from "@/lib/server/admin/db";
 import { audit } from "@/lib/server/admin/audit";
+
+// Stop mass account creation from a single source: 5 signups per IP
+// per 15 minutes (matches the auth-surface limit in security.md).
+const SIGNUP_ATTEMPTS = 5;
+const SIGNUP_WINDOW_SEC = 15 * 60;
 
 const SignupSchema = z.object({
   email: z.string().email().max(320),
@@ -39,6 +46,15 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
   }
 
   const { email, password, fullName, orgName } = parsed.data;
+
+  const ip = ipFromHeaders(await headers());
+  const ipLimit = await rateLimit(`signup:ip:${ip}`, SIGNUP_ATTEMPTS, SIGNUP_WINDOW_SEC);
+  if (!ipLimit.ok) {
+    return {
+      status: "error",
+      message: "Too many sign-up attempts. Please wait a few minutes and try again.",
+    };
+  }
 
   const supabase = await supabaseServer();
 
