@@ -123,6 +123,35 @@ describe("unknown token", () => {
   });
 });
 
+describe("admin-initiated mint", () => {
+  // The support flow reuses mintResetToken with initiatedByAdminId set, so
+  // the token row records which admin triggered it (forensics + email copy).
+  it("tags the token with the initiating admin id", async () => {
+    const { data, error } = await admin.auth.admin.createUser({
+      email: `pwreset-admin-${run}@tablekit.test`,
+      password: "integration-test-pw-1234",
+      email_confirm: true,
+    });
+    if (error || !data.user) throw error ?? new Error("createUser (admin) failed");
+    const adminId = data.user.id;
+
+    try {
+      const { tokenId } = await mintResetToken(userId, { initiatedByAdminId: adminId });
+      const [row] = await db
+        .select({
+          userId: schema.passwordResetTokens.userId,
+          initiatedByAdminId: schema.passwordResetTokens.initiatedByAdminId,
+        })
+        .from(schema.passwordResetTokens)
+        .where(eq(schema.passwordResetTokens.id, tokenId));
+      expect(row?.userId).toBe(userId);
+      expect(row?.initiatedByAdminId).toBe(adminId);
+    } finally {
+      await admin.auth.admin.deleteUser(adminId).catch(() => undefined);
+    }
+  });
+});
+
 describe("session revocation", () => {
   // The reset action revokes the user's other sessions via a service-role
   // `delete from auth.sessions`. Prove the adminDb role has that grant and
