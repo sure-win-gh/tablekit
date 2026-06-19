@@ -88,6 +88,18 @@ describe("re-mint invalidation", () => {
     expect(await resolveResetToken(first.token)).toBeNull();
     expect(await resolveResetToken(second.token)).toEqual({ userId });
   });
+
+  it("preserves a USED token row when a new one is minted (forensics)", async () => {
+    const used = await mintResetToken(userId);
+    await consumeResetToken(used.token); // now used
+    await mintResetToken(userId); // mints another — must not delete the used row
+    const [row] = await db
+      .select({ usedAt: schema.passwordResetTokens.usedAt })
+      .from(schema.passwordResetTokens)
+      .where(eq(schema.passwordResetTokens.id, used.tokenId));
+    expect(row).toBeDefined();
+    expect(row?.usedAt).not.toBeNull();
+  });
 });
 
 describe("retention sweep", () => {

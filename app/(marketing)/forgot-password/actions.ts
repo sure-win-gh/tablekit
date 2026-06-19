@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { buildResetUrl, mintResetToken } from "@/lib/auth/password-reset";
 import { memberships, users } from "@/lib/db/schema";
-import { sendEmail } from "@/lib/email/send";
+import { EmailSendError, sendEmail } from "@/lib/email/send";
 import { renderPasswordReset } from "@/lib/email/templates/password-reset";
 import { ipFromHeaders, rateLimit } from "@/lib/public/rate-limit";
 import { hashForLookup } from "@/lib/security/crypto";
@@ -58,11 +58,11 @@ export async function requestPasswordReset(
     await dispatchResetEmail(email);
   } catch (err) {
     // Never surface failure to the caller — the response is neutral whether
-    // or not the account exists or the send succeeded.
-    console.error(
-      "[password-reset] dispatch failed:",
-      err instanceof Error ? err.message : String(err),
-    );
+    // or not the account exists or the send succeeded. Log only a bland
+    // code: a Resend error message can echo the recipient address
+    // (e.g. invalid_to_address), which must not land in logs (gdpr.md §logs).
+    const code = err instanceof EmailSendError ? err.code : "dispatch-error";
+    console.error("[password-reset] dispatch failed:", code);
   }
 
   // Always the same neutral result — no account enumeration.

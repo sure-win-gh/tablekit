@@ -105,8 +105,11 @@ export async function resolveResetToken(token: string): Promise<{ userId: string
 const RETENTION_GRACE_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Delete tokens that are used or expired and older than the 24h grace
- * window. Called by the daily cleanup cron. Returns the count removed.
+ * Delete spent token rows past the 24h grace. A row is removed once it was
+ * used >24h ago OR expired >24h ago — so every token is swept 24h after its
+ * 15-min expiry regardless of whether it was used (an abandoned link is
+ * caught by the expiry predicate). Live rows survive. Called by the daily
+ * cleanup cron; returns the count removed.
  */
 export async function sweepResetTokenRetention(): Promise<{ deleted: number }> {
   const cutoff = new Date(Date.now() - RETENTION_GRACE_MS);

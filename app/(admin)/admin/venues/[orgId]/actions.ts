@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { buildResetUrl, mintResetToken } from "@/lib/auth/password-reset";
 import { memberships, users } from "@/lib/db/schema";
-import { sendEmail } from "@/lib/email/send";
+import { EmailSendError, sendEmail } from "@/lib/email/send";
 import { renderPasswordReset } from "@/lib/email/templates/password-reset";
 import { rateLimit } from "@/lib/public/rate-limit";
 import { audit } from "@/lib/server/admin/audit";
@@ -77,15 +77,23 @@ export async function triggerPasswordReset(
 
   // Always to the address ON FILE — an admin-supplied destination is never
   // accepted (the form only sends userId + reason).
-  await sendEmail({
-    to: user.email,
-    subject,
-    html,
-    text,
-    unsubscribeUrl: `${appUrl.replace(/\/$/, "")}/login`,
-    oneClickUnsubscribe: false,
-    idempotencyKey: `pwreset:${tokenId}`,
-  });
+  try {
+    await sendEmail({
+      to: user.email,
+      subject,
+      html,
+      text,
+      unsubscribeUrl: `${appUrl.replace(/\/$/, "")}/login`,
+      oneClickUnsubscribe: false,
+      idempotencyKey: `pwreset:${tokenId}`,
+    });
+  } catch (err) {
+    // Log a bland code only — a Resend error can echo the recipient address
+    // (gdpr.md §logs). The minted token is harmless (expires/swept).
+    const code = err instanceof EmailSendError ? err.code : "send-failed";
+    console.error("[password-reset] admin trigger send failed:", code);
+    return { status: "error", message: "Couldn't send the reset email. Please try again." };
+  }
 
   // Staff action (platform_audit_log) + operator-visible org audit.
   await platformAudit.log({
@@ -107,7 +115,10 @@ export async function triggerPasswordReset(
       action: "password_reset.requested",
       targetType: "user",
       targetId: user.id,
-      metadata: { via: "admin", adminEmail: session.email },
+      // Operator-readable log: record only that support triggered it. The
+      // staff member's identity stays in platform_audit_log (deny-all),
+      // never crossed into a tenant-readable log.
+      metadata: { via: "admin" },
     });
   }
 
