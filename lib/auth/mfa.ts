@@ -70,26 +70,50 @@ export type MfaGateDecision =
   | { kind: "enrol"; factorId: null }
   | { kind: "challenge"; factorId: string };
 
+// Outreach-claimed accounts get a grace window before the TOTP wall is
+// enforced, rather than the previous permanent bypass: a prospect
+// claiming a pre-populated account shouldn't hit a 2FA wall on first
+// login, but an owner account must not run without 2FA indefinitely
+// (security audit P2). After the window, normal owner/manager
+// enforcement applies.
+export const OUTREACH_MFA_GRACE_DAYS = 7;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 export type MfaGateOptions = {
   // Org was created via the outreach pre-populated-accounts flow
-  // (organisations.outreach_source IS NOT NULL). For these orgs we
-  // skip the TOTP wall entirely — the prospect's first-login friction
-  // matters more than enforcing 2FA on a freshly-claimed account.
-  // The operator can still enrol from /dashboard/settings/security.
+  // (organisations.outreach_source IS NOT NULL).
   outreachOrigin?: boolean;
+  // When the outreach org was claimed (organisations.claimed_at). The
+  // grace window runs from this instant. A null/absent timestamp grants
+  // no grace — we never hand out an indefinite bypass on missing data.
+  outreachClaimedAt?: Date | null;
+  // Injectable clock for deterministic tests; defaults to the real now.
+  now?: Date;
 };
 
-// Decide what to render given a role + MFA state. Pure — no I/O.
-// Centralised here so the layout, server actions, and any future
+// True while an outreach-origin account is still inside its post-claim
+// TOTP grace window.
+function isWithinOutreachGrace(opts: MfaGateOptions): boolean {
+  if (!opts.outreachOrigin) return false;
+  const claimedAt = opts.outreachClaimedAt;
+  if (!claimedAt) return false;
+  const now = opts.now ?? new Date();
+  return now.getTime() - claimedAt.getTime() < OUTREACH_MFA_GRACE_DAYS * MS_PER_DAY;
+}
+
+// Decide what to render given a role + MFA state. Pure given an injected
+// clock. Centralised here so the layout, server actions, and any future
 // API key-bypass paths agree on the rule.
 export function decideMfaGate(
   role: OrgRole,
   mfa: MfaState,
   opts: MfaGateOptions = {},
 ): MfaGateDecision {
-  if (opts.outreachOrigin) return { kind: "pass" };
   if (!isMfaRequired(role)) return { kind: "pass" };
   if (mfa.currentLevel === "aal2") return { kind: "pass" };
+  // Defer the wall during the outreach grace window. Once it lapses the
+  // account falls through to normal challenge/enrol enforcement.
+  if (isWithinOutreachGrace(opts)) return { kind: "pass" };
   if (mfa.hasVerifiedFactor && mfa.factorId) {
     return { kind: "challenge", factorId: mfa.factorId };
   }

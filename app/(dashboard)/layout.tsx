@@ -34,12 +34,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
         const [row] = await db
           .select({
             role: memberships.role,
-            // Outreach-origin orgs bypass the TOTP wall on first
-            // claim. organisations.outreach_source is NULL for orgs
-            // created via normal /signup. RLS lets the caller see
-            // their own org row through the existing membership-scope
-            // policy.
+            // Outreach-origin orgs get a grace window before the TOTP
+            // wall is enforced (not a permanent bypass). outreach_source
+            // is NULL for orgs created via normal /signup; claimed_at is
+            // when the prospect claimed the account and starts the grace
+            // clock. RLS lets the caller see their own org row through
+            // the existing membership-scope policy.
             outreachSource: organisations.outreachSource,
+            claimedAt: organisations.claimedAt,
           })
           .from(memberships)
           .innerJoin(organisations, eq(organisations.id, memberships.organisationId))
@@ -53,6 +55,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         if (mfa) {
           const decision = decideMfaGate(member.role, mfa, {
             outreachOrigin: member.outreachSource !== null,
+            outreachClaimedAt: member.claimedAt,
           });
           if (decision.kind === "enrol") {
             return <MfaWall mode="enrol" />;
