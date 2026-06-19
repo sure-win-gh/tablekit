@@ -608,6 +608,16 @@ export const bookings = pgTable(
     // Lead-time + creation-bucketed analytics filter on created_at, which
     // the (venue_id, start_at) index doesn't cover.
     index("bookings_venue_created_idx").on(t.venueId, t.createdAt),
+    // Hottest read paths — floor view, availability/overlap checks, the
+    // heatmap and covers reports — scan venue_id + a start_at range and
+    // exclude cancelled rows (`status <> 'cancelled'`). A partial index
+    // on (venue_id, start_at) over only the active rows keeps the
+    // start_at range seek (status is a negation, so it can't be an
+    // index-ordered column) while staying small as cancelled history
+    // grows (security audit P2).
+    index("bookings_venue_start_active_idx")
+      .on(t.venueId, t.startAt)
+      .where(sql`${t.status} <> 'cancelled'`),
   ],
 );
 
