@@ -6,6 +6,8 @@ import { adminDb } from "@/lib/server/admin/db";
 import { platformAudit } from "@/lib/server/admin/dashboard/audit";
 import { getOrgDetail } from "@/lib/server/admin/dashboard/metrics/org-detail";
 
+import { ResetPasswordControl } from "./reset-control";
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminOrgDrillDownPage({
@@ -82,6 +84,7 @@ export default async function AdminOrgDrillDownPage({
                 <th className="py-1 font-medium">Email</th>
                 <th className="py-1 font-medium">Role</th>
                 <th className="py-1 font-medium">Joined</th>
+                <th className="py-1 font-medium">Password</th>
               </tr>
             </thead>
             <tbody className="divide-hairline divide-y">
@@ -90,6 +93,9 @@ export default async function AdminOrgDrillDownPage({
                   <td className="text-ink py-1.5">{m.email}</td>
                   <td className="text-ink py-1.5">{m.role}</td>
                   <td className="text-ash py-1.5 tabular-nums">{fmtDate(m.createdAt)}</td>
+                  <td className="py-1.5 align-top">
+                    <ResetPasswordControl userId={m.userId} email={m.email} />
+                  </td>
                 </tr>
               ))}
             </tbody>

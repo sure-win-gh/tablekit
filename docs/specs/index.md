@@ -46,6 +46,12 @@ This folder holds the source of truth for every feature. Claude should read the 
 |----|--------------------------------------------|-------|
 | 99 | [`admin-dashboard.md`](admin-dashboard.md) | shipped — founder-only platform metrics, ops health, venue search. Live Stripe pull for MRR; env allowlist auth. CSV export across all headline metrics + recharts-powered sparklines (admin-bundle code-split). |
 
+## Security & hardening (audit follow-ups)
+
+| Spec | Status | Notes |
+|------|--------|-------|
+| [`password-reset.md`](password-reset.md) | draft | Self-owned reset: 15-min single-use token table (`password_reset_tokens`, RLS deny-all) + `/forgot-password` + `/reset-password`, enumeration-safe, rate-limited, sessions revoked on reset. Supabase does only the final password write. Security audit P2 (req #2). Extends `auth.md`. |
+
 ## How to use
 
 1. Before implementing a feature, open its spec and check the acceptance criteria.

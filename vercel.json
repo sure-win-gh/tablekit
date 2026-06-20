@@ -56,6 +56,10 @@
     {
       "path": "/api/cron/pos-retention",
       "schedule": "10 6 * * *"
+    },
+    {
+      "path": "/api/cron/reset-token-retention",
+      "schedule": "30 6 * * *"
     }
   ]
 }
