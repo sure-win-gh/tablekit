@@ -97,6 +97,8 @@ Before flipping from "private beta" to "public beta":
 - [ ] Kill switches tested on staging.
 - [ ] Status page live.
 - [ ] Rate limits set to production values (not dev).
+- [ ] **Upstash configured** (`UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`) — the rate limiter fails *open* if unset, silently disabling all auth/abuse throttling. The boot check in `instrumentation.ts` logs a critical alert if these are missing in production.
+- [ ] **Supabase "Confirm email" is ON** (Authentication → Providers → Email). If off, signups get a session without verifying the address. Lives in the Supabase dashboard, not code — verify after any project change. Signup reports to Sentry as a tripwire if it ever sees a live session at signup in production.
 - [ ] Encryption master key wrapped in Supabase Vault; rotation tested.
 - [ ] Cookie banner / privacy notice on widget and dashboard.
 - [ ] `/.well-known/security.txt` published.
