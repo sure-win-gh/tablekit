@@ -48,13 +48,21 @@ Not the primary target (yet): nation-state actors, supply-chain compromise of al
 - Widget host (`book.tablekit.uk`): allow framing by `*` (embeddable), but strict script-src.
 - No `unsafe-inline` in production.
 
-**Current state (target, not yet met):** the public surfaces (`/embed`, `/book`) ship
-`Content-Security-Policy-Report-Only` (see `next.config.ts`), with violations collected at
-`/api/csp-report`. `script-src`/`style-src` still carry `unsafe-inline` (Next.js hydration
-scripts + Tailwind/Stripe/hCaptcha inline styles). **Flipping to enforcing is deferred** until
-we ship nonce-based CSP (a custom App-Router script-handling shim) — flipping with
-`unsafe-inline` in place would be near-pointless, and a naive flip risks breaking hydration.
-Tracked as a follow-up, not closed by the P3 audit batch.
+**Current state:**
+
+- **Authenticated app (`/dashboard`, `/admin`): nonce-based CSP.** Generated per request in
+  `proxy.ts` (`lib/security/csp.ts` builds it); `script-src 'self' 'nonce-…' 'strict-dynamic'`
+  with **no `'unsafe-inline'`** — Next.js stamps the nonce onto its framework scripts; these
+  surfaces load no inline or third-party client scripts (Stripe on the dashboard is a full-page
+  redirect, hCaptcha is widget-only, Sentry is a self-hosted chunk). `style-src` keeps
+  `'unsafe-inline'` **by design** — React renders inline `style={{}}` attributes that can't be
+  nonced, and style injection is low XSS risk. So "no `unsafe-inline`" above means **scripts
+  only**. Ships **Report-Only** first; `CSP_DASHBOARD_ENFORCE=true` flips it to enforcing (an env
+  change after a soak — no code change, instantly reversible). Violations → `/api/csp-report`.
+- **Public widget surfaces (`/embed`, `/book`): still Report-Only** (`next.config.ts`), with
+  `unsafe-inline` retained. **Enforcing is deferred** — they embed third-party scripts
+  (Stripe Elements, hCaptcha) and are edge-cached + run on customer sites, so a nonce migration
+  carries real breakage risk for a defense-in-depth layer. Tracked as a separate future project.
 
 ### CORS — same-origin by design (no `Access-Control-Allow-Origin`)
 We emit **no** CORS headers, and that is the correct, secure default for this architecture, not
