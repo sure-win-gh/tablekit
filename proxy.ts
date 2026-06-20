@@ -20,19 +20,47 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { dashboardCsp } from "@/lib/security/csp";
 import { isPlatformAdminEmail } from "@/lib/server/admin/allowlist";
 
 function notFound(): NextResponse {
   return new NextResponse(null, { status: 404 });
 }
 
-export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request });
+// Per-request CSP nonce. Edge-safe (Web Crypto + btoa; no node:crypto/Buffer).
+function generateNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
+}
 
-  const isAdminRoute = request.nextUrl.pathname.startsWith("/admin");
+export async function proxy(request: NextRequest) {
+  // Nonce-based CSP for the authenticated app surfaces (/dashboard, /admin).
+  // Set the nonce + the CSP on the *request* headers before the first
+  // NextResponse.next({ request }) so Next stamps the nonce onto its framework
+  // <script> tags; x-nonce lets app code nonce its own scripts (none today).
+  // Mutating request.headers in place means the Supabase cookie block's own
+  // NextResponse.next({ request }) calls forward them too. See
+  // docs/playbooks/security.md (dashboard CSP) + lib/security/csp.ts.
+  const pathname = request.nextUrl.pathname;
+  const isAdminRoute = pathname.startsWith("/admin");
+  const isAppSurface = pathname.startsWith("/dashboard") || isAdminRoute;
 
   const supabaseUrl = process.env["NEXT_PUBLIC_SUPABASE_URL"];
   const supabaseKey = process.env["NEXT_PUBLIC_SUPABASE_ANON_KEY"];
+
+  let csp: string | null = null;
+  if (isAppSurface) {
+    const nonce = generateNonce();
+    csp = dashboardCsp(nonce, supabaseUrl ? { supabaseUrl } : {});
+    request.headers.set("x-nonce", nonce);
+    request.headers.set("Content-Security-Policy", csp);
+  }
+
+  let response = NextResponse.next({ request });
+
   if (!supabaseUrl || !supabaseKey) {
     // /admin must fail closed even when env is misconfigured — losing
     // the gate to an env typo would be a worst-case outcome.
@@ -72,6 +100,23 @@ export async function proxy(request: NextRequest) {
     url.pathname = "/login";
     url.searchParams.set("next", request.nextUrl.pathname);
     return NextResponse.redirect(url);
+  }
+
+  // Apply the browser-enforced CSP to the rendered app-surface response.
+  // Report-Only by default; CSP_DASHBOARD_ENFORCE=true flips to enforcing
+  // (an env change after the soak — no code change, instantly reversible).
+  // The early returns above (admin 404, dashboard→/login) render no scripts,
+  // so they need no policy.
+  if (csp) {
+    const header =
+      process.env["CSP_DASHBOARD_ENFORCE"] === "true"
+        ? "Content-Security-Policy"
+        : "Content-Security-Policy-Report-Only";
+    response.headers.set(header, csp);
+    // Declares the `report-to` group named in the policy → modern Chrome
+    // delivers violations to /api/csp-report (which accepts the Reporting-API
+    // format). report-uri remains the fallback for other browsers.
+    response.headers.set("Reporting-Endpoints", 'csp-endpoint="/api/csp-report"');
   }
 
   return response;
