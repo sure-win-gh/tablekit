@@ -8,6 +8,7 @@ import { makeOrgSlug } from "@/lib/auth/slug";
 import { setActiveOrg } from "@/lib/auth/active-org";
 import { supabaseServer } from "@/lib/db/supabase-server";
 import { memberships, organisations } from "@/lib/db/schema";
+import { captureMessage } from "@/lib/observability/capture";
 import { ipFromHeaders, rateLimit } from "@/lib/public/rate-limit";
 import { adminDb } from "@/lib/server/admin/db";
 import { audit } from "@/lib/server/admin/audit";
@@ -122,6 +123,17 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
   // active-org cookie when the user clicks the link.
   if (!authData.session) {
     return { status: "needs_confirm", email };
+  }
+
+  // A live session straight after signup means Supabase's "Confirm email"
+  // setting is OFF — a production misconfiguration (sessions granted without
+  // verifying the address; see security.md "Auth invariants" + the deploy
+  // checklist). Surface it loudly so it's caught, but don't block the user.
+  if ((process.env["VERCEL_ENV"] ?? process.env["NODE_ENV"]) === "production") {
+    captureMessage(
+      "signup: live session without email confirmation — Supabase 'Confirm email' is off",
+      "error",
+    );
   }
 
   // Email-confirm off: session is live now, drop them on the dashboard

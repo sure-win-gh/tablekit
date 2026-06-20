@@ -48,6 +48,32 @@ Not the primary target (yet): nation-state actors, supply-chain compromise of al
 - Widget host (`book.tablekit.uk`): allow framing by `*` (embeddable), but strict script-src.
 - No `unsafe-inline` in production.
 
+**Current state (target, not yet met):** the public surfaces (`/embed`, `/book`) ship
+`Content-Security-Policy-Report-Only` (see `next.config.ts`), with violations collected at
+`/api/csp-report`. `script-src`/`style-src` still carry `unsafe-inline` (Next.js hydration
+scripts + Tailwind/Stripe/hCaptcha inline styles). **Flipping to enforcing is deferred** until
+we ship nonce-based CSP (a custom App-Router script-handling shim) — flipping with
+`unsafe-inline` in place would be near-pointless, and a naive flip risks breaking hydration.
+Tracked as a follow-up, not closed by the P3 audit batch.
+
+### CORS — same-origin by design (no `Access-Control-Allow-Origin`)
+We emit **no** CORS headers, and that is the correct, secure default for this architecture, not
+an omission:
+- The embeddable widget runs in a same-origin iframe served from our own host.
+- The Plus-tier REST API (`/api/v1`) is authenticated by bearer token (backend-to-backend), so
+  no browser ever makes a cross-origin call that would need CORS.
+A future change must **never** add a wildcard `Access-Control-Allow-Origin: *`. A guard test
+(`tests/unit/no-cors-wildcard.test.ts`) asserts no `Access-Control-Allow-Origin` appears in
+`next.config.ts` headers or any `app/api/**` route.
+
+### Auth invariants (production)
+- **Email confirmation must stay ON.** Signup relies on Supabase's "Confirm email" project
+  setting: with it on, `signUp()` returns no session and the action returns `needs_confirm`. If
+  it were turned off, signups would be granted a session immediately (unverified address). This
+  setting lives in the Supabase dashboard, not in code — keep it on in production (see the
+  deploy checklist). As a tripwire, the signup action reports to Sentry if it ever sees a live
+  session straight after signup in production.
+
 ### Rate limiting
 - Auth endpoints: 5 attempts per IP per 15 minutes, 3 per account per hour.
 - Booking widget: 20 requests per IP per minute, CAPTCHA (hCaptcha) after 5.
