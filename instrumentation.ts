@@ -13,6 +13,18 @@ import * as Sentry from "@sentry/nextjs";
 import { scrubEvent } from "@/lib/observability/sentry-scrub";
 
 export async function register(): Promise<void> {
+  // Boot tripwire: the rate limiter (lib/public/rate-limit.ts) fails OPEN if
+  // Upstash isn't configured, silently disabling all auth/abuse throttling.
+  // In production that's a serious misconfiguration — surface it loudly in
+  // logs (and to Sentry below once it's initialised) rather than degrade
+  // silently. See docs/playbooks/{security,deploy}.md.
+  const upstashMissing = missingUpstashInProd();
+  if (upstashMissing.length > 0) {
+    console.error(
+      `[boot] CRITICAL: rate limiter fails OPEN — Upstash not configured (${upstashMissing.join(", ")}). Auth/abuse throttling is DISABLED.`,
+    );
+  }
+
   const dsn = process.env["SENTRY_DSN"];
   if (!dsn) return;
 
@@ -33,10 +45,28 @@ export async function register(): Promise<void> {
 
   if (process.env["NEXT_RUNTIME"] === "nodejs") {
     Sentry.init(common);
+    // Now that Sentry is up, also page on the Upstash misconfig.
+    if (upstashMissing.length > 0) {
+      Sentry.captureMessage(
+        `rate limiter fails open: Upstash not configured in production (${upstashMissing.join(", ")})`,
+        "fatal",
+      );
+    }
   }
   if (process.env["NEXT_RUNTIME"] === "edge") {
     Sentry.init(common);
   }
+}
+
+// Which Upstash env vars are missing in a production Node runtime (empty
+// otherwise). Gated to the Node server runtime so the check fires once, not
+// also on edge. Exported for the unit test.
+export function missingUpstashInProd(): string[] {
+  const isProd = (process.env["VERCEL_ENV"] ?? process.env["NODE_ENV"]) === "production";
+  if (!isProd) return [];
+  const runtime = process.env["NEXT_RUNTIME"];
+  if (runtime && runtime !== "nodejs") return [];
+  return ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"].filter((k) => !process.env[k]);
 }
 
 // Forwards React Server Component / route-handler errors to Sentry.

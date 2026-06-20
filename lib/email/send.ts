@@ -79,7 +79,18 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
       { idempotencyKey: input.idempotencyKey },
     );
     if (r.error) {
-      throw new EmailSendError(r.error.message, "provider-error", retryableEmail(r.error.name));
+      // Bland code only. Resend validation errors (e.g. invalid_to_address)
+      // echo the recipient address in r.error.message, and that string is
+      // persisted to messages.error / campaign_sends.error. Mirror the
+      // twilio:<code> pattern in lib/sms/send.ts (gdpr.md §Outbound messaging
+      // SDK errors). The structured cause carries only the bland error name —
+      // never the raw message or request payload.
+      throw new EmailSendError(
+        `resend:${r.error.name}`,
+        "provider-error",
+        retryableEmail(r.error.name),
+        { name: r.error.name },
+      );
     }
     if (!r.data?.id) {
       throw new EmailSendError("Resend returned no message id", "no-id-returned", true);
@@ -87,12 +98,12 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
     return { providerId: r.data.id };
   } catch (err) {
     if (err instanceof EmailSendError) throw err;
-    throw new EmailSendError(
-      err instanceof Error ? err.message : String(err),
-      "provider-error",
-      true,
-      err,
-    );
+    // Unexpected throw (network / SDK). Don't surface err.message or attach
+    // the raw err as .cause — either can carry the recipient address or the
+    // request payload. Bland code + the error's class name only.
+    throw new EmailSendError("resend:exception", "provider-error", true, {
+      name: err instanceof Error ? err.name : "unknown",
+    });
   }
 }
 

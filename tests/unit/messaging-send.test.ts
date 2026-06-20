@@ -103,6 +103,42 @@ describe("sendEmail", () => {
     ).rejects.toMatchObject({ retryable: false });
   });
 
+  it("carries a bland resend:<name> code, never the recipient-echoing message", async () => {
+    const recipient = "victim@example.com";
+    vi.doMock("@/lib/email/client", () => ({
+      resend: () => ({
+        emails: {
+          send: async () => ({
+            data: null,
+            // Resend echoes the address verbatim on invalid_to_address.
+            error: { name: "invalid_to_address", message: `The 'to' ${recipient} is invalid` },
+          }),
+        },
+      }),
+      fromEmail: () => "x",
+      messagingDisabled: () => false,
+    }));
+    const { sendEmail, EmailSendError } = await import("@/lib/email/send");
+    try {
+      await sendEmail({
+        to: recipient,
+        subject: "x",
+        html: "x",
+        unsubscribeUrl: "x",
+        idempotencyKey: "x",
+      });
+      throw new Error("expected sendEmail to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(EmailSendError);
+      const e = err as InstanceType<typeof EmailSendError>;
+      expect(e.message).toBe("resend:invalid_to_address");
+      expect(e.message).not.toContain(recipient);
+      expect(e.retryable).toBe(false);
+      // The structured cause carries only the bland name, never the address.
+      expect(JSON.stringify(e.cause ?? {})).not.toContain(recipient);
+    }
+  });
+
   it("classifies an unknown provider error as retryable", async () => {
     vi.doMock("@/lib/email/client", () => ({
       resend: () => ({
