@@ -119,5 +119,6 @@ No marketplace, no dedicated mobile app, no native POS integrations beyond webho
 - `docs/playbooks/gdpr.md` — data protection playbook
 - `docs/playbooks/payments.md` — PCI-safe payment handling
 - `docs/playbooks/security.md` — app security checklist
+- `docs/playbooks/cloudflare.md` — edge protection, rate limiting, IP bans
 - `docs/playbooks/incident.md` — what to do if something breaks in prod
 - `docs/playbooks/deploy.md` — deployment process

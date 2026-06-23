@@ -68,6 +68,12 @@ Distinct from Connect/deposits. Deposits run on the **connected account** (venue
 
 TLS via Cloudflare in front of Vercel (orange-cloud proxy). DNSSEC on.
 
+> Cloudflare is our security edge (WAF, bot, rate limiting, IP bans — see
+> `cloudflare.md`). Because the orange-cloud proxy masks the real client IP from
+> Vercel, **Vercel's own WAF / Bot Protection are mutually exclusive with this
+> setup and stay OFF** — enabling them behind Cloudflare degrades their accuracy
+> and gains nothing. Don't run both.
+
 ## Cron & background jobs
 
 - Vercel Cron for short jobs (<5 min): reminders, report refreshes, flag evaluations.
@@ -99,6 +105,7 @@ Before flipping from "private beta" to "public beta":
 - [ ] Rate limits set to production values (not dev).
 - [ ] **Upstash configured** (`UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`) — the rate limiter fails *open* if unset, silently disabling all auth/abuse throttling. The boot check in `instrumentation.ts` logs a critical alert if these are missing in production.
 - [ ] **Supabase "Confirm email" is ON** (Authentication → Providers → Email). If off, signups get a session without verifying the address. Lives in the Supabase dashboard, not code — verify after any project change. Signup reports to Sentry as a tripwire if it ever sees a live session at signup in production.
+- [ ] **Dashboard CSP flipped to enforcing** (`CSP_DASHBOARD_ENFORCE=true`) — only **after** a Report-Only soak shows a clean `/api/csp-report` (grep `csp.violation` in Vercel logs across `/dashboard`+`/admin`). The `/dashboard`+`/admin` nonce CSP ships Report-Only; this env flag is the enforce switch (no code change, instantly reversible by unsetting). See security.md §CSP. (Widget `/book`+`/embed` CSP stays Report-Only — separate future project.)
 - [ ] Encryption master key wrapped in Supabase Vault; rotation tested.
 - [ ] Cookie banner / privacy notice on widget and dashboard.
 - [ ] `/.well-known/security.txt` published.

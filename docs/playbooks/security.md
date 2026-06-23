@@ -87,6 +87,10 @@ A future change must **never** add a wildcard `Access-Control-Allow-Origin: *`. 
 - Booking widget: 20 requests per IP per minute, CAPTCHA (hCaptcha) after 5.
 - API: 100 req/min per org for reads, 20/min for writes.
 - Implemented at Vercel Edge with Upstash Redis for state.
+- **Network-layer limits, bot challenges, and IP bans live at Cloudflare — see
+  `cloudflare.md`.** The edge absorbs floods before they reach Vercel; the app
+  limiter (which fails open if Upstash is unconfigured) enforces the precise
+  per-account boundary.
 
 ### Headers
 - `X-Content-Type-Options: nosniff`

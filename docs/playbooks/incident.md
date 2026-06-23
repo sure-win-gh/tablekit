@@ -27,6 +27,15 @@
 6. **Fix.** Once the bleed is stopped, root-cause and fix. Claude Code can be asked to help — use `/plan` before `/ship`.
 7. **Verify.** Confirm the fix holds on staging and on a single venue in prod before full rollout.
 
+## Edge mitigation (abuse / floods)
+
+If the incident is abuse rather than a bug — credential stuffing, a booking-spam
+flood, scraping — mitigate at Cloudflare first (it drops traffic before it costs us
+a Vercel invocation or a DB query). To ban a specific IP, throttle a path, or flip
+Under Attack Mode, follow `cloudflare.md` → "Incident response: banning an IP under
+active attack." Prefer temporary, automatic rules (rate limit / Managed Challenge)
+over permanent IP bans — attackers rotate IPs and real users share them.
+
 ## Kill switches (implement these before launch)
 
 - `WIDGET_DISABLED=true` — serves maintenance page to all widget traffic.
