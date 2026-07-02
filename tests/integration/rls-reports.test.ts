@@ -262,6 +262,21 @@ beforeAll(async () => {
       status: "finished",
       source: "widget",
     }),
+    // Pending (requested) booking — realised reports exclude it, but the
+    // cancellations rate denominator (totalBookings) counts ALL statuses,
+    // so it must land in totalBookings without being counted as cancelled.
+    await mkBooking({
+      orgId: orgA.id,
+      venueId: venueAId,
+      serviceId: serviceALunchId,
+      areaId: areaAId,
+      guestId: guestAOnceId,
+      partySize: 2,
+      startAt: at(DAY2_LOCAL, 12),
+      endAt: at(DAY2_LOCAL, 13),
+      status: "requested",
+      source: "host",
+    }),
   ];
   const bookingAIds = await seedA();
   const bookingAFinishedDinner = bookingAIds[3]!;
@@ -461,7 +476,7 @@ describe("reports — covers", () => {
     const rows = await asUser(ctx.userAId, (tx) => getCoversReport(tx, ctx.venueAId, bounds));
     // Expected: DAY1 Lunch (3 bookings, 9 booked, 6 realised),
     //           DAY1 Dinner (2, 8, 6),
-    //           DAY2 Lunch (1, 2, 2).
+    //           DAY2 Lunch (2 bookings incl. 1 requested, 4 booked, 2 realised).
     const byKey = new Map(rows.map((r) => [`${r.day}|${r.serviceName}`, r]));
     const day1Lunch = byKey.get(`${DAY1_LOCAL}|Lunch`);
     expect(day1Lunch?.bookings).toBe(3);
@@ -472,7 +487,7 @@ describe("reports — covers", () => {
     expect(day1Dinner?.coversBooked).toBe(8);
     expect(day1Dinner?.coversRealised).toBe(6);
     const day2Lunch = byKey.get(`${DAY2_LOCAL}|Lunch`);
-    expect(day2Lunch?.bookings).toBe(1);
+    expect(day2Lunch?.bookings).toBe(2);
     expect(day2Lunch?.coversRealised).toBe(2);
   });
 
@@ -530,9 +545,9 @@ describe("reports — sources", () => {
     const bounds = filter();
     const rows = await asUser(ctx.userAId, (tx) => getSourceMixReport(tx, ctx.venueAId, bounds));
     const bySource = new Map(rows.map((r) => [r.source, r]));
-    // 3 host (lunch confirmed + dinner finished + dinner no_show),
-    // 3 widget (lunch confirmed + lunch cancelled + day2 finished).
-    expect(bySource.get("host")?.bookings).toBe(3);
+    // 4 host (lunch confirmed + dinner finished + dinner no_show + day2
+    // requested), 3 widget (lunch confirmed + lunch cancelled + day2 finished).
+    expect(bySource.get("host")?.bookings).toBe(4);
     expect(bySource.get("widget")?.bookings).toBe(3);
   });
 });
@@ -557,10 +572,11 @@ describe("reports — cancellations", () => {
     const report = await asUser(ctx.userAId, (tx) =>
       getCancellationsReport(tx, ctx.venueAId, bounds),
     );
-    // 6 bookings in range, 1 cancelled (reason change_of_plans).
-    expect(report.totalBookings).toBe(6);
+    // 7 bookings in range (incl. 1 requested — all statuses count toward the
+    // denominator), 1 cancelled (reason change_of_plans).
+    expect(report.totalBookings).toBe(7);
     expect(report.cancelled).toBe(1);
-    expect(report.rate).toBeCloseTo(1 / 6, 5);
+    expect(report.rate).toBeCloseTo(1 / 7, 5);
     expect(report.byReason).toEqual([{ reason: "change_of_plans", count: 1 }]);
     const day1 = report.byDay.find((r) => r.day === DAY1_LOCAL);
     expect(day1?.bookings).toBe(5);

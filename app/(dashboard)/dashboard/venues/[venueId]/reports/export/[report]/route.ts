@@ -26,6 +26,7 @@ import { getReviewsReport } from "@/lib/reports/reviews";
 import { getSourceMixReport } from "@/lib/reports/sources";
 import { getSpendReport } from "@/lib/reports/spend";
 import { getTopGuestsReport } from "@/lib/reports/top-guests";
+import { audit } from "@/lib/server/admin/audit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -48,7 +49,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ venueId: string; report: string }> },
 ) {
-  await requireRole("host");
+  const { userId, orgId } = await requireRole("host");
   const { venueId, report } = await params;
 
   if (!isReportName(report)) {
@@ -83,6 +84,18 @@ export async function GET(
     fromDate,
     toDate,
   });
+
+  // Every report download is audit-logged — even though these aggregates
+  // decrypt no PII, the surface serves guest-linked reports (top-guests,
+  // sources), so the download warrants a trail. Mirrors the data-export route.
+  await audit.log({
+    organisationId: orgId,
+    actorUserId: userId,
+    action: "data.exported",
+    targetType: "export",
+    metadata: { report, fromDate, toDate, venueId },
+  });
+
   const filename = `${report}-${fromDate}_${toDate}.csv`;
   return new NextResponse(csv, {
     status: 200,

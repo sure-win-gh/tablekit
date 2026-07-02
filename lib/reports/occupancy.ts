@@ -94,8 +94,10 @@ export async function getOccupancyReport(
 
   return serviceRows
     .map((s) => {
-      const schedule = s.schedule as Schedule;
-      const sessionsInRange = schedule.days.reduce((sum, d) => sum + (weekdayCounts[d] ?? 0), 0);
+      // Defensive: a malformed schedule row (missing `days`) must not take
+      // down the whole reports page — treat it as zero sessions.
+      const days = (s.schedule as Schedule).days ?? [];
+      const sessionsInRange = days.reduce((sum, d) => sum + (weekdayCounts[d] ?? 0), 0);
       const capacityPerSession = resolveCapacity(roomCapacity, overrides.get(s.id));
       const totalCapacity = sessionsInRange * capacityPerSession;
       const coversRealised = realisedByService.get(s.id) ?? 0;
