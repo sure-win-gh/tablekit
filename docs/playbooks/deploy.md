@@ -58,6 +58,38 @@ Distinct from Connect/deposits. Deposits run on the **connected account** (venue
 - **Usage Meter (transactional metering):** a Billing **Meter** with **`sum`** aggregation over the event's `value`, plus a metered Price of **£0.01/unit** (`tax_behavior: exclusive`) tied to it → `STRIPE_PRICE_USAGE`. Reporting `value` in **pence** bills at exact pass-through cost. Record the meter's `event_name` as `STRIPE_METER_USAGE_EVENT_NAME`. Test-mode meter + price created + wired; recreate in live mode. The subscription Checkout omits the usage line item until `STRIPE_PRICE_USAGE` is set.
 - **VAT / Stripe Tax:** prices are tax-exclusive and Checkout sets `automatic_tax.enabled` + collects a billing address, so Stripe Tax computes VAT on top. Requires Stripe Tax active + your tax registrations configured in the dashboard. Top-ups credit the **pre-VAT** (`amount_subtotal`) amount.
 
+## Runbook: flip the dashboard CSP to enforcing
+
+The `/dashboard` + `/admin` CSP ships **Report-Only** (`proxy.ts` + `lib/security/csp.ts`).
+Flipping to enforcing is an env toggle after a clean soak — no code change, instantly
+reversible. See `security.md` §CSP and `cloudflare.md` §Caching.
+
+**Invariant:** dashboard responses must be served **fresh per request** — the nonce is
+per-request, so any cache layer holding the HTML means shared/stale nonces (enforcing would
+then block the page). Keep the dashboard uncached everywhere.
+
+**A — Cloudflare (prerequisites, before flipping):**
+1. **Bypass cache for `app.tablekit.uk`** — Caching → Cache Rules (Cloudflare doesn't cache
+   HTML by default, but make it explicit). Verify a `/dashboard` response shows
+   `cf-cache-status: DYNAMIC`, not `HIT`.
+2. **Skip WAF/rate-limit for `/api/csp-report` and `/monitoring`** — so soak reports + the
+   Sentry tunnel aren't challenged (see `cloudflare.md` §"Allow our own infrastructure").
+
+**B — Vercel (the flip):**
+1. **Soak.** Vercel → project → Logs, search `csp.violation`; check entries whose
+   `documentPath` starts with `/dashboard` or `/admin`. Goal: none (or only benign ones you
+   accept). Each carries `directive` + `blockedHost`.
+2. **Staging first.** Set env var `CSP_DASHBOARD_ENFORCE=true` on the environment serving
+   `staging.tablekit.uk`, then **redeploy** (env changes need a new build).
+3. **Smoke** (DevTools console open, watch for `Refused to…`): dashboard home, a settings +
+   billing page, `/admin`, and the POS guest-spend panel (Supabase Realtime) once it's routed.
+4. **Production.** Set `CSP_DASHBOARD_ENFORCE=true` on Production, redeploy, re-smoke.
+
+**Rollback (~1 min):** delete `CSP_DASHBOARD_ENFORCE` (or set `false`) → redeploy. Back to
+Report-Only.
+
+**Out of scope:** the widget (`/book`, `/embed`) CSP stays Report-Only — separate project.
+
 ## Domains
 
 - Primary: `tablekit.uk` (marketing site).
