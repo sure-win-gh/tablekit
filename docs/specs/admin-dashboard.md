@@ -1,6 +1,6 @@
 # Spec: Internal admin dashboard (Tablekit-staff)
 
-**Status:** shipped (2026-04-28)
+**Status:** shipped (2026-04-28); cockpit redesign + expanded metrics (2026-07-02)
 **Depends on:** `auth.md`, `bookings.md`, `messaging.md`, `payments.md`, `reporting.md` (operator-facing — distinct surface)
 
 ## What we're building
@@ -21,13 +21,21 @@ Route group `app/(admin)/admin/...` — sibling to `(dashboard)`, `(marketing)`,
 
 | Page | Purpose |
 |---|---|
-| `/admin` | Overview — KPI tiles + headline trends |
-| `/admin/venues` | Org/venue search + activity scoring |
-| `/admin/venues/[orgId]` | Single-org drill-down (metrics + audit log + Stripe status) |
-| `/admin/financials` | MRR, churn, subscription mix, Stripe Connect funnel |
-| `/admin/operations` | Message delivery health, payment failures, DSARs, webhook health |
-| `/admin/feature-adoption` | % orgs using deposits / waitlist / multi-venue / reviews / Connect / ≥1 staff |
-| `/admin/audit` | Streamed platform-wide audit feed with filters |
+| `/admin` | Overview cockpit — KPI band (MRR, subs, signups, bookings, active venues, msg cost), alert strip, 30d trend charts, source mix, messaging snapshot |
+| `/admin/venues` | Org/venue search + activity scoring (score bar + 14d breakdown tooltip, relative dates, plan chips) |
+| `/admin/venues/[orgId]` | Single-org drill-down (KPI tiles, 30d booking trend chart, Connect status chips, members) |
+| `/admin/financials` | MRR + tier mix bars, Stripe Connect funnel bars with per-stage drop-off |
+| `/admin/operations` | Message delivery health, public API health, operator webhook health, payment failures, Stripe webhooks, DSARs |
+| `/admin/growth` | Signups 90d trend, feature adoption bars (12 features), venue type mix, platform source mix. Replaces `/admin/feature-adoption` (now a redirect). |
+| `/admin/audit` | Platform-wide audit feed — action-family chips, relative timestamps, inline metadata expander |
+
+### 2026-07 redesign notes
+
+- **Shared admin UI kit**: `components/admin/ui.tsx` (server-safe: `Section`, `KpiTile`, `AlertStrip`, `HBar`, `Chip`, `timeAgo`, table classes) + `components/admin/charts.tsx` (client, recharts `TrendChart`). Colours are `@theme` tokens only; recharts stays admin-only for bundle splitting.
+- **Alert strip on the Overview**: renders nothing when healthy; links to the owning page when not (degraded Stripe, unhandled webhooks, overdue DSARs, >5% bounce at ≥20 msgs, payment-failure orgs).
+- **New metrics**: `getActiveVenues` (venues with ≥1 non-cancelled booking, 7d), `getApiHealth` (api_request_log: volume, 4xx/5xx split, p50/p95 latency, 14d trend, top orgs), `getOperatorWebhookHealth` (webhook_deliveries: success/failure, failing endpoints), org drill-down `bookingsByDay` (30d).
+- **Adoption breadth**: feature list extended with enquiries (AI handler), sent campaigns, active POS connections, guest imports, unrevoked API keys. New CSV export `/admin/export/adoption`.
+- **Audit metadata inline**: the audit feed renders `audit_log.metadata` in an expander (previously CSV-only). This relies on the writer convention that metadata holds ids/enums/counts, never free text or guest contact details.
 
 Layout has a distinct red/orange "ADMIN" pill in the top bar so it's never confused with an operator view.
 
@@ -133,7 +141,7 @@ Layout has a distinct red/orange "ADMIN" pill in the top bar so it's never confu
 - `app/(admin)/admin/venues/page.tsx`, `.../[orgId]/page.tsx` — search + drill-down.
 - `app/(admin)/admin/financials/page.tsx` — MRR, churn, Connect funnel.
 - `app/(admin)/admin/operations/page.tsx` — message + payment + webhook + DSAR health.
-- `app/(admin)/admin/feature-adoption/page.tsx` — % adoption per feature.
+- `app/(admin)/admin/growth/page.tsx` — signups trend + adoption + mixes (`feature-adoption/page.tsx` is a gated permanent redirect).
 - `app/(admin)/admin/audit/page.tsx` — audit feed.
 - `lib/server/admin/auth.ts` — `requirePlatformAdmin()`.
 - `lib/server/admin/allowlist.ts` — pure `ADMIN_EMAILS` parser shared with proxy (no `server-only` import).
@@ -155,7 +163,7 @@ Layout has a distinct red/orange "ADMIN" pill in the top bar so it's never confu
 - [ ] Stripe API failure does not break the dashboard — financials degrade to last cached value + warning banner.
 - [ ] All queries use `adminDb()`; no operator-RLS leakage from admin pages into operator pages (verified by integration test seeded with two orgs).
 - [x] CSV export for signups, venues list, bookings volume, messages volume, financials snapshot. Routes under [`app/(admin)/admin/export/`](../../app/(admin)/admin/export/) — each one calls `requirePlatformAdmin` inline, logs a `platform_audit_log` "exported" event with the metric + range, and streams CSV via `toCsv()` from the generic RFC-4180 helper. Download links live in the page Section headers / card headers (signups + bookings + messages on the overview, MRR on financials, venues on the venues page).
-- [x] `recharts` code-split — operator pages don't load it. The only `recharts` import in the codebase is in [`components/admin/sparkline.tsx`](../../components/admin/sparkline.tsx), which is consumed exclusively from files under `app/(admin)/`. Next.js's route-group bundling keeps the chunk out of operator routes.
+- [x] `recharts` code-split — non-reporting operator pages don't load it. recharts is imported only by `components/admin/{sparkline,charts}.tsx` (admin routes) and the operator reports/insights client forms; Next.js per-route bundling keeps the chunk off every other route.
 
 ## Out of scope (future work)
 

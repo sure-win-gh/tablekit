@@ -10,12 +10,17 @@
 
 import "server-only";
 
-import { count, countDistinct, eq, sql } from "drizzle-orm";
+import { count, countDistinct, eq, isNotNull, isNull, sql } from "drizzle-orm";
 
 import {
+  apiKeys,
+  campaigns,
   depositRules,
+  enquiries,
+  importJobs,
   messages,
   organisations,
+  posConnections,
   reviews,
   stripeAccounts,
   venues,
@@ -40,6 +45,11 @@ export async function getFeatureAdoption(db: AdminDb): Promise<FeatureAdoption> 
     connectCompleteOrgs,
     anyMessageOrgs,
     multiMemberOrgs,
+    enquiryOrgs,
+    campaignSentOrgs,
+    posOrgs,
+    importOrgs,
+    apiKeyOrgs,
     venueTypeRows,
   ] = await Promise.all([
     db.select({ n: count() }).from(organisations),
@@ -58,6 +68,20 @@ export async function getFeatureAdoption(db: AdminDb): Promise<FeatureAdoption> 
         select organisation_id from memberships group by organisation_id having count(*) >= 2
       ) s
     `),
+    db.select({ n: countDistinct(enquiries.organisationId) }).from(enquiries),
+    db
+      .select({ n: countDistinct(campaigns.organisationId) })
+      .from(campaigns)
+      .where(isNotNull(campaigns.sentAt)),
+    db
+      .select({ n: countDistinct(posConnections.organisationId) })
+      .from(posConnections)
+      .where(eq(posConnections.status, "active")),
+    db.select({ n: countDistinct(importJobs.organisationId) }).from(importJobs),
+    db
+      .select({ n: countDistinct(apiKeys.organisationId) })
+      .from(apiKeys)
+      .where(isNull(apiKeys.revokedAt)),
     db
       .select({
         venueType: venues.venueType,
@@ -88,6 +112,23 @@ export async function getFeatureAdoption(db: AdminDb): Promise<FeatureAdoption> 
       key: "multi_member",
       label: "≥2 team members",
       orgsWithFeature: Number(multiMemberOrgs.rows[0]?.n ?? 0),
+    },
+    {
+      key: "enquiries",
+      label: "AI enquiry handler (≥1 enquiry)",
+      orgsWithFeature: enquiryOrgs[0]?.n ?? 0,
+    },
+    {
+      key: "campaigns",
+      label: "Sent ≥1 marketing campaign",
+      orgsWithFeature: campaignSentOrgs[0]?.n ?? 0,
+    },
+    { key: "pos", label: "POS connected", orgsWithFeature: posOrgs[0]?.n ?? 0 },
+    { key: "imports", label: "Ran ≥1 guest import", orgsWithFeature: importOrgs[0]?.n ?? 0 },
+    {
+      key: "api_keys",
+      label: "Public API key (unrevoked)",
+      orgsWithFeature: apiKeyOrgs[0]?.n ?? 0,
     },
   ];
 

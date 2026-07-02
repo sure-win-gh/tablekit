@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Tablekit — Business Metrics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0f1a; --panel:#141a2a; --panel2:#1b2237; --line:#26304a;
+    --text:#e8edf7; --muted:#8b97b3; --accent:#5b8def; --pos:#34d399; --neg:#f87171;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f5f7fb; --panel:#ffffff; --panel2:#f0f3fa;
+      --line:#e3e9f4; --text:#10182b; --muted:#647089; --accent:#2f6bed; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1120px;margin:0 auto;padding:32px 24px 64px;}
+  header{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px;}
+  h1{font-size:22px;margin:0;letter-spacing:-.2px;}
+  .gen{color:var(--muted);font-size:13px;}
+  .banner{background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+    padding:10px 14px;margin:16px 0;color:var(--muted);font-size:13px;}
+  .banner code{color:var(--accent);}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:18px 0 8px;}
+  @media(max-width:780px){.grid{grid-template-columns:repeat(2,1fr);}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;}
+  .card-label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.06em;}
+  .card-value{font-size:28px;font-weight:650;margin-top:6px;letter-spacing:-.5px;}
+  .card-sub{color:var(--muted);font-size:12.5px;margin-top:4px;}
+  .pos{color:var(--pos);} .neg{color:var(--neg);} .muted{color:var(--muted);}
+  .panels{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:22px;}
+  @media(max-width:880px){.panels{grid-template-columns:1fr;}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;}
+  .panel h2{font-size:14px;margin:0 0 14px;font-weight:600;}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{ text-align:left;color:var(--muted);font-weight:500;font-size:12px;padding:0 8px 8px;border-bottom:1px solid var(--line);}
+  td{padding:8px;border-bottom:1px solid var(--line);}
+  td.num{text-align:right;white-space:nowrap;}
+  .barcell{width:34%;}
+  .bar{height:8px;border-radius:6px;background:linear-gradient(90deg,var(--accent),#8db4ff);min-width:2px;}
+  canvas{max-height:240px;}
+  footer{color:var(--muted);font-size:12px;margin-top:28px;text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Tablekit · Business Metrics</h1>
+    <div class="gen">Generated 13/06/2026, 10:45:30 · Stripe test</div>
+  </header>
+  <div class="banner">Showing <strong>sample data</strong> — run <code>node scripts/metrics-dashboard/generate.mjs</code> against live credentials to populate real numbers.</div>
+
+  <div class="grid"><div class="card">
+       <div class="card-label">MRR</div>
+       <div class="card-value pos">£2,117</div>
+       <div class="card-sub">Stripe test mode · 55 paying</div>
+     </div><div class="card">
+       <div class="card-label">ARR</div>
+       <div class="card-value pos">£25,404</div>
+       <div class="card-sub">MRR × 12</div>
+     </div><div class="card">
+       <div class="card-label">Active subscriptions</div>
+       <div class="card-value ">61</div>
+       <div class="card-sub">6 trialing · 2 past due</div>
+     </div><div class="card">
+       <div class="card-label">Monthly churn</div>
+       <div class="card-value ">3.1%</div>
+       <div class="card-sub">2 cancelled / 58 base</div>
+     </div><div class="card">
+       <div class="card-label">Active venues</div>
+       <div class="card-value pos">132</div>
+       <div class="card-sub">of 214 · booked in 30d</div>
+     </div><div class="card">
+       <div class="card-label">Inactive venues</div>
+       <div class="card-value ">82</div>
+       <div class="card-sub">no bookings in window</div>
+     </div><div class="card">
+       <div class="card-label">Active users</div>
+       <div class="card-value ">161</div>
+       <div class="card-sub">of 268 total</div>
+     </div><div class="card">
+       <div class="card-label">New venues (30d)</div>
+       <div class="card-value pos">18</div>
+       <div class="card-sub">1,755 bookings in 30d</div>
+     </div></div>
+
+  <div class="panels">
+    <div class="panel">
+      <h2>New venues per month</h2>
+      <canvas id="signups"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Bookings per month</h2>
+      <canvas id="bookings"></canvas>
+    </div>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <h2>Plan mix</h2>
+      <canvas id="planmix"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Tool utilisation <span class="muted">(venues using each feature)</span></h2>
+      <table>
+        <thead><tr><th>Feature</th><th class="num">Venues</th><th>Adoption</th></tr></thead>
+        <tbody><tr>
+        <td>Bookings</td>
+        <td class="num">198 <span class="muted">(93%)</span></td>
+        <td class="barcell"><div class="bar" style="width:93%"></div></td>
+      </tr><tr>
+        <td>SMS reminders</td>
+        <td class="num">88 <span class="muted">(41%)</span></td>
+        <td class="barcell"><div class="bar" style="width:41%"></div></td>
+      </tr><tr>
+        <td>Deposits / payments</td>
+        <td class="num">71 <span class="muted">(33%)</span></td>
+        <td class="barcell"><div class="bar" style="width:33%"></div></td>
+      </tr><tr>
+        <td>Reviews</td>
+        <td class="num">54 <span class="muted">(25%)</span></td>
+        <td class="barcell"><div class="bar" style="width:25%"></div></td>
+      </tr><tr>
+        <td>Waitlist</td>
+        <td class="num">41 <span class="muted">(19%)</span></td>
+        <td class="barcell"><div class="bar" style="width:19%"></div></td>
+      </tr><tr>
+        <td>Reserve w/ Google</td>
+        <td class="num">33 <span class="muted">(15%)</span></td>
+        <td class="barcell"><div class="bar" style="width:15%"></div></td>
+      </tr><tr>
+        <td>Marketing campaigns</td>
+        <td class="num">22 <span class="muted">(10%)</span></td>
+        <td class="barcell"><div class="bar" style="width:10%"></div></td>
+      </tr><tr>
+        <td>AI enquiry handler</td>
+        <td class="num">9 <span class="muted">(4%)</span></td>
+        <td class="barcell"><div class="bar" style="width:4%"></div></td>
+      </tr><tr>
+        <td>Public API keys</td>
+        <td class="num">7 <span class="muted">(3%)</span></td>
+        <td class="barcell"><div class="bar" style="width:3%"></div></td>
+      </tr><tr>
+        <td>Webhooks</td>
+        <td class="num">5 <span class="muted">(2%)</span></td>
+        <td class="barcell"><div class="bar" style="width:2%"></div></td>
+      </tr><tr>
+        <td>POS integration</td>
+        <td class="num">3 <span class="muted">(1%)</span></td>
+        <td class="barcell"><div class="bar" style="width:1%"></div></td>
+      </tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panels"><div class="panel">
+      <h2>Messaging usage this month</h2>
+      <table><thead><tr><th>Channel</th><th class="num">Sends</th><th class="num">Est. cost</th></tr></thead>
+      <tbody><tr><td>email</td><td class="num">9,120</td><td class="num">£0</td></tr><tr><td>sms</td><td class="num">3,410</td><td class="num">£136</td></tr><tr><td>whatsapp</td><td class="num">410</td><td class="num">£21</td></tr></tbody></table>
+    </div><div class="panel">
+      <h2>Notes</h2>
+      <p class="muted" style="font-size:13px;line-height:1.6;">
+      MRR &amp; churn come from live Stripe subscriptions (source of truth for billing).
+      Active venue = a booking created in the last 30 days.
+      Tool utilisation counts distinct venues with at least one row for that feature.
+      Re-run the generator to refresh.</p>
+    </div></div>
+
+  <footer>Tablekit metrics · read-only snapshot · regenerate with <code>node scripts/metrics-dashboard/generate.mjs</code></footer>
+</div>
+
+<script>
+  const css = getComputedStyle(document.documentElement);
+  const accent = css.getPropertyValue('--accent').trim() || '#2f6bed';
+  const muted = css.getPropertyValue('--muted').trim() || '#888';
+  const line = css.getPropertyValue('--line').trim() || '#ddd';
+  Chart.defaults.color = muted;
+  Chart.defaults.borderColor = line;
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+
+  const months = ["2026-01","2026-02","2026-03","2026-04","2026-05","2026-06"];
+  const signups = [9,12,15,11,21,18];
+  const bMonths = ["2026-01","2026-02","2026-03","2026-04","2026-05","2026-06"];
+  const bookings = [820,1010,1340,1180,1620,1755];
+  const planMix = {"Core":43,"Plus":12,"Other":0};
+
+  if (document.getElementById('signups') && months.length) {
+    new Chart(document.getElementById('signups'), {
+      type:'bar',
+      data:{labels:months,datasets:[{data:signups,backgroundColor:accent,borderRadius:6}]},
+      options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}
+    });
+  }
+  if (document.getElementById('bookings') && bMonths.length) {
+    new Chart(document.getElementById('bookings'), {
+      type:'line',
+      data:{labels:bMonths,datasets:[{data:bookings,borderColor:accent,backgroundColor:'rgba(91,141,239,.15)',fill:true,tension:.3,pointRadius:3}]},
+      options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}
+    });
+  }
+  const pmLabels = Object.keys(planMix), pmVals = Object.values(planMix);
+  if (document.getElementById('planmix') && pmVals.some(v=>v>0)) {
+    new Chart(document.getElementById('planmix'), {
+      type:'doughnut',
+      data:{labels:pmLabels,datasets:[{data:pmVals,
+        backgroundColor:['#6b7280','#5b8def','#34d399','#f59e0b']}]},
+      options:{plugins:{legend:{position:'bottom'}},cutout:'62%'}
+    });
+  }
+</script>
+</body>
+</html>

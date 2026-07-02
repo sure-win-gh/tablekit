@@ -1,6 +1,7 @@
 import { Download } from "lucide-react";
 import Link from "next/link";
 
+import { Chip, timeAgo } from "@/components/admin/ui";
 import { Card, CardBody, CardHeader, CardTitle, Input } from "@/components/ui";
 import { requirePlatformAdmin } from "@/lib/server/admin/auth";
 import { adminDb } from "@/lib/server/admin/db";
@@ -35,8 +36,9 @@ export default async function AdminVenuesPage({
       <header>
         <h1 className="text-ink text-2xl font-bold tracking-tight">Venues</h1>
         <p className="text-ash text-sm">
-          Cross-organisation list with 14-day activity score. Search by org name, slug, or venue
-          name. Click an org to drill down.
+          Cross-organisation list with 14-day activity score (bookings 50 + logins 20 + messages
+          30). Under 30 = at risk. Search by org name, slug, or venue name; click an org to drill
+          down.
         </p>
       </header>
 
@@ -107,17 +109,44 @@ export default async function AdminVenuesPage({
                         </Link>
                         <div className="text-ash text-[11px]">{row.slug}</div>
                       </td>
-                      <td className="text-ink py-1.5">{row.plan}</td>
+                      <td className="py-1.5">
+                        <Chip tone={row.plan === "free" ? "neutral" : "coral"}>{row.plan}</Chip>
+                      </td>
                       <td className="text-ink py-1.5 text-right tabular-nums">{row.venueCount}</td>
                       <td className="text-ash py-1.5">{row.ownerEmail ?? "—"}</td>
-                      <td className="text-ash py-1.5 tabular-nums">{fmtDate(row.lastBookingAt)}</td>
-                      <td className="text-ash py-1.5 tabular-nums">{fmtDate(row.lastLoginAt)}</td>
                       <td
-                        className={`py-1.5 text-right tabular-nums ${
-                          row.activityScore < 30 ? "text-rose" : "text-ink"
-                        }`}
+                        className="text-ash py-1.5 tabular-nums"
+                        title={fmtDate(row.lastBookingAt)}
                       >
-                        {row.activityScore}
+                        {timeAgo(row.lastBookingAt)}
+                      </td>
+                      <td className="text-ash py-1.5 tabular-nums" title={fmtDate(row.lastLoginAt)}>
+                        {timeAgo(row.lastLoginAt)}
+                      </td>
+                      <td className="py-1.5">
+                        <div
+                          className="flex items-center justify-end gap-2"
+                          title={`${row.bookings14d} bookings · ${row.logins14d} logins · ${row.messages14d} messages (14d)`}
+                        >
+                          <span className="bg-cloud relative h-1.5 w-16 overflow-hidden rounded-full">
+                            <span
+                              className="absolute inset-y-0 left-0 rounded-full"
+                              style={{
+                                width: `${row.activityScore}%`,
+                                backgroundColor:
+                                  row.activityScore < 30 ? "var(--color-rose)" : "var(--color-ink)",
+                              }}
+                              aria-hidden
+                            />
+                          </span>
+                          <span
+                            className={`w-6 text-right font-semibold tabular-nums ${
+                              row.activityScore < 30 ? "text-rose" : "text-ink"
+                            }`}
+                          >
+                            {row.activityScore}
+                          </span>
+                        </div>
                       </td>
                     </tr>
                   ))}

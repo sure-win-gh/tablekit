@@ -1,7 +1,9 @@
 // Integration smoke test for getFeatureAdoption.
 //
 // Seeds one org with two venues + one waitlist + one message + one
-// review and asserts the feature-adoption snapshot picks them up.
+// review + one enquiry + one sent campaign + one POS connection + one
+// import job + one API key and asserts the feature-adoption snapshot
+// picks them all up.
 
 import { eq } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
@@ -94,6 +96,39 @@ beforeAll(async () => {
     rating: 5,
     source: "internal",
   });
+  await db.insert(schema.enquiries).values({
+    organisationId: orgId,
+    venueId: v1!.id,
+    fromEmailHash: `enq_${run}`,
+    fromEmailCipher: "c",
+    subjectCipher: "c",
+    bodyCipher: "c",
+  });
+  await db.insert(schema.campaigns).values({
+    organisationId: orgId,
+    venueId: v1!.id,
+    name: "Summer push",
+    channel: "email",
+    status: "sent",
+    body: "b",
+    sentAt: new Date(),
+  });
+  await db.insert(schema.posConnections).values({
+    organisationId: orgId,
+    venueId: v1!.id,
+    provider: "generic",
+  });
+  await db.insert(schema.importJobs).values({
+    organisationId: orgId,
+    source: "generic-csv",
+    filename: "guests.csv",
+  });
+  await db.insert(schema.apiKeys).values({
+    organisationId: orgId,
+    prefix: `tk_${run}`,
+    hash: `hash_${run}`,
+    label: "test key",
+  });
 });
 
 afterAll(async () => {
@@ -111,6 +146,11 @@ describe("getFeatureAdoption", () => {
     expect(byKey.get("waitlist") ?? 0).toBeGreaterThanOrEqual(1);
     expect(byKey.get("any_message") ?? 0).toBeGreaterThanOrEqual(1);
     expect(byKey.get("reviews") ?? 0).toBeGreaterThanOrEqual(1);
+    expect(byKey.get("enquiries") ?? 0).toBeGreaterThanOrEqual(1);
+    expect(byKey.get("campaigns") ?? 0).toBeGreaterThanOrEqual(1);
+    expect(byKey.get("pos") ?? 0).toBeGreaterThanOrEqual(1);
+    expect(byKey.get("imports") ?? 0).toBeGreaterThanOrEqual(1);
+    expect(byKey.get("api_keys") ?? 0).toBeGreaterThanOrEqual(1);
 
     const types = new Set(data.venueTypeMix.map((r) => r.venueType));
     expect(types.has("cafe")).toBe(true);

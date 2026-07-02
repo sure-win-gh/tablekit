@@ -1,8 +1,25 @@
-import { Download } from "lucide-react";
+import Link from "next/link";
 
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui";
+import { TrendChart } from "@/components/admin/charts";
+import {
+  Chip,
+  Empty,
+  HBar,
+  KpiTile,
+  Section,
+  TABLE,
+  TBODY,
+  THEAD,
+  fmtDateTimeUtc,
+  pctStr,
+  timeAgo,
+} from "@/components/admin/ui";
 import { requirePlatformAdmin } from "@/lib/server/admin/auth";
 import { adminDb } from "@/lib/server/admin/db";
+import {
+  getApiHealth,
+  getOperatorWebhookHealth,
+} from "@/lib/server/admin/dashboard/metrics/api-health";
 import {
   getOperationsSnapshot,
   type MessageHealth7dRow,
@@ -12,162 +29,232 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminOperationsPage() {
   await requirePlatformAdmin();
-  const snap = await getOperationsSnapshot(adminDb());
+  const db = adminDb();
+  const [snap, api, hooks] = await Promise.all([
+    getOperationsSnapshot(db),
+    getApiHealth(db),
+    getOperatorWebhookHealth(db),
+  ]);
+
+  const failureMax = snap.paymentFailures7d[0]?.count ?? 0;
+  const now = new Date();
 
   return (
     <div className="flex max-w-6xl flex-col gap-6">
       <header>
         <h1 className="text-ink text-2xl font-bold tracking-tight">Operations</h1>
         <p className="text-ash text-sm">
-          Platform-wide health: message delivery, payment failures, Stripe webhooks, open DSARs.
+          Platform health: message delivery, payment failures, Stripe webhooks, DSARs, public API,
+          and operator webhooks.
         </p>
       </header>
 
-      <Card padding="lg">
-        <CardHeader>
-          <CardTitle>Message delivery — last 7 days</CardTitle>
-        </CardHeader>
-        <CardBody>
-          {snap.messages.length === 0 ? (
-            <Empty message="No messages in the last 7 days." />
-          ) : (
-            <table className="w-full text-xs">
-              <thead className="text-ash text-left">
-                <tr>
-                  <th className="py-1 font-medium">Channel</th>
-                  <th className="py-1 text-right font-medium">Total</th>
-                  <th className="py-1 text-right font-medium">Delivered</th>
-                  <th className="py-1 text-right font-medium">Bounced</th>
-                  <th className="py-1 text-right font-medium">Failed</th>
-                  <th className="py-1 text-right font-medium">Bounce %</th>
+      <Section
+        title="Message delivery — last 7 days"
+        description="Bounce rate over 5% (at ≥20 messages) is flagged."
+      >
+        {snap.messages.length === 0 ? (
+          <Empty message="No messages in the last 7 days." />
+        ) : (
+          <table className={TABLE}>
+            <thead className={THEAD}>
+              <tr>
+                <th className="py-1 font-medium">Channel</th>
+                <th className="py-1 text-right font-medium">Total</th>
+                <th className="py-1 text-right font-medium">Delivered</th>
+                <th className="py-1 text-right font-medium">Bounced</th>
+                <th className="py-1 text-right font-medium">Failed</th>
+                <th className="py-1 text-right font-medium">Bounce rate</th>
+              </tr>
+            </thead>
+            <tbody className={TBODY}>
+              {snap.messages.map((row) => (
+                <tr key={row.channel}>
+                  <td className="text-ink py-1.5">{row.channel}</td>
+                  <td className="text-ink py-1.5 text-right tabular-nums">{row.total}</td>
+                  <td className="text-ink py-1.5 text-right tabular-nums">{row.delivered}</td>
+                  <td className="text-ink py-1.5 text-right tabular-nums">{row.bounced}</td>
+                  <td className="text-ink py-1.5 text-right tabular-nums">{row.failed}</td>
+                  <td className="py-1.5 text-right">
+                    <BounceChip row={row} />
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-hairline divide-y">
-                {snap.messages.map((row) => (
-                  <tr key={row.channel}>
-                    <td className="text-ink py-1.5">{row.channel}</td>
-                    <td className="text-ink py-1.5 text-right tabular-nums">{row.total}</td>
-                    <td className="text-ink py-1.5 text-right tabular-nums">{row.delivered}</td>
-                    <td className="text-ink py-1.5 text-right tabular-nums">{row.bounced}</td>
-                    <td className="text-ink py-1.5 text-right tabular-nums">{row.failed}</td>
-                    <td className={`py-1.5 text-right tabular-nums ${bounceAlertClass(row)}`}>
-                      {bouncePct(row)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </CardBody>
-      </Card>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Section>
 
-      <Card padding="lg">
-        <CardHeader>
-          <CardTitle>Payment failures — last 7 days</CardTitle>
-          <a
-            href="/admin/export/payment-failures"
-            className="rounded-pill border-hairline text-ink hover:border-ink inline-flex items-center gap-1.5 border bg-white px-3 py-1 text-xs font-semibold transition"
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden />
-            CSV
-          </a>
-        </CardHeader>
-        <CardBody>
-          {snap.paymentFailures7d.length === 0 ? (
-            <Empty message="No failed payments in the last 7 days." />
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <Section
+          title="Public API"
+          description="7-day requests, error rates, and latency from the v1 API request log; the chart shows the 14-day trend."
+        >
+          {api.requests7d === 0 ? (
+            <Empty message="No API traffic in the last 7 days." />
           ) : (
-            <table className="w-full text-xs">
-              <thead className="text-ash text-left">
-                <tr>
-                  <th className="py-1 font-medium">Organisation</th>
-                  <th className="py-1 text-right font-medium">Failures</th>
-                  <th className="py-1 font-medium">Last failure</th>
-                </tr>
-              </thead>
-              <tbody className="divide-hairline divide-y">
-                {snap.paymentFailures7d.map((row) => (
-                  <tr key={row.orgId}>
-                    <td className="text-ink py-1.5">{row.orgName}</td>
-                    <td className="text-ink py-1.5 text-right tabular-nums">{row.count}</td>
-                    <td className="text-ash py-1.5 tabular-nums">
-                      {fmtDateTime(row.lastFailureAt)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <KpiTile label="Requests" value={api.requests7d.toLocaleString("en-GB")} />
+                <KpiTile
+                  label="5xx rate"
+                  value={pctStr(api.errorRate7d, 2)}
+                  sub={`${api.serverErrors7d} errors · ${api.clientErrors7d} 4xx`}
+                  alert={api.errorRate7d > 0.01}
+                />
+                <KpiTile
+                  label="p50 latency"
+                  value={api.p50LatencyMs === null ? "—" : `${api.p50LatencyMs}ms`}
+                />
+                <KpiTile
+                  label="p95 latency"
+                  value={api.p95LatencyMs === null ? "—" : `${api.p95LatencyMs}ms`}
+                  alert={api.p95LatencyMs !== null && api.p95LatencyMs > 1000}
+                />
+              </div>
+              <div className="mt-4">
+                <TrendChart data={api.byDay} label="Requests" height={120} />
+              </div>
+              {api.topOrgs.length > 0 ? (
+                <div className="mt-4 flex flex-col gap-2">
+                  {api.topOrgs.map((o) => (
+                    <HBar
+                      key={o.orgId}
+                      label={
+                        <Link href={`/admin/venues/${o.orgId}`} className="hover:underline">
+                          {o.orgName}
+                        </Link>
+                      }
+                      value={o.requests}
+                      max={api.topOrgs[0]?.requests ?? 0}
+                      display={o.requests.toLocaleString("en-GB")}
+                      sub={o.serverErrors > 0 ? `${o.serverErrors} 5xx` : "no 5xx"}
+                      color={o.serverErrors > 0 ? "var(--color-rose)" : "var(--color-ink)"}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </>
           )}
-        </CardBody>
-      </Card>
+        </Section>
 
-      <Card padding="lg">
-        <CardHeader>
-          <CardTitle>Stripe webhooks</CardTitle>
-        </CardHeader>
-        <CardBody>
-          <div className="grid grid-cols-3 gap-3">
-            <Stat label="Received last 24h" value={snap.webhooks.totalLast24h.toString()} />
-            <Stat
-              label="Unhandled (all-time)"
-              value={snap.webhooks.unhandledTotal.toString()}
-              alert={snap.webhooks.unhandledTotal > 0}
+        <Section
+          title="Operator webhooks — last 7 days"
+          description="Outbound deliveries to operator endpoints. A failing endpoint burns retries silently — chase these."
+        >
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <KpiTile label="Active subs" value={String(hooks.activeSubscriptions)} />
+            <KpiTile label="Deliveries" value={String(hooks.deliveries7d)} />
+            <KpiTile
+              label="Failed"
+              value={String(hooks.failed7d)}
+              alert={hooks.failed7d > 0}
+              sub={
+                hooks.deliveries7d === 0 ? undefined : pctStr(hooks.failed7d / hooks.deliveries7d)
+              }
             />
-            <Stat label="Last received" value={fmtDateTime(snap.webhooks.lastReceivedAt)} />
+            <KpiTile label="Pending now" value={String(hooks.pendingNow)} />
           </div>
-        </CardBody>
-      </Card>
+          {hooks.failingEndpoints.length > 0 ? (
+            <div className="mt-4 flex flex-col gap-2">
+              {hooks.failingEndpoints.map((e) => (
+                <HBar
+                  key={e.subscriptionId}
+                  label={
+                    <Link href={`/admin/venues/${e.orgId}`} className="hover:underline">
+                      {e.orgName} · {e.label}
+                    </Link>
+                  }
+                  value={e.failed7d}
+                  max={hooks.failingEndpoints[0]?.failed7d ?? 0}
+                  display={`${e.failed7d}×`}
+                  sub={hostnameOf(e.url)}
+                  color="var(--color-rose)"
+                />
+              ))}
+            </div>
+          ) : hooks.deliveries7d > 0 ? (
+            <p className="text-ash mt-3 text-xs">No failing endpoints. All deliveries healthy.</p>
+          ) : null}
+        </Section>
+      </div>
 
-      <Card padding="lg">
-        <CardHeader>
-          <CardTitle>Data subject access requests</CardTitle>
-        </CardHeader>
-        <CardBody>
+      <Section
+        title="Payment failures — last 7 days"
+        description="Failed / requires_payment_method by organisation. Often a stuck deposit rule."
+        csvHref="/admin/export/payment-failures"
+      >
+        {snap.paymentFailures7d.length === 0 ? (
+          <Empty message="No failed payments in the last 7 days." />
+        ) : (
+          <div className="flex flex-col gap-2">
+            {snap.paymentFailures7d.map((row) => (
+              <HBar
+                key={row.orgId}
+                label={
+                  <Link href={`/admin/venues/${row.orgId}`} className="hover:underline">
+                    {row.orgName}
+                  </Link>
+                }
+                value={row.count}
+                max={failureMax}
+                display={`${row.count}×`}
+                sub={timeAgo(row.lastFailureAt, now)}
+                color="var(--color-rose)"
+              />
+            ))}
+          </div>
+        )}
+      </Section>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <Section title="Stripe webhooks">
           <div className="grid grid-cols-3 gap-3">
-            <Stat label="Open" value={snap.dsars.open.toString()} />
-            <Stat
+            <KpiTile label="Received 24h" value={String(snap.webhooks.totalLast24h)} />
+            <KpiTile
+              label="Unhandled"
+              value={String(snap.webhooks.unhandledTotal)}
+              alert={snap.webhooks.unhandledTotal > 0}
+              sub="all-time"
+            />
+            <KpiTile
+              label="Last received"
+              value={timeAgo(snap.webhooks.lastReceivedAt, now)}
+              sub={fmtDateTimeUtc(snap.webhooks.lastReceivedAt)}
+            />
+          </div>
+        </Section>
+
+        <Section title="Data subject access requests">
+          <div className="grid grid-cols-3 gap-3">
+            <KpiTile label="Open" value={String(snap.dsars.open)} />
+            <KpiTile
               label="Overdue"
-              value={snap.dsars.overdue.toString()}
+              value={String(snap.dsars.overdue)}
               alert={snap.dsars.overdue > 0}
             />
-            <Stat label="Due within 7 days" value={snap.dsars.dueWithin7d.toString()} />
+            <KpiTile label="Due within 7d" value={String(snap.dsars.dueWithin7d)} />
           </div>
-        </CardBody>
-      </Card>
-    </div>
-  );
-}
-
-function bouncePct(row: MessageHealth7dRow): string {
-  if (row.total === 0) return "—";
-  return `${((row.bounced / row.total) * 100).toFixed(1)}%`;
-}
-
-function bounceAlertClass(row: MessageHealth7dRow): string {
-  if (row.total < 20) return "text-ash";
-  const rate = row.bounced / row.total;
-  return rate > 0.05 ? "text-rose" : "text-ink";
-}
-
-function Stat({ label, value, alert = false }: { label: string; value: string; alert?: boolean }) {
-  return (
-    <div className="rounded-card border-hairline border bg-white px-3 py-2">
-      <div className="text-ash text-xs">{label}</div>
-      <div
-        className={`text-2xl font-bold tracking-tight tabular-nums ${
-          alert ? "text-rose" : "text-ink"
-        }`}
-      >
-        {value}
+        </Section>
       </div>
     </div>
   );
 }
 
-function Empty({ message }: { message: string }) {
-  return <p className="text-ash text-xs">{message}</p>;
+// Hostname only — operator URLs can embed tokens in paths/queries.
+// Defensive fallback: a malformed stored URL must not 500 the page.
+function hostnameOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url.slice(0, 40);
+  }
 }
 
-function fmtDateTime(d: Date | null): string {
-  if (!d) return "—";
-  return d.toISOString().slice(0, 16).replace("T", " ") + " UTC";
+function BounceChip({ row }: { row: MessageHealth7dRow }) {
+  if (row.total === 0) return <Chip tone="neutral">—</Chip>;
+  const rate = row.bounced / row.total;
+  const display = pctStr(rate);
+  if (row.total < 20) return <Chip tone="neutral">{display}</Chip>;
+  return <Chip tone={rate > 0.05 ? "rose" : "ink"}>{display}</Chip>;
 }
