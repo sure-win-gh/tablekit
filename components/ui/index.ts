@@ -6,4 +6,5 @@ export { Button, IconButton } from "./button";
 export { Card, CardBody, CardDescription, CardHeader, CardTitle } from "./card";
 export { Field } from "./field";
 export { Input, Select, Textarea } from "./input";
+export { Skeleton } from "./skeleton";
 export { cn } from "./cn";

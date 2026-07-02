@@ -74,3 +74,49 @@ export type TopGuestRow = {
   visits: number; // confirmed|seated|finished only
   lastVisit: Date;
 };
+
+export type CancellationsReport = {
+  totalBookings: number; // every booking created for a slot in range
+  cancelled: number;
+  rate: number; // 0..1; 0 when totalBookings === 0
+  byDay: Array<{ day: string; bookings: number; cancelled: number }>;
+  // Normalised reason strings; null reasons reported as "unspecified".
+  byReason: Array<{ reason: string; count: number }>;
+};
+
+export type PeakTimeCell = {
+  weekday: number; // ISO: 1=Mon .. 7=Sun, venue-local
+  hour: number; // 0..23, venue-local
+  bookings: number;
+  covers: number; // realised statuses only
+};
+
+export type OccupancyRow = {
+  serviceId: string;
+  serviceName: string;
+  sessionsInRange: number; // scheduled occurrences of the service in range
+  capacityPerSession: number; // override ?? whole-room capacity
+  totalCapacity: number; // sessionsInRange × capacityPerSession
+  coversRealised: number;
+  utilisation: number; // 0..n; 0 when totalCapacity === 0
+};
+
+export type ReviewsReport = {
+  count: number;
+  avgRating: number | null; // null when count === 0
+  byDay: Array<{ day: string; count: number; avgRating: number }>;
+  bySource: Array<{ source: string; count: number; avgRating: number }>;
+  sentiment: { positive: number; neutral: number; negative: number; unclassified: number };
+};
+
+export type SpendReport = {
+  orders: number;
+  revenueMinor: number;
+  covers: number; // sum of known cover counts (nullable at source)
+  avgPerOrderMinor: number; // 0 when no orders
+  // Spend per cover computed only over orders where the till reported a
+  // cover count — null when none did, so the UI can say "unknown" rather
+  // than implying £0.
+  avgPerCoverMinor: number | null;
+  byDay: Array<{ day: string; orders: number; revenueMinor: number }>;
+};
