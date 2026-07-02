@@ -14,18 +14,34 @@ import { requireRole } from "@/lib/auth/require-role";
 import { formatVenueDateLong } from "@/lib/bookings/time";
 import { withUser } from "@/lib/db/client";
 import { venues } from "@/lib/db/schema";
+import { getCancellationsReport } from "@/lib/reports/cancellations";
 import { getCoversReport } from "@/lib/reports/covers";
 import { toCsv } from "@/lib/reports/csv";
 import { getDepositRevenueReport } from "@/lib/reports/deposits";
 import { parseFilter } from "@/lib/reports/filter";
 import { getNoShowReport } from "@/lib/reports/no-show";
+import { getOccupancyReport } from "@/lib/reports/occupancy";
+import { getPeakTimesReport } from "@/lib/reports/peak-times";
+import { getReviewsReport } from "@/lib/reports/reviews";
 import { getSourceMixReport } from "@/lib/reports/sources";
+import { getSpendReport } from "@/lib/reports/spend";
 import { getTopGuestsReport } from "@/lib/reports/top-guests";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const REPORTS = ["covers", "no-show", "deposits", "sources", "top-guests"] as const;
+const REPORTS = [
+  "covers",
+  "no-show",
+  "deposits",
+  "sources",
+  "top-guests",
+  "cancellations",
+  "peak-times",
+  "occupancy",
+  "reviews",
+  "spend",
+] as const;
 type ReportName = (typeof REPORTS)[number];
 
 export async function GET(
@@ -63,7 +79,10 @@ export async function GET(
     return NextResponse.json({ error: parsed.reason }, { status: 400 });
   }
 
-  const csv = await renderCsv(report, venueId, parsed.bounds, venue.timezone);
+  const csv = await renderCsv(report, venueId, parsed.bounds, venue.timezone, {
+    fromDate,
+    toDate,
+  });
   const filename = `${report}-${fromDate}_${toDate}.csv`;
   return new NextResponse(csv, {
     status: 200,
@@ -84,6 +103,7 @@ async function renderCsv(
   venueId: string,
   bounds: { startUtc: Date; endUtc: Date; timezone: string },
   timezone: string,
+  range: { fromDate: string; toDate: string },
 ): Promise<string> {
   switch (report) {
     case "covers": {
@@ -156,6 +176,67 @@ async function renderCsv(
         { header: "first_name", value: (r) => r.firstName },
         { header: "visits", value: (r) => r.visits },
         { header: "last_visit", value: (r) => formatVenueDateLong(r.lastVisit, { timezone }) },
+      ]);
+    }
+    case "cancellations": {
+      const report = await withUser((db) => getCancellationsReport(db, venueId, bounds));
+      // Two sections in one file, disambiguated by "scope" — same trick
+      // as the no-show export.
+      const rows = [
+        ...report.byDay.map((r) => ({
+          scope: "day",
+          key: r.day,
+          bookings: r.bookings,
+          cancelled: r.cancelled,
+        })),
+        ...report.byReason.map((r) => ({
+          scope: "reason",
+          key: r.reason,
+          bookings: null as number | null,
+          cancelled: r.count,
+        })),
+      ];
+      return toCsv(rows, [
+        { header: "scope", value: (r) => r.scope },
+        { header: "day_or_reason", value: (r) => r.key },
+        { header: "bookings", value: (r) => r.bookings },
+        { header: "cancelled", value: (r) => r.cancelled },
+      ]);
+    }
+    case "peak-times": {
+      const rows = await withUser((db) => getPeakTimesReport(db, venueId, bounds));
+      return toCsv(rows, [
+        { header: "iso_weekday", value: (r) => r.weekday },
+        { header: "hour", value: (r) => r.hour },
+        { header: "bookings", value: (r) => r.bookings },
+        { header: "covers", value: (r) => r.covers },
+      ]);
+    }
+    case "occupancy": {
+      const rows = await withUser((db) => getOccupancyReport(db, venueId, bounds, range));
+      return toCsv(rows, [
+        { header: "service", value: (r) => r.serviceName },
+        { header: "sessions", value: (r) => r.sessionsInRange },
+        { header: "capacity_per_session", value: (r) => r.capacityPerSession },
+        { header: "total_capacity", value: (r) => r.totalCapacity },
+        { header: "covers_realised", value: (r) => r.coversRealised },
+        { header: "utilisation", value: (r) => r.utilisation.toFixed(4) },
+      ]);
+    }
+    case "reviews": {
+      const report = await withUser((db) => getReviewsReport(db, venueId, bounds));
+      return toCsv(report.byDay, [
+        { header: "day", value: (r) => r.day },
+        { header: "reviews", value: (r) => r.count },
+        { header: "avg_rating", value: (r) => r.avgRating.toFixed(2) },
+      ]);
+    }
+    case "spend": {
+      const report = await withUser((db) => getSpendReport(db, venueId, bounds));
+      return toCsv(report.byDay, [
+        { header: "day", value: (r) => r.day },
+        { header: "orders", value: (r) => r.orders },
+        { header: "revenue_minor", value: (r) => r.revenueMinor },
       ]);
     }
   }

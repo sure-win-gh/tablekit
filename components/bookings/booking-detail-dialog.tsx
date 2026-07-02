@@ -415,7 +415,7 @@ function BookingDetailDialogBody({ venueId, date, booking, allVenueTables, onClo
             <Field
               label="Cancellation reason"
               htmlFor="bdm-cancel-reason"
-              hint="Optional — recorded on the booking + audit log."
+              hint="Optional — recorded on the booking + audit log and grouped in reports. Keep it reason-shaped; don't include guest names or personal details."
               optional
             >
               <Input

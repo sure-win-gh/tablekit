@@ -1,7 +1,8 @@
 // Integration tests for the reporting module.
 //
-// Two tenants, both with bookings + payments on the same date. We
-// run the five report queries under each user's RLS context and
+// Two tenants, both with bookings + payments (and reviews + POS
+// orders) on the same date. We run every report query under each
+// user's RLS context and
 // assert (a) the aggregates are correct for the visible scope and
 // (b) cross-tenant isolation holds — user A never sees a booking
 // or payment from org B.
@@ -14,11 +15,16 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { BookingStatus } from "@/lib/bookings/state";
 import * as schema from "@/lib/db/schema";
+import { getCancellationsReport } from "@/lib/reports/cancellations";
 import { getCoversReport } from "@/lib/reports/covers";
 import { getDepositRevenueReport } from "@/lib/reports/deposits";
 import { parseFilter } from "@/lib/reports/filter";
 import { getNoShowReport } from "@/lib/reports/no-show";
+import { getOccupancyReport } from "@/lib/reports/occupancy";
+import { getPeakTimesReport } from "@/lib/reports/peak-times";
+import { getReviewsReport } from "@/lib/reports/reviews";
 import { getSourceMixReport } from "@/lib/reports/sources";
+import { getSpendReport } from "@/lib/reports/spend";
 import { getTopGuestsReport } from "@/lib/reports/top-guests";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -260,6 +266,24 @@ beforeAll(async () => {
   const bookingAIds = await seedA();
   const bookingAFinishedDinner = bookingAIds[3]!;
   const bookingANoShow = bookingAIds[4]!;
+  const bookingACancelled = bookingAIds[2]!;
+
+  // Cancellation reason on org A's cancelled booking — feeds the
+  // cancellations report's by-reason breakdown.
+  await db
+    .update(schema.bookings)
+    .set({ cancelledAt: at(DAY1_LOCAL, 10), cancelledReason: "change_of_plans" })
+    .where(eq(schema.bookings.id, bookingACancelled));
+
+  // A 10-top table for venue A so occupancy has non-zero capacity.
+  await db.insert(schema.venueTables).values({
+    organisationId: orgA.id,
+    venueId: venueAId,
+    areaId: areaAId,
+    label: "T1",
+    minCover: 1,
+    maxCover: 10,
+  });
 
   // Org B — one confirmed booking on DAY1 with a deposit. RLS check
   // will assert user A *cannot* see it.
@@ -316,6 +340,83 @@ beforeAll(async () => {
       amountMinor: 1000,
       currency: "GBP",
       status: "succeeded",
+    },
+  ]);
+
+  // Reviews — org A: two reviews in range (internal + google); org B:
+  // one. The RLS check asserts user A can't see org B's.
+  await db.insert(schema.reviews).values([
+    {
+      organisationId: orgA.id,
+      venueId: venueAId,
+      bookingId: bookingAFinishedDinner,
+      guestId: guestAReturnId,
+      rating: 5,
+      source: "internal",
+      submittedAt: at(DAY1_LOCAL, 21),
+    },
+    {
+      organisationId: orgA.id,
+      venueId: venueAId,
+      rating: 3,
+      source: "google",
+      externalId: `g_${run}`,
+      // External reviews require a display name per reviews_source_shape_check.
+      reviewerDisplayName: "A. Diner",
+      submittedAt: at(DAY2_LOCAL, 14),
+    },
+    {
+      organisationId: orgB.id,
+      venueId: venueBId,
+      rating: 1,
+      source: "internal",
+      bookingId: bookingBId,
+      guestId: guestBId,
+      submittedAt: at(DAY1_LOCAL, 21),
+    },
+  ]);
+
+  // POS — one connection + two orders for org A (one with covers, one
+  // without), one order for org B.
+  const mkPosConnection = async (orgId: string, venueId: string) => {
+    const [c] = await db
+      .insert(schema.posConnections)
+      .values({ organisationId: orgId, venueId, provider: "generic" })
+      .returning({ id: schema.posConnections.id });
+    return c!.id;
+  };
+  const posConnAId = await mkPosConnection(orgA.id, venueAId);
+  const posConnBId = await mkPosConnection(orgB.id, venueBId);
+  await db.insert(schema.posOrders).values([
+    {
+      organisationId: orgA.id,
+      venueId: venueAId,
+      connectionId: posConnAId,
+      provider: "generic",
+      externalOrderId: `oa1_${run}`,
+      totalMinor: 5000,
+      coverCount: 2,
+      closedAt: at(DAY1_LOCAL, 14),
+    },
+    {
+      organisationId: orgA.id,
+      venueId: venueAId,
+      connectionId: posConnAId,
+      provider: "generic",
+      externalOrderId: `oa2_${run}`,
+      totalMinor: 3000,
+      coverCount: null,
+      closedAt: at(DAY2_LOCAL, 14),
+    },
+    {
+      organisationId: orgB.id,
+      venueId: venueBId,
+      connectionId: posConnBId,
+      provider: "generic",
+      externalOrderId: `ob1_${run}`,
+      totalMinor: 9999,
+      coverCount: 4,
+      closedAt: at(DAY1_LOCAL, 14),
     },
   ]);
 
@@ -447,5 +548,126 @@ describe("reports — top guests", () => {
     const returner = rows.find((r) => r.guestId === ctx.guestAReturnId);
     expect(returner?.visits).toBe(3);
     expect(rows.length).toBe(1);
+  });
+});
+
+describe("reports — cancellations", () => {
+  it("computes rate + reason breakdown for venue A", async () => {
+    const bounds = filter();
+    const report = await asUser(ctx.userAId, (tx) =>
+      getCancellationsReport(tx, ctx.venueAId, bounds),
+    );
+    // 6 bookings in range, 1 cancelled (reason change_of_plans).
+    expect(report.totalBookings).toBe(6);
+    expect(report.cancelled).toBe(1);
+    expect(report.rate).toBeCloseTo(1 / 6, 5);
+    expect(report.byReason).toEqual([{ reason: "change_of_plans", count: 1 }]);
+    const day1 = report.byDay.find((r) => r.day === DAY1_LOCAL);
+    expect(day1?.bookings).toBe(5);
+    expect(day1?.cancelled).toBe(1);
+  });
+
+  it("user A querying venue B sees nothing — RLS isolation", async () => {
+    const bounds = filter();
+    const report = await asUser(ctx.userAId, (tx) =>
+      getCancellationsReport(tx, ctx.venueBId, bounds),
+    );
+    expect(report.totalBookings).toBe(0);
+    expect(report.byReason).toEqual([]);
+  });
+});
+
+describe("reports — peak times", () => {
+  it("buckets realised covers by venue-local weekday × hour", async () => {
+    const bounds = filter();
+    const cells = await asUser(ctx.userAId, (tx) => getPeakTimesReport(tx, ctx.venueAId, bounds));
+    const byKey = new Map(cells.map((c) => [`${c.weekday}-${c.hour}`, c]));
+    // DAY1 (Monday, isodow 1): 12:00 party 2, 13:00 party 4, 19:00
+    // party 6. The 14:00 cancelled and 20:00 no_show are excluded.
+    expect(byKey.get("1-12")?.covers).toBe(2);
+    expect(byKey.get("1-13")?.covers).toBe(4);
+    expect(byKey.get("1-19")?.covers).toBe(6);
+    expect(byKey.get("1-14")).toBeUndefined();
+    expect(byKey.get("1-20")).toBeUndefined();
+    // DAY2 (Tuesday, isodow 2): 13:00 party 2.
+    expect(byKey.get("2-13")?.covers).toBe(2);
+    expect(cells.length).toBe(4);
+  });
+
+  it("user A querying venue B sees nothing — RLS isolation", async () => {
+    const bounds = filter();
+    const cells = await asUser(ctx.userAId, (tx) => getPeakTimesReport(tx, ctx.venueBId, bounds));
+    expect(cells).toEqual([]);
+  });
+});
+
+describe("reports — occupancy", () => {
+  it("computes utilisation per service against seats × sessions", async () => {
+    const bounds = filter();
+    const rows = await asUser(ctx.userAId, (tx) =>
+      getOccupancyReport(tx, ctx.venueAId, bounds, { fromDate: DAY1_LOCAL, toDate: DAY2_LOCAL }),
+    );
+    // Venue A: one 10-top table, both services run every day → 2
+    // sessions × 10 seats = 20 capacity each.
+    // Lunch realised: 6 (day1) + 2 (day2) = 8 → 40%. Dinner: 6 → 30%.
+    const byName = new Map(rows.map((r) => [r.serviceName, r]));
+    const lunch = byName.get("Lunch");
+    expect(lunch?.sessionsInRange).toBe(2);
+    expect(lunch?.capacityPerSession).toBe(10);
+    expect(lunch?.totalCapacity).toBe(20);
+    expect(lunch?.coversRealised).toBe(8);
+    expect(lunch?.utilisation).toBeCloseTo(0.4, 5);
+    const dinner = byName.get("Dinner");
+    expect(dinner?.coversRealised).toBe(6);
+    expect(dinner?.utilisation).toBeCloseTo(0.3, 5);
+  });
+
+  it("user A querying venue B sees nothing — RLS isolation", async () => {
+    const bounds = filter();
+    const rows = await asUser(ctx.userAId, (tx) =>
+      getOccupancyReport(tx, ctx.venueBId, bounds, { fromDate: DAY1_LOCAL, toDate: DAY2_LOCAL }),
+    );
+    expect(rows).toEqual([]);
+  });
+});
+
+describe("reports — reviews", () => {
+  it("aggregates count, average and source mix for venue A", async () => {
+    const bounds = filter();
+    const report = await asUser(ctx.userAId, (tx) => getReviewsReport(tx, ctx.venueAId, bounds));
+    expect(report.count).toBe(2);
+    expect(report.avgRating).toBeCloseTo(4, 5);
+    const bySource = new Map(report.bySource.map((s) => [s.source, s]));
+    expect(bySource.get("internal")?.count).toBe(1);
+    expect(bySource.get("google")?.count).toBe(1);
+  });
+
+  it("user A querying venue B sees nothing — RLS isolation", async () => {
+    const bounds = filter();
+    const report = await asUser(ctx.userAId, (tx) => getReviewsReport(tx, ctx.venueBId, bounds));
+    expect(report.count).toBe(0);
+    expect(report.avgRating).toBeNull();
+  });
+});
+
+describe("reports — spend", () => {
+  it("totals POS orders and computes per-cover only over covered orders", async () => {
+    const bounds = filter();
+    const report = await asUser(ctx.userAId, (tx) => getSpendReport(tx, ctx.venueAId, bounds));
+    expect(report.orders).toBe(2);
+    expect(report.revenueMinor).toBe(8000);
+    expect(report.avgPerOrderMinor).toBe(4000);
+    // Only the £50 order reported covers (2) → £25/cover; the £30
+    // cover-less order must not deflate the number.
+    expect(report.covers).toBe(2);
+    expect(report.avgPerCoverMinor).toBe(2500);
+    expect(report.byDay.length).toBe(2);
+  });
+
+  it("user A querying venue B sees nothing — RLS isolation", async () => {
+    const bounds = filter();
+    const report = await asUser(ctx.userAId, (tx) => getSpendReport(tx, ctx.venueBId, bounds));
+    expect(report.orders).toBe(0);
+    expect(report.revenueMinor).toBe(0);
   });
 });
