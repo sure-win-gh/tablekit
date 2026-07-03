@@ -116,6 +116,61 @@ export function TimelineScroller({
 }
 
 // ===========================================================================
+// Live "now" indicator.
+//
+// The old line was a server snapshot — truthful at page load, hours
+// stale by the end of service on a host stand that never reloads.
+// This client component recomputes the venue-local time every minute
+// and repositions (or hides) the line. Position maths mirrors the
+// original server calculation exactly; no data is refetched.
+// ===========================================================================
+
+function venueNowMinutes(timezone: string, windowStartHour: number): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const h = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const m = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  return (h - windowStartHour) * 60 + m;
+}
+
+export function NowLine({
+  timezone,
+  windowStartHour,
+  totalSlots,
+  initialMinutes,
+}: {
+  timezone: string;
+  windowStartHour: number;
+  totalSlots: number;
+  // Server-computed position seeds the first render so SSR and client
+  // hydration agree even across a minute boundary or clock skew; the
+  // mount-time tick immediately corrects to the client clock.
+  initialMinutes: number | null;
+}) {
+  const [minutes, setMinutes] = useState(initialMinutes ?? -1);
+
+  useEffect(() => {
+    const tick = () => setMinutes(venueNowMinutes(timezone, windowStartHour));
+    tick();
+    const t = setInterval(tick, 60_000);
+    return () => clearInterval(t);
+  }, [timezone, windowStartHour]);
+
+  if (minutes < 0 || minutes > totalSlots * 15) return null;
+  return (
+    <div
+      aria-label="now"
+      className="bg-coral pointer-events-none absolute inset-y-0 z-20 w-px"
+      style={{ left: `calc(120px + (100% - 120px) * ${minutes / (totalSlots * 15)})` }}
+    />
+  );
+}
+
+// ===========================================================================
 // Timeline interaction state.
 //
 // Two interactions share one context:
@@ -369,6 +424,10 @@ export type TimelineBookingBlock = {
   highChairs: number;
   dietaryNotes: string | null;
   priorVisits: number;
+  // True when the booking runs past the day window's right edge (e.g.
+  // a 23:00–01:00 booking) — the block renders an → marker so the
+  // clamped end isn't mistaken for the real end.
+  truncatedEnd: boolean;
 };
 
 // Detail-modal payload — a TimelineBookingBlock plus the row's
@@ -455,8 +514,9 @@ export function TimelineRow({
           wallEnd: action.newWallEnd,
         };
       }
-      // resize
-      return { ...b, span: action.newSpan, wallEnd: action.newWallEnd };
+      // resize — the new end is inside the window by construction, so
+      // any truncation marker clears.
+      return { ...b, span: action.newSpan, wallEnd: action.newWallEnd, truncatedEnd: false };
     }),
   );
 
@@ -941,8 +1001,16 @@ function BookingBlock({
         STATUS_FILL[block.status],
       )}
     >
-      <span className="truncate font-semibold">
-        {block.wallStart}–{block.wallEnd} {block.guestFirstName}
+      <span
+        className="truncate font-semibold"
+        title={
+          block.truncatedEnd
+            ? `Runs past the end of the day view — actually finishes at ${block.wallEnd}`
+            : undefined
+        }
+      >
+        {block.wallStart}–{block.wallEnd}
+        {block.truncatedEnd ? " →" : ""} {block.guestFirstName}
       </span>
       <span className="truncate">
         party {block.partySize}

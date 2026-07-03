@@ -1,6 +1,13 @@
 # Spec: Service summary
 
-**Status:** shipped — Plus-gated `/service-summary`: capacity-override table (PR1), per-day panel with capacity/booked/utilisation/open-slots (PR2), month/week calendar heatmap (PR3), four-rule suggestion engine (PR4).
+**Status:** shipped — Plus-gated `/service-summary`: capacity-override table (PR1), per-day panel with capacity/booked/utilisation/open-slots (PR2), month/week calendar heatmap (PR3), four-rule suggestion engine (PR4). UI refresh + day-prep KPIs (2026-07-02).
+
+### 2026-07 refresh notes
+
+- **Day KPI band**: covers booked vs capacity (coral accent ≥95%), bookings, open slots, largest party, high chairs, dietary-note count. The last three come from `getDayPrep` (`lib/services/summary.ts`) — a single day aggregate; `dietary_notes_cipher` is only null-checked, never read or decrypted. RLS-tested in `tests/integration/rls-services.test.ts`.
+- **Attention strip**: all fired suggestions surface in one tinted row above the fold ("Worth a look"); per-row badges remain.
+- **Calendar**: coral-intensity heat scale (tokens via `color-mix`, same language as the reports peak-times heatmap), compact `h-10` cells, ‹ › month navigation + month label. `heatBucket` thresholds unchanged.
+- **Service rows**: single divided card; each row shows window, name, tokenised utilisation bar (ink / coral ≥70% / rose ≥95%), booked/capacity/%, plus previously-hidden detail (bookings count, avg party, open slots, turn minutes) and a Timeline deep-link.
 **Depends on:** `bookings.md`, `venues.md`
 
 ## What we're building

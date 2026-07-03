@@ -44,6 +44,43 @@ export type ServiceSummaryRow = {
 
 const REPRESENTATIVE_PARTY = 2;
 
+// Day-prep aggregates for the KPI band — counts only, computed in SQL.
+// dietaryNotesCount counts bookings whose (encrypted) dietary note is
+// present; the ciphertext itself is never read, let alone decrypted.
+export type DayPrep = {
+  highChairs: number;
+  dietaryNotesCount: number;
+  largestParty: number;
+};
+
+export async function getDayPrep(
+  db: Db,
+  venueId: string,
+  date: string,
+  timezone: string,
+): Promise<DayPrep> {
+  const { startUtc, endUtc } = venueLocalDayRange(date, timezone);
+  const [row] = await db
+    .select({
+      highChairs: sql<number>`coalesce(sum(${bookings.highChairs}), 0)::int`.as("highChairs"),
+      dietaryNotesCount:
+        sql<number>`count(*) filter (where ${bookings.dietaryNotesCipher} is not null)::int`.as(
+          "dietaryNotesCount",
+        ),
+      largestParty: sql<number>`coalesce(max(${bookings.partySize}), 0)::int`.as("largestParty"),
+    })
+    .from(bookings)
+    .where(
+      and(
+        eq(bookings.venueId, venueId),
+        gte(bookings.startAt, startUtc),
+        lt(bookings.startAt, endUtc),
+        ne(bookings.status, "cancelled"),
+      ),
+    );
+  return row ?? { highChairs: 0, dietaryNotesCount: 0, largestParty: 0 };
+}
+
 export async function getServiceSummary(
   db: Db,
   venueId: string,

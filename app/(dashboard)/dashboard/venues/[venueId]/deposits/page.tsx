@@ -62,39 +62,46 @@ export default async function DepositsPage({ params }: { params: Promise<{ venue
   const servicesById = new Map(serviceOptions.map((s) => [s.id, s.name]));
 
   return (
-    <section className="flex flex-col gap-6">
+    <section className="flex max-w-3xl flex-col gap-6">
       <div>
-        <h2 className="text-ink text-lg font-medium tracking-tight">Deposit rules</h2>
-        <p className="text-ash text-sm">
-          The most-specific matching rule wins — a service-specific rule beats a wildcard, narrower
-          day-of-week beats broader, narrower party range beats open, most recently created breaks
-          ties. Bookings that match a rule collect a deposit via the widget; host-created bookings
-          skip deposits.
+        <h2 className="text-ink text-xl font-bold tracking-tight">Deposit rules</h2>
+        <p className="text-ash mt-0.5 text-sm">
+          Widget bookings that match a rule collect a deposit (or card hold) at booking time;
+          host-created bookings never do.
         </p>
       </div>
 
-      <div className="flex flex-col">
-        {rules.length === 0 ? (
-          <p className="border-hairline text-ash rounded-md border border-dashed p-4 text-sm">
-            No rules yet. Add one below to start collecting deposits on widget bookings.
-          </p>
-        ) : (
-          rules.map((r) => (
+      {rules.length === 0 ? (
+        <p className="border-hairline text-ash rounded-card border border-dashed bg-white p-6 text-center text-sm">
+          No rules yet — add one below to start collecting deposits on widget bookings.
+        </p>
+      ) : (
+        <div className="border-hairline rounded-card divide-hairline divide-y overflow-hidden border bg-white">
+          {rules.map((r) => (
             <DepositRuleRow
               key={r.id}
               rule={r}
               serviceName={r.serviceId ? (servicesById.get(r.serviceId) ?? null) : null}
               venueId={venueId}
             />
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
       <NewDepositRuleForm
         venueId={venueId}
         services={serviceOptions}
         chargesEnabled={chargesEnabled}
+        startOpen={rules.length === 0}
       />
+
+      {rules.length > 1 ? (
+        <p className="text-ash text-xs">
+          When several rules match a booking, the most specific wins: a service-specific rule beats
+          &ldquo;All services&rdquo;, fewer days beats more days, a narrower party range beats an
+          open one, and the newest rule breaks any remaining tie.
+        </p>
+      ) : null}
     </section>
   );
 }
