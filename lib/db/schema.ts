@@ -63,6 +63,16 @@ export const organisations = pgTable(
     name: text("name").notNull(),
     slug: citext("slug").notNull().unique(),
     plan: text("plan").notNull().default("free"),
+    // Multi-region (docs/specs/multi-region.md). `region` = where this org's
+    // data lives ('eu' | 'us'); `billing_entity` = which legal entity it
+    // contracts with ('uk' | 'us'), i.e. which Stripe account books its
+    // revenue. Set together at signup by regionForCountry() (lib/regions.ts)
+    // and effectively immutable afterwards — a region change is a documented
+    // support-driven migration, never a flag flip (D7). Existing orgs are
+    // grandfathered to the defaults as a constant — never geo-IP
+    // re-detection (D3). CHECK constraints pinned in the migration.
+    region: text("region").notNull().default("eu"),
+    billingEntity: text("billing_entity").notNull().default("uk"),
     // Platform-account Stripe Customer (Tablekit = merchant for the SaaS
     // subscription + credit top-ups). DISTINCT from guests.stripe_customer_id,
     // which is a per-guest Customer on the venue's CONNECTED account for
