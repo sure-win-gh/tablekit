@@ -428,7 +428,8 @@ function HBar({
   sub?: string;
   color?: string;
 }) {
-  const width = max === 0 ? 0 : Math.max(2, Math.min(100, (value / max) * 100));
+  // Zero stays zero — a visible sliver for an empty row misleads.
+  const width = max === 0 || value === 0 ? 0 : Math.max(2, Math.min(100, (value / max) * 100));
   return (
     <div className="flex items-center gap-3 text-xs">
       <span className="text-ink w-32 shrink-0 truncate" title={label}>
