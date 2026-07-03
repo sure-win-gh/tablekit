@@ -21,8 +21,10 @@ vi.mock("@/lib/server/admin/db", () => ({ adminDb: () => ({ select: mockSelect }
 import { getBillingContact } from "@/lib/billing/contact";
 
 // adminDb().select(...).from(...).where(...).limit(n) resolves to `rows`.
+// Rows carry the org's billing entity (multi-region Phase 2) — 'uk' here,
+// matching every grandfathered org.
 function stubCustomerRow(customerId: string | null): void {
-  const rows = customerId === null ? [] : [{ customerId }];
+  const rows = customerId === null ? [] : [{ customerId, billingEntity: "uk" }];
   mockSelect.mockReturnValue({
     from: () => ({ where: () => ({ limit: () => Promise.resolve(rows) }) }),
   });

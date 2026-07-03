@@ -102,9 +102,15 @@ export async function reportUsageDeltas(now: Date): Promise<MeterSyncResult> {
       continue;
     }
 
-    // The org's usage bills on its entity's account/meter. Skip (watermark
-    // stays put) if that entity's Stripe or meter isn't configured yet.
-    const entity = isBillingEntity(row.billingEntity) ? row.billingEntity : "uk";
+    // The org's usage bills on its entity's account/meter. Per-row
+    // isolation: an unknown entity value skips the row (watermark stays
+    // put; never reports into the UK meter by default), as does an entity
+    // whose Stripe/meter isn't configured yet.
+    if (!isBillingEntity(row.billingEntity)) {
+      result.skipped += 1;
+      continue;
+    }
+    const entity = row.billingEntity;
     const eventName = meterEventName(entity);
     if (!entityMeterReady(entity) || !eventName) {
       result.skipped += 1;

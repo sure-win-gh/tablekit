@@ -51,8 +51,11 @@ export async function getBillingContact(orgId: string): Promise<BillingContact |
     .limit(1);
   if (!org?.customerId) return null;
 
-  // The customer lives on the org's entity's account.
-  const entity = isBillingEntity(org.billingEntity) ? org.billingEntity : "uk";
+  // The customer lives on the org's entity's account. Display-only path:
+  // an unknown entity value degrades to the empty state (never falls back
+  // to the UK account) rather than failing the whole Account page render.
+  if (!isBillingEntity(org.billingEntity)) return null;
+  const entity = org.billingEntity;
   if (!stripeEnabled(entity)) return null;
 
   // Display-only and runs on every Account page load — a Stripe outage should

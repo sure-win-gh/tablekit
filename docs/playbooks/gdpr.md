@@ -173,7 +173,7 @@ See `docs/specs/multi-region.md` for the full architecture and locked decisions.
   - Observability: Sentry is EU-pinned; US-tenant errors flow EU-ward. PII scrubbing (`beforeSend`, above) is the mitigation; dual-project split if it proves insufficient.
   - AI enquiries: Bedrock is pinned `eu-west-1`. US tenants need a US-pinned invocation path, or the feature is withheld in the US at launch. Bumping the region counts as a sub-processor-equivalent change (rule 8 below).
   - Cross-region analytics/reporting aggregation: out of scope v1; requires pseudonymisation or a documented transfer basis when it arrives.
-- **Launch gates (external, not code):** US entity formation + US Stripe account + intra-group DTA; state-by-state US sales-tax registrations. Both gate the `REGION_US_ENABLED` flag.
+- **Launch gates (external, not code):** US entity formation + US Stripe account + intra-group DTA; state-by-state US sales-tax registrations. Both gate the `REGION_US_ENABLED` flag. Phase 4 additionally requires: updating the Supabase and Stripe rows in the sub-processor table + `/legal/sub-processors` (Supabase US project; Stripe Inc. as the US entity's processor) with the standard 30-day notice mechanics, and a decision on where US-entity `stripe_events` are stored (US regional DB, or documented here as EU-resident control-plane data).
 
 ## Things Claude Code must never do
 

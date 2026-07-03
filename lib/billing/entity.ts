@@ -13,7 +13,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 
 import { organisations } from "@/lib/db/schema";
-import { DEFAULT_BILLING_ENTITY, isBillingEntity, type BillingEntity } from "@/lib/regions/mapping";
+import { assertBillingEntity, type BillingEntity } from "@/lib/regions/mapping";
 import { adminDb } from "@/lib/server/admin/db";
 
 export async function entityForOrg(orgId: string): Promise<BillingEntity> {
@@ -23,7 +23,7 @@ export async function entityForOrg(orgId: string): Promise<BillingEntity> {
     .where(eq(organisations.id, orgId))
     .limit(1);
   if (!org) throw new Error(`lib/billing/entity.ts: org ${orgId} not found`);
-  // The column is CHECK-constrained to 'uk'|'us'; the guard is
-  // belt-and-braces against a future value landing before code catches up.
-  return isBillingEntity(org.billingEntity) ? org.billingEntity : DEFAULT_BILLING_ENTITY;
+  // The column is CHECK-constrained to 'uk'|'us'; an unknown value THROWS
+  // (fail closed) rather than silently billing through the UK account.
+  return assertBillingEntity(org.billingEntity);
 }

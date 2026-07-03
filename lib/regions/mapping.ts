@@ -63,3 +63,16 @@ export function isRegion(value: string): value is Region {
 export function isBillingEntity(value: string): value is BillingEntity {
   return (BILLING_ENTITIES as readonly string[]).includes(value);
 }
+
+/**
+ * Fail-closed narrowing for values read from the database. The column is
+ * CHECK-constrained to 'uk'|'us', so this is unreachable today — but if a
+ * third entity value ever lands before the code catches up, billing paths
+ * must THROW rather than silently charge through the UK account.
+ */
+export function assertBillingEntity(value: string): BillingEntity {
+  if (!isBillingEntity(value)) {
+    throw new Error(`unknown billing entity "${value}" — expected one of: uk, us`);
+  }
+  return value;
+}

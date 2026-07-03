@@ -5,6 +5,12 @@
 // event has been observed arriving there (docs/specs/multi-region.md,
 // Phase 2 cutover note). Then delete this file.
 //
+// CUTOVER GOTCHA: resolveSecret prefers STRIPE_WEBHOOK_SECRET_UK the
+// moment it is set — so set it to the SAME whsec_ as the legacy
+// STRIPE_WEBHOOK_SECRET (i.e. repoint the existing Stripe endpoint,
+// don't create a second endpoint with a new secret) or deliveries to
+// this legacy route will start failing signature verification.
+//
 // See lib/stripe/webhook-route.ts for the shared handler + ordering notes.
 
 import { makeStripeWebhookHandler } from "@/lib/stripe/webhook-route";

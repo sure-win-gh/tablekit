@@ -54,6 +54,8 @@ function row(over: Record<string, unknown>) {
     estCostPence: 40,
     reportedPence: 0,
     customerId: "cus_1",
+    // Multi-region Phase 2: every row carries the org's billing entity.
+    billingEntity: "uk",
     ...over,
   };
 }

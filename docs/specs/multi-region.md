@@ -24,7 +24,7 @@ Evolve Tablekit from single-region (UK/EU) single-entity (UK) into:
 
 | # | Decision | Answer |
 |---|----------|--------|
-| D1 | Region detection | Explicit country selector at signup. Edge geo headers may **pre-select** the option only — they never decide. Country → `{region, entity}` via one pure, unit-tested function (`lib/regions.ts`). |
+| D1 | Region detection | Explicit country selector at signup. Edge geo headers may **pre-select** the option only — they never decide. Country → `{region, entity}` via one pure, unit-tested function (`lib/regions/mapping.ts`). |
 | D2 | Rest-of-world default | Everything non-US → UK entity / EU region. (Australia and all other territories included.) |
 | D3 | Existing customers | All current orgs grandfathered as `region='eu'`, `billing_entity='uk'`, backfilled as a **constant** in the migration. No IP-based re-detection, no reassignment, no data movement. (No US customers exist — pre-launch.) |
 | D4 | Auth topology | Single global Supabase Auth project, co-located with the EU project, for v1. A US user's auth record living in the EU is acceptable: GDPR restricts EU data leaving the EEA; no US law requires US-person data to stay in the US. Avoids the per-region email-uniqueness / password-reset split. |
@@ -53,8 +53,9 @@ Evolve Tablekit from single-region (UK/EU) single-entity (UK) into:
 - Migration: `organisations.region text NOT NULL DEFAULT 'eu'` and
   `organisations.billing_entity text NOT NULL DEFAULT 'uk'`, both with CHECK
   constraints. Backfill = the defaults (D3).
-- `lib/regions.ts`: the single source for region/entity types, the pure
-  `regionForCountry(iso2)` mapping (D1/D2), and env-based config accessors.
+- `lib/regions/`: the single source for region/entity types and the pure
+  `regionForCountry(iso2)` mapping (D1/D2) in `mapping.ts` (client-safe),
+  with env-based config accessors in `config.ts` (server-only).
   `DATABASE_URL_EU` falls back to `DATABASE_URL` so nothing breaks mid-rollout;
   `DATABASE_URL_US` is unset until Phase 4.
 - `lib/db/client.ts`: pool becomes a region-keyed registry. Every existing
@@ -84,6 +85,9 @@ Evolve Tablekit from single-region (UK/EU) single-entity (UK) into:
 - Signup creates the org in the correct regional DB, writes
   `region`/`billing_entity`, registers the org in the control-plane routing
   map. Widget/public/API paths resolve venue → region before querying.
+- The signup path MUST consult `regionEnabled("us")` (lib/regions/config.ts)
+  before offering the US option — that flag is the launch-gate enforcement
+  point; today nothing calls it (US is unreachable anyway in Phases 0–2).
 
 ### Phase 4 — US bring-up *(HELD — gated below)*
 
@@ -100,6 +104,16 @@ Evolve Tablekit from single-region (UK/EU) single-entity (UK) into:
   Sentry/Upstash/Resend/Twilio per-region posture reviewed.
 - Feature flag `REGION_US_ENABLED` — the US signup path stays dark until every
   launch gate is green.
+- Drop the transitional `stripe_events_id_key` UNIQUE constraint (added in
+  migration 0054 so the previous deployment's `ON CONFLICT ("id")` survives
+  the deploy window) BEFORE the US Stripe account sends its first event.
+- Decide where US-entity `stripe_events` rows live: the US regional DB, or
+  explicitly documented as EU-resident control-plane data in `gdpr.md`
+  (payloads can carry US operators' contact details).
+- Update the `gdpr.md` sub-processor table + `/legal/sub-processors` page:
+  Supabase gains a US-project row; Stripe Inc. (US) becomes the US entity's
+  processor. Standard 30-day notice mechanics apply — treat as a launch
+  gate, not an afterthought.
 
 ## Launch gates (external, run in parallel — NOT code tasks)
 

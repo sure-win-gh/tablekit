@@ -16,6 +16,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 
 import { organisations } from "@/lib/db/schema";
+import { assertBillingEntity } from "@/lib/regions/mapping";
 import { adminDb } from "@/lib/server/admin/db";
 import { stripe } from "@/lib/stripe/client";
 
@@ -50,8 +51,9 @@ export async function ensureCustomer(orgId: string): Promise<string> {
   // The Customer is created on the ORG'S ENTITY'S account — this is the
   // moment an org's billing gets pinned to a Stripe account, and it is
   // not portable afterwards (customers/subscriptions can't move between
-  // accounts — docs/specs/multi-region.md D7).
-  const entity = org.billingEntity === "us" ? ("us" as const) : ("uk" as const);
+  // accounts — docs/specs/multi-region.md D7). Unknown value → throw,
+  // never default (same fail-closed rule as entityForOrg).
+  const entity = assertBillingEntity(org.billingEntity);
   const customer = await stripe(entity).customers.create(
     { name: org.name, metadata: { organisation_id: orgId } },
     { idempotencyKey: `org_${orgId}_billing_customer_v1` },

@@ -10,7 +10,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 
 import { organisations } from "@/lib/db/schema";
-import { isBillingEntity } from "@/lib/regions/mapping";
+import { assertBillingEntity } from "@/lib/regions/mapping";
 import { adminDb } from "@/lib/server/admin/db";
 import { stripe } from "@/lib/stripe/client";
 
@@ -41,8 +41,9 @@ export async function createPortalSession(orgId: string): Promise<string> {
   if (!org?.customerId) throw new NoBillingCustomerError(orgId);
 
   // The customer lives on the org's entity's account — a portal session
-  // minted on the wrong account would 404 the customer.
-  const entity = isBillingEntity(org.billingEntity) ? org.billingEntity : "uk";
+  // minted on the wrong account would 404 the customer. Unknown value →
+  // throw (fail closed), never default to the UK account.
+  const entity = assertBillingEntity(org.billingEntity);
   const session = await stripe(entity).billingPortal.sessions.create({
     customer: org.customerId,
     return_url: `${appUrl()}/dashboard/organisation/billing`,
