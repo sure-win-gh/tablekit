@@ -14,6 +14,7 @@ import {
 } from "@/lib/bookings/time";
 import type { BookingStatus } from "@/lib/bookings/state";
 import { STATUS_FILL } from "@/lib/bookings/status-style";
+import { bookingSpan } from "@/lib/bookings/timeline-span";
 import { withUser } from "@/lib/db/client";
 import {
   areas,
@@ -30,6 +31,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import {
   BookingDetailModal,
   NewBookingModal,
+  NowLine,
   TimelineDateNav,
   TimelineDragProvider,
   TimelineRow,
@@ -298,6 +300,21 @@ export default async function TimelinePage({
   const initialScrollMinutes =
     date === today && nowMinutes !== null ? Math.max(0, nowMinutes - 30) : null;
 
+  // Day-glance stats for the header — derived entirely from data
+  // already fetched, no extra queries. Cancelled and no-show bookings
+  // are excluded: this strip is about what the floor actually serves.
+  const dayStats = (() => {
+    const active = bookingsForDay.filter((b) => b.status !== "cancelled" && b.status !== "no_show");
+    return {
+      bookings: active.length,
+      covers: active.reduce((s, b) => s + b.partySize, 0),
+      seatedNow: active.filter((b) => b.status === "seated").length,
+      toCome: active.filter((b) => b.status === "requested" || b.status === "confirmed").length,
+      highChairs: active.reduce((s, b) => s + b.highChairs, 0),
+      dietaryNotes: active.filter((b) => b.dietaryNotesCipher !== null).length,
+    };
+  })();
+
   return (
     <section className="flex flex-col gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -305,11 +322,49 @@ export default async function TimelinePage({
           <h2 className="text-ink text-xl font-bold tracking-tight">
             {formatVenueDateLong(startUtc, { timezone: venue.timezone })}
           </h2>
-          <p className="text-ash mt-0.5 text-xs">
-            {bookingsForDay.length === 0
-              ? "Nothing on the books for this day."
-              : `${bookingsForDay.length} booking${bookingsForDay.length === 1 ? "" : "s"} · ${tables.length} ${tables.length === 1 ? "table" : "tables"}`}
-          </p>
+          {dayStats.bookings === 0 ? (
+            <p className="text-ash mt-0.5 text-xs">
+              {bookingsForDay.length === 0
+                ? "Nothing on the books for this day."
+                : `Nothing active — ${bookingsForDay.length} cancelled or no-show.`}
+            </p>
+          ) : (
+            <p className="text-ash mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs">
+              <span className="text-ink font-semibold tabular-nums">{dayStats.covers} covers</span>
+              <span aria-hidden>·</span>
+              <span className="tabular-nums">{dayStats.bookings} bookings</span>
+              {dayStats.seatedNow > 0 ? (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className="text-ink font-semibold tabular-nums">
+                    {dayStats.seatedNow} seated
+                  </span>
+                </>
+              ) : null}
+              {dayStats.toCome > 0 ? (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className="tabular-nums">{dayStats.toCome} to come</span>
+                </>
+              ) : null}
+              {dayStats.highChairs > 0 ? (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className="text-coral-deep font-semibold tabular-nums">
+                    {dayStats.highChairs} high chair{dayStats.highChairs === 1 ? "" : "s"}
+                  </span>
+                </>
+              ) : null}
+              {dayStats.dietaryNotes > 0 ? (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className="text-coral-deep font-semibold tabular-nums">
+                    {dayStats.dietaryNotes} dietary note{dayStats.dietaryNotes === 1 ? "" : "s"}
+                  </span>
+                </>
+              ) : null}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Link href={`/dashboard/venues/${venueId}/bookings?date=${date}`}>
@@ -389,14 +444,15 @@ export default async function TimelinePage({
 
             {/* Area + table rows */}
             <div className="relative">
-              {/* Now indicator overlays the whole grid. */}
-              {nowMinutes !== null ? (
-                <div
-                  aria-label="now"
-                  className="bg-coral pointer-events-none absolute inset-y-0 z-20 w-px"
-                  style={{
-                    left: `calc(120px + (100% - 120px) * ${nowMinutes / (totalSlots * 15)})`,
-                  }}
+              {/* Live now indicator — client component, re-ticks every
+                  minute so it stays truthful on a host stand left open
+                  all service. Only rendered when viewing today. */}
+              {date === today ? (
+                <NowLine
+                  timezone={venue.timezone}
+                  windowStartHour={window.startHour}
+                  totalSlots={totalSlots}
+                  initialMinutes={nowMinutes}
                 />
               ) : null}
 
@@ -482,6 +538,7 @@ export default async function TimelinePage({
                               refundable: refundableSet.has(b.id),
                               cardHold: cardHoldSet.has(b.id),
                               noShowOutcome: noShowOutcomes.get(b.id) ?? null,
+                              truncatedEnd: span.truncatedEnd,
                               ...enrichment,
                             },
                           ];
@@ -524,13 +581,18 @@ function parseHHMM(s: string): number {
 // Stable per-service colour so each service reads as a distinct band
 // in the header. Hash the id to an index; the palette is small enough
 // that collisions are visible only with many overlapping services.
+// Token tints only (design-token rule) — services are sequential
+// bands (breakfast / lunch / dinner), so adjacent distinctness is
+// what matters, not hue variety.
+// Rose is reserved for error states elsewhere in the timeline, so the
+// bands vary coral/ink intensity instead.
 const SERVICE_PALETTE = [
-  "bg-violet-100 border-violet-300 text-violet-900",
-  "bg-cyan-100 border-cyan-300 text-cyan-900",
-  "bg-fuchsia-100 border-fuchsia-300 text-fuchsia-900",
-  "bg-orange-100 border-orange-300 text-orange-900",
-  "bg-teal-100 border-teal-300 text-teal-900",
-  "bg-pink-100 border-pink-300 text-pink-900",
+  "bg-coral/10 border-coral/40 text-coral-deep",
+  "bg-ink/10 border-ink/40 text-ink",
+  "bg-coral/30 border-coral/70 text-coral-deep",
+  "bg-cloud border-stone text-charcoal",
+  "bg-coral/50 border-coral text-coral-deep",
+  "bg-ink/25 border-ink/60 text-ink",
 ];
 
 function serviceColor(id: string): string {
@@ -555,28 +617,6 @@ function deriveWindow(svcRows: Array<{ schedule: unknown }>): {
   }
   if (minStart === 24 || maxEnd === 0) return { startHour: 9, endHour: 23 };
   return { startHour: Math.max(0, minStart), endHour: Math.min(24, maxEnd) };
-}
-
-function bookingSpan(
-  startAt: Date,
-  endAt: Date,
-  timezone: string,
-  window: { startHour: number; endHour: number },
-): { startCol: number; span: number } | null {
-  const startMin =
-    Number(formatInTimeZone(startAt, timezone, "H")) * 60 +
-    Number(formatInTimeZone(startAt, timezone, "m"));
-  const endMin =
-    Number(formatInTimeZone(endAt, timezone, "H")) * 60 +
-    Number(formatInTimeZone(endAt, timezone, "m"));
-  const winStartMin = window.startHour * 60;
-  const winEndMin = window.endHour * 60;
-  const clampedStart = Math.max(startMin, winStartMin);
-  const clampedEnd = Math.min(endMin, winEndMin);
-  if (clampedEnd <= clampedStart) return null;
-  const startCol = Math.floor((clampedStart - winStartMin) / 15);
-  const endCol = Math.ceil((clampedEnd - winStartMin) / 15);
-  return { startCol, span: Math.max(1, endCol - startCol) };
 }
 
 function Legend() {
