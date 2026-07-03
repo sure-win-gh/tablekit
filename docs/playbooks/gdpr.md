@@ -159,6 +159,22 @@ If we suspect a personal data breach:
 
 Do not delete logs or evidence during response, even if doing so seems to "clean up." Preserve, isolate, investigate.
 
+## Multi-region & cross-border transfers (US expansion)
+
+See `docs/specs/multi-region.md` for the full architecture and locked decisions. The data-protection posture:
+
+- **Region pinning.** Each organisation has exactly one data region (`organisations.region`: `eu` = existing Supabase London project, `us` = a new Supabase US project). Same schema, same RLS, same column-encryption model in both. Backups stay in-region; no cross-region replicas without documented safeguards.
+- **Grandfathering.** Every org created before the multi-region migration is backfilled `region='eu'`, `billing_entity='uk'` as a constant. Never geo-IP re-detection — mislabelling residency by IP is the failure mode this line exists to prevent.
+- **Per-region master keys** (Phase 4): `TABLEKIT_MASTER_KEY_EU` / `_US`. A US key must never be able to decrypt EU PII, and vice versa.
+- **Global auth + control plane (deliberate, documented).** Supabase Auth and the org→region routing map live in the EU project for all users, including US ones. Rationale: GDPR restricts EU personal data leaving the EEA; no US law requires US-person data to remain in the US. Operator auth records (email, password hash) for US customers therefore reside in the EU — acceptable, revisit only if a US-side residency obligation materialises.
+- **Compute.** Single EU Vercel compute region (v1). EU data never leaves the EEA — no transfer question in the direction GDPR cares about. US tenants' data transits EU compute; document, no safeguard required in that direction. Multi-region compute is a latency decision, not a compliance one.
+- **What region pinning does NOT solve** — each needs a legal safeguard (intra-group data transfer agreement between the UK and US entities, plus SCCs / UK IDTA where applicable) before `REGION_US_ENABLED`:
+  - Admin/support access: UK-based staff reading US tenants' data via `/admin` is a US→UK flow. `platform_audit_log` must record it (extend with region when Phase 4 lands).
+  - Observability: Sentry is EU-pinned; US-tenant errors flow EU-ward. PII scrubbing (`beforeSend`, above) is the mitigation; dual-project split if it proves insufficient.
+  - AI enquiries: Bedrock is pinned `eu-west-1`. US tenants need a US-pinned invocation path, or the feature is withheld in the US at launch. Bumping the region counts as a sub-processor-equivalent change (rule 8 below).
+  - Cross-region analytics/reporting aggregation: out of scope v1; requires pseudonymisation or a documented transfer basis when it arrives.
+- **Launch gates (external, not code):** US entity formation + US Stripe account + intra-group DTA; state-by-state US sales-tax registrations. Both gate the `REGION_US_ENABLED` flag.
+
 ## Things Claude Code must never do
 
 - Log plaintext guest PII (email, phone, name, DoB, notes).
