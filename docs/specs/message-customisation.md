@@ -1,6 +1,6 @@
 # Spec: Message customisation (content & flow control)
 
-**Status:** shipped (PR #70) — Phase 2 of the Automation & Engagement plan.
+**Status:** shipped (PR #70) — Phase 2 of the Automation & Engagement plan. UI restructured into tabs (2026-07-02).
 **Depends on:** `messaging.md`, `whatsapp.md`, `guests.md`, `docs/playbooks/gdpr.md`
 
 ## What we're building
@@ -45,7 +45,7 @@ create table message_templates (
 - `lib/messaging/triggers.ts` — read per-event timing from settings instead of the hardcoded 24h/2h/3h literals; enqueue the resolved channel.
 - `lib/messaging/templates/render.ts` (or extend the registry) — apply a per-(venue, template, channel) override when present, interpolating a **fixed merge-tag set** (`{{guestFirstName}}`, `{{venueName}}`, `{{startAtLocal}}`, `{{partySize}}`, `{{reference}}`, `{{serviceName}}`) with a safe substituter (no arbitrary HTML/script; unknown tags error in preview, render literal at send).
 - Branding threaded into `MessageBookingContext` + consumed by `lib/email/templates/_layout.tsx`.
-- Settings UI: extend `app/(dashboard)/dashboard/venues/[venueId]/settings/*` (existing `useActionState` + server-action + merge-then-persist) with a per-message editor: enable toggle, channel-order picker, timing, copy editor + live preview, branding fields. Locked elements (unsubscribe footer, STOP line, WhatsApp approved-template constraint) shown read-only.
+- Settings UI (2026-07 restructure): `settings/messaging/page.tsx` is a three-tab surface — **Messages** (one expandable row per lifecycle message: enable toggle, channel order, timing, AND the copy override + merge tags + live preview, saved together by the per-event `saveMessage` action so a row's save can never clobber a sibling message), **Branding** (venue-level fields, own `updateBranding` action), **Usage & costs** (org-scoped current-month `message_usage` read via RLS). Row headers show at-a-glance state: on/off dot, timing, channel chain, Custom-copy badge. Locked elements (unsubscribe footer, STOP line) remain non-removable; the old page-wide `updateMessagingSettings` action and the standalone composer were retired in the restructure.
 
 ## Acceptance criteria
 

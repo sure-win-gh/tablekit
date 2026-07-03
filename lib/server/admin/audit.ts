@@ -33,6 +33,7 @@ export type AuditAction =
   | "venue.slug_updated"
   | "venue.messaging_settings_updated"
   | "venue.message_template_updated"
+  | "venue.branding_updated"
   | "venue.photo_uploaded"
   | "venue.photo_deleted"
   | "campaign.created"

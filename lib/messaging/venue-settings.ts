@@ -109,6 +109,24 @@ export function parseMessagingSettings(settings: unknown): MessagingSettings {
 
 export { DEFAULTS as MESSAGING_SETTINGS_DEFAULTS };
 
+// Merge ONE event's new config into a venue's stored settings object,
+// returning the full settings value to persist. Pure and total so the
+// per-message save action can't clobber sibling events, branding, or
+// unrelated root keys — the load-bearing invariant of the Messages tab
+// (unit-tested in tests/unit/messaging-merge-event.test.ts).
+export function mergeMessagingEvent(
+  settings: unknown,
+  event: FlowEvent,
+  config: FlowEventSettings,
+): Record<string, unknown> {
+  const root =
+    settings && typeof settings === "object" ? (settings as Record<string, unknown>) : {};
+  return {
+    ...root,
+    messaging: { ...parseMessagingSettings(settings), [event]: config },
+  };
+}
+
 // --- Branding ---------------------------------------------------------------
 // Hex colour guard: #RGB or #RRGGBB only — never lets arbitrary CSS into
 // the email layout's inline style or the widget's themed wrapper.
