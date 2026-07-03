@@ -34,10 +34,18 @@ function sign(body: string, secret: string, timestamp = Math.floor(Date.now() / 
   return `t=${timestamp},v1=${mac}`;
 }
 
-const originalSecretKey = process.env["STRIPE_SECRET_KEY"];
-const originalWebhookSecret = process.env["STRIPE_WEBHOOK_SECRET"];
+const ENV_KEYS = [
+  "STRIPE_SECRET_KEY",
+  "STRIPE_SECRET_KEY_UK",
+  "STRIPE_SECRET_KEY_US",
+  "STRIPE_WEBHOOK_SECRET",
+  "STRIPE_WEBHOOK_SECRET_UK",
+  "STRIPE_WEBHOOK_SECRET_US",
+] as const;
+const original = new Map<string, string | undefined>(ENV_KEYS.map((k) => [k, process.env[k]]));
 
 beforeEach(() => {
+  for (const key of ENV_KEYS) delete process.env[key];
   process.env["STRIPE_SECRET_KEY"] = FAKE_STRIPE_SECRET_KEY;
   process.env["STRIPE_WEBHOOK_SECRET"] = FAKE_WEBHOOK_SECRET;
   _resetStripeClientForTests();
@@ -45,10 +53,11 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  if (originalSecretKey === undefined) delete process.env["STRIPE_SECRET_KEY"];
-  else process.env["STRIPE_SECRET_KEY"] = originalSecretKey;
-  if (originalWebhookSecret === undefined) delete process.env["STRIPE_WEBHOOK_SECRET"];
-  else process.env["STRIPE_WEBHOOK_SECRET"] = originalWebhookSecret;
+  for (const key of ENV_KEYS) {
+    const value = original.get(key);
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
   _resetStripeClientForTests();
   _clearHandlersForTests();
 });
@@ -86,6 +95,43 @@ describe("verifyAndParse", () => {
     process.env["STRIPE_WEBHOOK_SECRET"] = "whsec_YOUR_STRIPE_WEBHOOK_SECRET";
     const sig = sign(body, FAKE_WEBHOOK_SECRET);
     expect(() => verifyAndParse(body, sig)).toThrow(WebhookSecretMissingError);
+  });
+});
+
+describe("entity keying (multi-region Phase 2)", () => {
+  const body = JSON.stringify({
+    id: "evt_entity_1",
+    type: "account.updated",
+    data: { object: {} },
+  });
+  const UK_SECRET = "whsec_uk" + "u".repeat(38);
+  const US_SECRET = "whsec_us" + "s".repeat(38);
+
+  it("uk prefers STRIPE_WEBHOOK_SECRET_UK over the legacy name", () => {
+    process.env["STRIPE_WEBHOOK_SECRET_UK"] = UK_SECRET;
+    // Signed with the _UK secret → verifies; the legacy secret would fail.
+    const sig = sign(body, UK_SECRET);
+    expect(verifyAndParse(body, sig, "uk").id).toBe("evt_entity_1");
+    const legacySig = sign(body, FAKE_WEBHOOK_SECRET);
+    expect(() => verifyAndParse(body, legacySig, "uk")).toThrow(WebhookSignatureError);
+  });
+
+  it("uk falls back to the legacy STRIPE_WEBHOOK_SECRET (alias)", () => {
+    const sig = sign(body, FAKE_WEBHOOK_SECRET);
+    expect(verifyAndParse(body, sig, "uk").id).toBe("evt_entity_1");
+  });
+
+  it("us FAILS CLOSED without STRIPE_WEBHOOK_SECRET_US — never verifies against UK secrets", () => {
+    process.env["STRIPE_SECRET_KEY_US"] = "sk_test_us" + "b".repeat(90);
+    process.env["STRIPE_WEBHOOK_SECRET_UK"] = UK_SECRET;
+    const sig = sign(body, UK_SECRET);
+    expect(() => verifyAndParse(body, sig, "us")).toThrow(WebhookSecretMissingError);
+
+    process.env["STRIPE_WEBHOOK_SECRET_US"] = US_SECRET;
+    // A UK-signed payload still fails against the US secret…
+    expect(() => verifyAndParse(body, sig, "us")).toThrow(WebhookSignatureError);
+    // …and a US-signed payload verifies.
+    expect(verifyAndParse(body, sign(body, US_SECRET), "us").id).toBe("evt_entity_1");
   });
 });
 

@@ -19,11 +19,12 @@ import type Stripe from "stripe";
 
 import { syncFromSubscription } from "@/lib/billing/subscription";
 import { creditTopupFromSession } from "@/lib/billing/topup";
+import type { BillingEntity } from "@/lib/regions/mapping";
 import { stripe } from "@/lib/stripe/client";
 
 import { registerHandler } from "../webhook";
 
-async function handle(event: Stripe.Event): Promise<void> {
+async function handle(event: Stripe.Event, entity: BillingEntity): Promise<void> {
   const session = event.data.object as Stripe.Checkout.Session;
 
   // Payment-mode session with our top-up marker → credit the balance.
@@ -37,7 +38,9 @@ async function handle(event: Stripe.Event): Promise<void> {
   const subId = typeof session.subscription === "string" ? session.subscription : null;
   if (!subId) return;
 
-  const sub = await stripe().subscriptions.retrieve(subId);
+  // Retrieve from the SAME entity's account that delivered the event —
+  // the subscription doesn't exist on the other one.
+  const sub = await stripe(entity).subscriptions.retrieve(subId);
   await syncFromSubscription(sub);
 }
 

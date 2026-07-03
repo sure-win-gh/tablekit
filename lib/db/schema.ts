@@ -899,13 +899,20 @@ export const stripeAccounts = pgTable("stripe_accounts", {
 export const stripeEvents = pgTable(
   "stripe_events",
   {
-    id: text("id").primaryKey(), // evt_xxx
+    id: text("id").notNull(), // evt_xxx
+    // Which entity's Stripe account delivered the event ('uk' | 'us').
+    // evt_* ids are only unique PER ACCOUNT, so the dedup key must be
+    // (entity, id) — see docs/specs/multi-region.md Phase 2. Default 'uk'
+    // backfills every pre-multi-region row (all delivered by the UK
+    // account). CHECK constraint pinned in the migration.
+    entity: text("entity").notNull().default("uk"),
     type: text("type").notNull(),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
     handledAt: timestamp("handled_at", { withTimezone: true }),
     payload: jsonb("payload").notNull(),
   },
   (t) => [
+    primaryKey({ columns: [t.entity, t.id] }),
     index("stripe_events_type_idx").on(t.type),
     // Partial index for the "needs a handler" worklist.
     index("stripe_events_unhandled_idx")

@@ -35,7 +35,7 @@ describe("checkout.session.completed handler", () => {
     mockRetrieve.mockResolvedValue(fakeSub);
     const handler = getHandler("checkout.session.completed")!;
 
-    await handler(sessionEvent({ mode: "subscription", subscription: "sub_123" }));
+    await handler(sessionEvent({ mode: "subscription", subscription: "sub_123" }), "uk");
 
     expect(mockRetrieve).toHaveBeenCalledWith("sub_123");
     expect(mockSync).toHaveBeenCalledWith(fakeSub);
@@ -43,7 +43,7 @@ describe("checkout.session.completed handler", () => {
 
   it("credits a top-up payment session (no subscription retrieve/sync)", async () => {
     const handler = getHandler("checkout.session.completed")!;
-    await handler(sessionEvent({ mode: "payment", metadata: { kind: "credit_topup" } }));
+    await handler(sessionEvent({ mode: "payment", metadata: { kind: "credit_topup" } }), "uk");
     expect(mockTopup).toHaveBeenCalledTimes(1);
     expect(mockRetrieve).not.toHaveBeenCalled();
     expect(mockSync).not.toHaveBeenCalled();
@@ -51,14 +51,14 @@ describe("checkout.session.completed handler", () => {
 
   it("ignores a payment session without the credit_topup marker", async () => {
     const handler = getHandler("checkout.session.completed")!;
-    await handler(sessionEvent({ mode: "payment", metadata: { kind: "something_else" } }));
+    await handler(sessionEvent({ mode: "payment", metadata: { kind: "something_else" } }), "uk");
     expect(mockTopup).not.toHaveBeenCalled();
     expect(mockSync).not.toHaveBeenCalled();
   });
 
   it("no-ops a subscription session missing a subscription id", async () => {
     const handler = getHandler("checkout.session.completed")!;
-    await handler(sessionEvent({ mode: "subscription", subscription: null }));
+    await handler(sessionEvent({ mode: "subscription", subscription: null }), "uk");
     expect(mockRetrieve).not.toHaveBeenCalled();
     expect(mockSync).not.toHaveBeenCalled();
   });
