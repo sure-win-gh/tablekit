@@ -25,6 +25,9 @@ export type VenueProfile = {
   address?: VenueAddress | null;
   phone?: string | null;
   website?: string | null; // https only
+  // Link-out to the venue's menu (their own site / PDF). We deliberately
+  // don't model menu content — one URL, zero schema.
+  menuUrl?: string | null; // https only
   latitude?: number | null; // used for the "Get directions" map link
   longitude?: number | null;
   // Manual TripAdvisor badge — their Content API excludes B2B SaaS, so the
@@ -50,6 +53,7 @@ const profileSchema = z.object({
   address: addressSchema.nullish(),
   phone: z.string().max(32).nullish(),
   website: z.string().url().max(2048).refine(isHttps).nullish(),
+  menuUrl: z.string().url().max(2048).refine(isHttps).nullish(),
   latitude: z.number().min(-90).max(90).nullish(),
   longitude: z.number().min(-180).max(180).nullish(),
   tripadvisorRating: z.number().min(0).max(5).nullish(),
@@ -101,6 +105,10 @@ export function parseProfile(settings: unknown): VenueProfile | undefined {
   if (typeof raw["website"] === "string" && isHttps(raw["website"])) {
     const w = z.string().url().max(2048).safeParse(raw["website"]);
     if (w.success) out.website = w.data;
+  }
+  if (typeof raw["menuUrl"] === "string" && isHttps(raw["menuUrl"])) {
+    const m = z.string().url().max(2048).safeParse(raw["menuUrl"]);
+    if (m.success) out.menuUrl = m.data;
   }
   if (typeof raw["latitude"] === "number" && raw["latitude"] >= -90 && raw["latitude"] <= 90) {
     out.latitude = raw["latitude"];

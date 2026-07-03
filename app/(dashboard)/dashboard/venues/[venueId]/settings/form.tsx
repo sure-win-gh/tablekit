@@ -33,6 +33,7 @@ type Props = {
     postcode: string;
     phone: string;
     website: string;
+    menuUrl: string;
     latitude: string;
     longitude: string;
     tripadvisorRating: string;
@@ -178,6 +179,13 @@ export function VenueSettingsForm({
             optional
           />
         </div>
+        <Field
+          label="Menu link (https)"
+          name="profile_menu_url"
+          defaultValue={profile.menuUrl}
+          error={fieldErrors?.["profileMenuUrl"]?.[0]}
+          optional
+        />
         <div className="grid grid-cols-2 gap-4">
           <Field
             label="Latitude"

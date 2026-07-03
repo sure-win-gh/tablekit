@@ -73,6 +73,7 @@ const Schema = z.object({
   profilePostcode: z.string().trim().max(12).optional(),
   profilePhone: z.string().trim().max(32).optional(),
   profileWebsite: z.string().trim().max(2048).optional(),
+  profileMenuUrl: z.string().trim().max(2048).optional(),
   profileLatitude: z.number().finite().min(-90).max(90).optional(),
   profileLongitude: z.number().finite().min(-180).max(180).optional(),
   profileTripadvisorRating: z.number().finite().min(0).max(5).optional(),
@@ -117,6 +118,7 @@ export async function updateVenue(
     profilePostcode: formData.get("profile_postcode"),
     profilePhone: formData.get("profile_phone"),
     profileWebsite: formData.get("profile_website"),
+    profileMenuUrl: formData.get("profile_menu_url"),
     profileLatitude: numOrUndef(formData.get("profile_latitude")),
     profileLongitude: numOrUndef(formData.get("profile_longitude")),
     profileTripadvisorRating: numOrUndef(formData.get("profile_tripadvisor_rating")),
@@ -197,6 +199,17 @@ export async function updateVenue(
       fieldErrors: { profileWebsite: ["Must start with https://."] },
     };
   }
+  const menuUrl = (parsed.data.profileMenuUrl ?? "").trim();
+  if (
+    menuUrl &&
+    (!z.string().url().safeParse(menuUrl).success || !menuUrl.startsWith("https://"))
+  ) {
+    return {
+      status: "error",
+      message: "Menu link must be a valid https:// URL.",
+      fieldErrors: { profileMenuUrl: ["Enter a valid https:// URL or leave blank."] },
+    };
+  }
   const tripUrl = (parsed.data.profileTripadvisorUrl ?? "").trim();
   if (
     tripUrl &&
@@ -219,6 +232,7 @@ export async function updateVenue(
   if (Object.keys(address).length > 0) profile["address"] = address;
   if (parsed.data.profilePhone) profile["phone"] = parsed.data.profilePhone;
   if (website) profile["website"] = website;
+  if (menuUrl) profile["menuUrl"] = menuUrl;
   if (parsed.data.profileLatitude !== undefined) profile["latitude"] = parsed.data.profileLatitude;
   if (parsed.data.profileLongitude !== undefined)
     profile["longitude"] = parsed.data.profileLongitude;

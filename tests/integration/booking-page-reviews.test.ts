@@ -207,6 +207,10 @@ describe("loadPublicReviews", () => {
     expect(r.count).toBe(5);
     expect(r.average).toBe(3.8);
     expect(r.bySource).toEqual({ internal: 2, google: 3 });
+    // Distribution partitions the same consent/erasure-filtered set:
+    // 5★ ×2 (internal 5 + google 5), 4★ ×1, ≤3★ ×2 (3 + 2). The
+    // non-consented and erased internal rows must not appear in any band.
+    expect(r.distribution).toEqual({ five: 2, four: 1, threeOrLess: 2 });
   });
 
   it("lists decrypted reviews (both sources), newest-first, comment-less excluded", async () => {
@@ -236,6 +240,7 @@ describe("loadPublicReviews", () => {
       average: 0,
       count: 0,
       bySource: { internal: 0, google: 0 },
+      distribution: { five: 0, four: 0, threeOrLess: 0 },
       items: [],
     });
   });

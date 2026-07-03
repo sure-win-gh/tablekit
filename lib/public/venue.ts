@@ -396,6 +396,9 @@ export type PublicReviews = {
   average: number; // 0 when count === 0; rounded to 1 dp
   count: number;
   bySource: { internal: number; google: number };
+  // Rating distribution across BOTH sources — drives the TheFork-style
+  // bars. Pure SQL filtered counts, no decrypt.
+  distribution: { five: number; four: number; threeOrLess: number };
   items: PublicReviewItem[]; // newest-first, only reviews that have a comment
 };
 
@@ -416,6 +419,9 @@ export async function loadPublicReviews(
   const aggCols = {
     count: sql<number>`count(*)::int`,
     sum: sql<number>`coalesce(sum(${reviews.rating}), 0)::int`,
+    five: sql<number>`count(*) filter (where ${reviews.rating} = 5)::int`,
+    four: sql<number>`count(*) filter (where ${reviews.rating} = 4)::int`,
+    threeOrLess: sql<number>`count(*) filter (where ${reviews.rating} <= 3)::int`,
   };
   const internalWhere = and(
     eq(reviews.venueId, venueId),
@@ -514,6 +520,11 @@ export async function loadPublicReviews(
     average,
     count,
     bySource: { internal: internalAgg?.count ?? 0, google: googleAgg?.count ?? 0 },
+    distribution: {
+      five: (internalAgg?.five ?? 0) + (googleAgg?.five ?? 0),
+      four: (internalAgg?.four ?? 0) + (googleAgg?.four ?? 0),
+      threeOrLess: (internalAgg?.threeOrLess ?? 0) + (googleAgg?.threeOrLess ?? 0),
+    },
     items,
   };
 }

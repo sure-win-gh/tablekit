@@ -41,6 +41,24 @@ describe("parseProfile", () => {
     expect(p?.cuisine).toBe("Thai");
   });
 
+  it("accepts an https menu link and drops a non-https one", () => {
+    const ok = parseProfile({ profile: { menuUrl: "https://example.com/menu.pdf" } });
+    expect(ok?.menuUrl).toBe("https://example.com/menu.pdf");
+    const bad = parseProfile({
+      profile: { menuUrl: "http://example.com/menu.pdf", cuisine: "Thai" },
+    });
+    expect(bad?.menuUrl).toBeUndefined();
+    expect(bad?.cuisine).toBe("Thai");
+  });
+
+  it("drops a javascript:/data: menu link (public href XSS guard)", () => {
+    for (const menuUrl of ["javascript:alert(1)", "data:text/html,<script>alert(1)</script>"]) {
+      const p = parseProfile({ profile: { menuUrl, cuisine: "Thai" } });
+      expect(p?.menuUrl).toBeUndefined();
+      expect(p?.cuisine).toBe("Thai");
+    }
+  });
+
   it("drops an invalid price range but keeps the rest (salvage)", () => {
     const p = parseProfile({ profile: { priceRange: "cheap", description: "Great food" } });
     expect(p?.priceRange).toBeUndefined();
