@@ -88,6 +88,12 @@ Evolve Tablekit from single-region (UK/EU) single-entity (UK) into:
 ### Phase 4 — US bring-up *(HELD — gated below)*
 
 - New Supabase US project; full migration set + `pnpm check:rls` against it.
+- Thread entity through the code paths Phase 2 deliberately left on the
+  `uk` default (safe while every org is uk): `lib/payments/*` (deposits act
+  on connected accounts, which are entity-tied), the admin dashboard's live
+  Stripe MRR pull (`lib/server/admin/dashboard/stripe-billing.ts` must
+  iterate BOTH accounts), and the widget deposit form's publishable key
+  (`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_UK`/`_US` picked by venue entity).
 - Per-region `TABLEKIT_MASTER_KEY_{EU,US}` (a US key never decrypts EU PII).
 - Cron fan-out over both regions; Bedrock pinned to a US region for US
   tenants' enquiries (or the AI enquiry feature withheld in US at launch);
