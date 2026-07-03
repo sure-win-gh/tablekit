@@ -7,7 +7,7 @@
 //      organisation_id from the parent service, even when the insert passes
 //      a wrong/placeholder org id.
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { createClient } from "@supabase/supabase-js";
@@ -15,7 +15,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { BookingStatus } from "@/lib/bookings/state";
 import * as schema from "@/lib/db/schema";
-import { getServiceSummary } from "@/lib/services/summary";
+import { getDayPrep, getServiceSummary } from "@/lib/services/summary";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -187,6 +187,20 @@ beforeAll(async () => {
   await mkSummaryBooking(serviceA2!.id, 5, "confirmed"); // Brunch: 5 / 10
   await mkSummaryBooking(serviceA2!.id, 3, "cancelled"); // excluded from booked
 
+  // Day-prep fixture: the confirmed Main booking needs 2 high chairs and
+  // carries a dietary note; the cancelled booking also claims high chairs
+  // to prove cancelled rows are excluded from the prep aggregates.
+  await db
+    .update(schema.bookings)
+    .set({ highChairs: 2, dietaryNotesCipher: "c" })
+    .where(and(eq(schema.bookings.serviceId, serviceAId), eq(schema.bookings.status, "confirmed")));
+  await db
+    .update(schema.bookings)
+    .set({ highChairs: 5 })
+    .where(
+      and(eq(schema.bookings.serviceId, serviceA2!.id), eq(schema.bookings.status, "cancelled")),
+    );
+
   ctx = {
     userAId,
     userBId,
@@ -270,5 +284,21 @@ describe("getServiceSummary", () => {
       getServiceSummary(tx, ctx.venueBId, SUMMARY_DATE, TZ),
     );
     expect(rows).toEqual([]);
+  });
+});
+
+describe("getDayPrep", () => {
+  it("sums high chairs, counts dietary notes, and finds the largest party — cancelled excluded", async () => {
+    const prep = await asUser(ctx.userAId, (tx) => getDayPrep(tx, ctx.venueAId, SUMMARY_DATE, TZ));
+    // Confirmed Main booking: 2 high chairs + a dietary note. The
+    // cancelled booking's 5 high chairs must not count.
+    expect(prep.highChairs).toBe(2);
+    expect(prep.dietaryNotesCount).toBe(1);
+    expect(prep.largestParty).toBe(8);
+  });
+
+  it("user A querying venue B sees zeros — RLS isolation", async () => {
+    const prep = await asUser(ctx.userAId, (tx) => getDayPrep(tx, ctx.venueBId, SUMMARY_DATE, TZ));
+    expect(prep).toEqual({ highChairs: 0, dietaryNotesCount: 0, largestParty: 0 });
   });
 });
