@@ -16,6 +16,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import Stripe from "stripe";
 
+import { entityForOrg } from "@/lib/billing/entity";
 import { stripeAccounts } from "@/lib/db/schema";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
@@ -58,12 +59,18 @@ export async function startOnboarding(
 
   const existing = await getAccount(organisationId);
 
+  // Connect Standard accounts hang off a PLATFORM account, so the venue's
+  // deposit account is created under — and forever tied to — the org's
+  // entity's Stripe account (docs/specs/multi-region.md). Existing UK
+  // orgs' acct_* rows are untouched: entity resolves to 'uk' for them.
+  const entity = await entityForOrg(organisationId);
+
   const db = adminDb();
   let accountId = existing?.accountId ?? null;
 
   try {
     if (!accountId) {
-      const created = await stripe().accounts.create({
+      const created = await stripe(entity).accounts.create({
         type: "standard",
         metadata: { organisation_id: organisationId },
       });
@@ -74,7 +81,7 @@ export async function startOnboarding(
       });
     }
 
-    const link = await stripe().accountLinks.create({
+    const link = await stripe(entity).accountLinks.create({
       account: accountId,
       // If the user aborts mid-flow, Stripe sends them to `refresh_url`
       // and we re-mint a fresh link. `return_url` fires on completion.
@@ -119,7 +126,10 @@ export async function refreshAccountState(
   const row = await getAccount(organisationId);
   if (!row) return null;
 
-  const acct = await stripe().accounts.retrieve(row.accountId);
+  // Same entity rule as startOnboarding — the acct_* only exists on the
+  // org's entity's platform account.
+  const entity = await entityForOrg(organisationId);
+  const acct = await stripe(entity).accounts.retrieve(row.accountId);
 
   await adminDb()
     .update(stripeAccounts)

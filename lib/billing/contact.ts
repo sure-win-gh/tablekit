@@ -12,6 +12,7 @@ import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
 
 import { organisations } from "@/lib/db/schema";
+import { isBillingEntity } from "@/lib/regions/mapping";
 import { adminDb } from "@/lib/server/admin/db";
 import { stripe, stripeEnabled } from "@/lib/stripe/client";
 
@@ -35,21 +36,31 @@ export type BillingContact = {
 // pass an `orgId` already authorised for the current session — here that's the
 // active-org id from requireRole(). Mirrors lib/billing/portal.ts.
 export async function getBillingContact(orgId: string): Promise<BillingContact | null> {
-  if (!stripeEnabled()) return null;
+  // Cheap env-only pre-check: on an environment with NO Stripe configured
+  // at all (local dev, CI), return the empty state without touching the
+  // DB. The per-entity check below still applies once we know the org.
+  if (!stripeEnabled("uk") && !stripeEnabled("us")) return null;
 
   const [org] = await adminDb()
-    .select({ customerId: organisations.stripeCustomerId })
+    .select({
+      customerId: organisations.stripeCustomerId,
+      billingEntity: organisations.billingEntity,
+    })
     .from(organisations)
     .where(eq(organisations.id, orgId))
     .limit(1);
   if (!org?.customerId) return null;
+
+  // The customer lives on the org's entity's account.
+  const entity = isBillingEntity(org.billingEntity) ? org.billingEntity : "uk";
+  if (!stripeEnabled(entity)) return null;
 
   // Display-only and runs on every Account page load — a Stripe outage should
   // degrade to the empty state, not blank the page (unlike the user-initiated
   // portal/checkout flows, which surface the error).
   let customer: Stripe.Customer | Stripe.DeletedCustomer;
   try {
-    customer = await stripe().customers.retrieve(org.customerId, { expand: ["tax_ids"] });
+    customer = await stripe(entity).customers.retrieve(org.customerId, { expand: ["tax_ids"] });
   } catch {
     return null;
   }

@@ -34,24 +34,39 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { billingPeriod } from "@/lib/billing/usage";
 import { messageUsage, organisations } from "@/lib/db/schema";
+import { isBillingEntity, type BillingEntity } from "@/lib/regions/mapping";
 import { adminDb } from "@/lib/server/admin/db";
 import { stripe, stripeEnabled } from "@/lib/stripe/client";
 
 export type MeterSyncResult = { reported: number; skipped: number; failed: number };
 
-function meterEventName(): string | null {
-  const v = process.env["STRIPE_METER_USAGE_EVENT_NAME"];
-  if (!v || v.includes("YOUR_")) return null;
-  return v;
+// Billing Meters are per-Stripe-account, so the event name is per entity:
+// uk reads STRIPE_METER_USAGE_EVENT_NAME_UK falling back to the legacy
+// STRIPE_METER_USAGE_EVENT_NAME; us reads _US only (no fallback — a US
+// org's usage must never be reported into the UK meter).
+function meterEventName(entity: BillingEntity): string | null {
+  const candidates =
+    entity === "uk"
+      ? ["STRIPE_METER_USAGE_EVENT_NAME_UK", "STRIPE_METER_USAGE_EVENT_NAME"]
+      : ["STRIPE_METER_USAGE_EVENT_NAME_US"];
+  for (const name of candidates) {
+    const v = process.env[name];
+    if (v && !v.includes("YOUR_")) return v;
+  }
+  return null;
+}
+
+// Is this entity ready to receive meter events?
+function entityMeterReady(entity: BillingEntity): boolean {
+  return stripeEnabled(entity) && meterEventName(entity) !== null;
 }
 
 export async function reportUsageDeltas(now: Date): Promise<MeterSyncResult> {
   const result: MeterSyncResult = { reported: 0, skipped: 0, failed: 0 };
 
-  // No-op cleanly until Stripe + the Meter are configured, so the cron is
-  // safe to ship before go-live.
-  const eventName = meterEventName();
-  if (!stripeEnabled() || !eventName) return result;
+  // No-op cleanly until Stripe + a Meter are configured for at least one
+  // entity, so the cron is safe to ship before go-live.
+  if (!entityMeterReady("uk") && !entityMeterReady("us")) return result;
 
   const period = billingPeriod(now);
   const db = adminDb();
@@ -66,6 +81,7 @@ export async function reportUsageDeltas(now: Date): Promise<MeterSyncResult> {
       estCostPence: messageUsage.estCostPence,
       reportedPence: messageUsage.reportedPence,
       customerId: organisations.stripeCustomerId,
+      billingEntity: organisations.billingEntity,
     })
     .from(messageUsage)
     .innerJoin(organisations, eq(organisations.id, messageUsage.organisationId))
@@ -86,8 +102,17 @@ export async function reportUsageDeltas(now: Date): Promise<MeterSyncResult> {
       continue;
     }
 
+    // The org's usage bills on its entity's account/meter. Skip (watermark
+    // stays put) if that entity's Stripe or meter isn't configured yet.
+    const entity = isBillingEntity(row.billingEntity) ? row.billingEntity : "uk";
+    const eventName = meterEventName(entity);
+    if (!entityMeterReady(entity) || !eventName) {
+      result.skipped += 1;
+      continue;
+    }
+
     try {
-      await stripe().billing.meterEvents.create({
+      await stripe(entity).billing.meterEvents.create({
         event_name: eventName,
         payload: { stripe_customer_id: row.customerId, value: String(delta) },
         identifier: `${row.organisationId}_${period}_${row.channel}_${row.reportedPence}`,

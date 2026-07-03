@@ -10,9 +10,11 @@ import "server-only";
 
 import type Stripe from "stripe";
 
+import { currencyForEntity } from "@/lib/regions/mapping";
 import { stripe } from "@/lib/stripe/client";
 
 import { appUrl, ensureCustomer } from "./checkout";
+import { entityForOrg } from "./entity";
 import { recordTopup } from "./credit";
 import { type TopupAmount } from "./topup-amounts";
 
@@ -31,19 +33,23 @@ export async function createTopupCheckout(
   amountPence: TopupAmount,
   returnPath: string,
 ): Promise<string> {
+  const entity = await entityForOrg(orgId);
   const customer = await ensureCustomer(orgId);
   const base = appUrl();
   // Only allow returning to an in-app dashboard path (no open redirect).
   const safePath = returnPath.startsWith("/dashboard/") ? returnPath : "/dashboard/organisation";
 
-  const session = await stripe().checkout.sessions.create({
+  const session = await stripe(entity).checkout.sessions.create({
     mode: "payment",
     customer,
     line_items: [
       {
         quantity: 1,
         price_data: {
-          currency: "gbp",
+          // Settlement currency follows the org's entity (uk→GBP, us→USD)
+          // — see lib/regions/mapping.ts. Amount presets stay pence/cents
+          // agnostic (minor units either way).
+          currency: currencyForEntity(entity),
           unit_amount: amountPence,
           // Tax-exclusive: VAT is added on top at checkout (matches the
           // subscription prices).

@@ -10,11 +10,23 @@ import {
   priceIdForPlan,
 } from "@/lib/billing/plans";
 
-const ENV_KEYS = ["STRIPE_PRICE_CORE", "STRIPE_PRICE_PLUS", "STRIPE_PRICE_USAGE"] as const;
+const ENV_KEYS = [
+  "STRIPE_PRICE_CORE",
+  "STRIPE_PRICE_PLUS",
+  "STRIPE_PRICE_USAGE",
+  "STRIPE_PRICE_CORE_UK",
+  "STRIPE_PRICE_PLUS_UK",
+  "STRIPE_PRICE_USAGE_UK",
+  "STRIPE_PRICE_CORE_US",
+  "STRIPE_PRICE_PLUS_US",
+  "STRIPE_PRICE_USAGE_US",
+] as const;
 const saved: Record<string, string | undefined> = {};
 
 beforeEach(() => {
   for (const k of ENV_KEYS) saved[k] = process.env[k];
+  // Clean multi-entity slate; legacy cases run against un-suffixed names.
+  for (const k of ENV_KEYS) delete process.env[k];
   process.env["STRIPE_PRICE_CORE"] = "price_core_123";
   process.env["STRIPE_PRICE_PLUS"] = "price_plus_456";
   process.env["STRIPE_PRICE_USAGE"] = "price_usage_789";
@@ -56,6 +68,36 @@ describe("planFromPriceId", () => {
     delete process.env["STRIPE_PRICE_CORE"];
     expect(planFromPriceId("price_plus_456")).toBe("plus");
     expect(planFromPriceId("price_core_123")).toBeNull();
+  });
+});
+
+describe("entity keying (multi-region Phase 2)", () => {
+  it("uk prefers the _UK-suffixed env over the legacy name", () => {
+    process.env["STRIPE_PRICE_CORE_UK"] = "price_core_uk_111";
+    expect(priceIdForPlan("core", "uk")).toBe("price_core_uk_111");
+    // Legacy name still resolves for the un-suffixed plans (fallback).
+    expect(priceIdForPlan("plus", "uk")).toBe("price_plus_456");
+  });
+
+  it("defaults to the uk entity when called without one", () => {
+    expect(priceIdForPlan("core")).toBe("price_core_123");
+    expect(optionalUsagePriceId()).toBe("price_usage_789");
+  });
+
+  it("us FAILS CLOSED — never falls back to legacy/UK prices", () => {
+    expect(() => priceIdForPlan("core", "us")).toThrow(BillingPriceNotConfiguredError);
+    expect(optionalUsagePriceId("us")).toBeNull();
+    process.env["STRIPE_PRICE_CORE_US"] = "price_core_us_999";
+    expect(priceIdForPlan("core", "us")).toBe("price_core_us_999");
+  });
+
+  it("planFromPriceId recognises prices from BOTH entities", () => {
+    process.env["STRIPE_PRICE_CORE_US"] = "price_core_us_999";
+    process.env["STRIPE_PRICE_PLUS_US"] = "price_plus_us_888";
+    expect(planFromPriceId("price_core_us_999")).toBe("core");
+    expect(planFromPriceId("price_plus_us_888")).toBe("plus");
+    // UK/legacy prices keep resolving too.
+    expect(planFromPriceId("price_core_123")).toBe("core");
   });
 });
 

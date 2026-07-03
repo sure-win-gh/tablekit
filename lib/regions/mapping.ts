@@ -47,6 +47,15 @@ export function regionForCountry(countryIso2: string): RegionAssignment {
   return { region: DEFAULT_REGION, entity: DEFAULT_BILLING_ENTITY };
 }
 
+/**
+ * The settlement currency each entity bills in: UK entity → GBP,
+ * US entity → USD. Single source — replaces the hardcoded "gbp" that
+ * used to live in lib/billing/topup.ts.
+ */
+export function currencyForEntity(entity: BillingEntity): "gbp" | "usd" {
+  return entity === "us" ? "usd" : "gbp";
+}
+
 export function isRegion(value: string): value is Region {
   return (REGIONS as readonly string[]).includes(value);
 }

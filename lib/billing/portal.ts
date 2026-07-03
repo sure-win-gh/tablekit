@@ -10,6 +10,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 
 import { organisations } from "@/lib/db/schema";
+import { isBillingEntity } from "@/lib/regions/mapping";
 import { adminDb } from "@/lib/server/admin/db";
 import { stripe } from "@/lib/stripe/client";
 
@@ -30,13 +31,19 @@ function appUrl(): string {
 
 export async function createPortalSession(orgId: string): Promise<string> {
   const [org] = await adminDb()
-    .select({ customerId: organisations.stripeCustomerId })
+    .select({
+      customerId: organisations.stripeCustomerId,
+      billingEntity: organisations.billingEntity,
+    })
     .from(organisations)
     .where(eq(organisations.id, orgId))
     .limit(1);
   if (!org?.customerId) throw new NoBillingCustomerError(orgId);
 
-  const session = await stripe().billingPortal.sessions.create({
+  // The customer lives on the org's entity's account — a portal session
+  // minted on the wrong account would 404 the customer.
+  const entity = isBillingEntity(org.billingEntity) ? org.billingEntity : "uk";
+  const session = await stripe(entity).billingPortal.sessions.create({
     customer: org.customerId,
     return_url: `${appUrl()}/dashboard/organisation/billing`,
   });
