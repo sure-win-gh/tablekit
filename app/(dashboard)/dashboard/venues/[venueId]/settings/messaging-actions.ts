@@ -274,23 +274,32 @@ export async function updateBranding(
   };
 
   const db = adminDb();
-  const [existing] = await db
-    .select({ settings: venues.settings })
-    .from(venues)
-    .where(and(eq(venues.id, venueId.data), eq(venues.organisationId, orgId)))
-    .limit(1);
-  if (!existing)
+  // Lock the venue row for the read-modify-write so a concurrent save
+  // (e.g. the Messages tab in another window) can't lose this branding
+  // write. Mirrors saveMessage above. The org filter carries the
+  // multi-tenant weight — adminDb() bypasses RLS.
+  const outcome = await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select({ settings: venues.settings })
+      .from(venues)
+      .where(and(eq(venues.id, venueId.data), eq(venues.organisationId, orgId)))
+      .limit(1)
+      .for("update");
+    if (!existing) return "not-found" as const;
+
+    await tx
+      .update(venues)
+      .set({
+        settings: {
+          ...((existing.settings as Record<string, unknown>) ?? {}),
+          branding,
+        },
+      })
+      .where(and(eq(venues.id, venueId.data), eq(venues.organisationId, orgId)));
+    return "saved" as const;
+  });
+  if (outcome === "not-found")
     return { status: "error", message: "Venue not found or not in your organisation." };
-
-  const merged = {
-    ...((existing.settings as Record<string, unknown>) ?? {}),
-    branding,
-  };
-
-  await db
-    .update(venues)
-    .set({ settings: merged })
-    .where(and(eq(venues.id, venueId.data), eq(venues.organisationId, orgId)));
 
   await audit.log({
     organisationId: orgId,
