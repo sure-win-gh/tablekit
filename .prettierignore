@@ -22,3 +22,7 @@ docs/scaffold.md
 # Drizzle-kit generated artifacts. Formatting them creates a loop
 # where every `pnpm db:generate` re-writes them to Drizzle's style.
 drizzle/migrations/meta/
+
+# Metrics-dashboard HTML is generated output of scripts/metrics-dashboard/generate.mjs.
+# Formatting it would be overwritten on the next run.
+scripts/metrics-dashboard/*.html

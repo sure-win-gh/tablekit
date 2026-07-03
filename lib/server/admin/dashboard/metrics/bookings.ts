@@ -8,9 +8,9 @@
 
 import "server-only";
 
-import { and, count, desc, gte, lte, sql } from "drizzle-orm";
+import { and, count, countDistinct, desc, gte, lte, ne, sql } from "drizzle-orm";
 
-import { bookings } from "@/lib/db/schema";
+import { bookings, venues } from "@/lib/db/schema";
 
 import { lastNDays, todayUtc } from "../filter";
 import type { AdminDb } from "../types";
@@ -59,6 +59,25 @@ export async function getBookingCounts(
   ]);
 
   return { today, last7d, last30d, sourceMix7d };
+}
+
+export type ActiveVenues = {
+  activeLast7d: number; // venues with ≥1 non-cancelled booking created in the window
+  totalVenues: number;
+};
+
+// "Is the product being used?" in one number: how many venues took a
+// booking this week, against the total venue count.
+export async function getActiveVenues(db: AdminDb, now: Date = new Date()): Promise<ActiveVenues> {
+  const week = lastNDays(7, now);
+  const [active, total] = await Promise.all([
+    db
+      .select({ n: countDistinct(bookings.venueId) })
+      .from(bookings)
+      .where(and(gte(bookings.createdAt, week.fromUtc), ne(bookings.status, "cancelled"))),
+    db.select({ n: count() }).from(venues),
+  ]);
+  return { activeLast7d: active[0]?.n ?? 0, totalVenues: total[0]?.n ?? 0 };
 }
 
 // Daily booking creation buckets, gap-filled with zeros. See the

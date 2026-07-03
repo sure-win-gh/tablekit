@@ -53,6 +53,10 @@ drizzle/meta/_journal.json.backup
 .turbo/
 .cache/
 
+# Metrics dashboard live output — generate.mjs writes real Stripe/DB
+# figures here on every run. Never commit it; -sample.html is the demo.
+scripts/metrics-dashboard/metrics-dashboard.html
+
 # Claude plans are working notes, not source of truth — but we keep them
 # so don't ignore .claude/plans/
 .claude/scheduled_tasks.lock

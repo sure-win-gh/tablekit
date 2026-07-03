@@ -1,6 +1,7 @@
 import { Download } from "lucide-react";
 import Link from "next/link";
 
+import { Chip, type ChipTone, timeAgo } from "@/components/admin/ui";
 import { Card, CardBody, CardHeader, CardTitle, Input } from "@/components/ui";
 import { requirePlatformAdmin } from "@/lib/server/admin/auth";
 import { adminDb } from "@/lib/server/admin/db";
@@ -91,15 +92,21 @@ export default async function AdminAuditPage({
                     <th className="py-1 font-medium">Organisation</th>
                     <th className="py-1 font-medium">Actor</th>
                     <th className="py-1 font-medium">Target</th>
+                    <th className="py-1 font-medium">Metadata</th>
                   </tr>
                 </thead>
                 <tbody className="divide-hairline divide-y">
                   {rows.map((row) => (
                     <tr key={row.id}>
-                      <td className="text-ash py-1.5 tabular-nums">
-                        {row.createdAt.toISOString().slice(0, 19).replace("T", " ")}
+                      <td
+                        className="text-ash py-1.5 whitespace-nowrap tabular-nums"
+                        title={row.createdAt.toISOString().slice(0, 19).replace("T", " ") + " UTC"}
+                      >
+                        {timeAgo(row.createdAt)}
                       </td>
-                      <td className="text-ink py-1.5 font-medium">{row.action}</td>
+                      <td className="py-1.5">
+                        <Chip tone={actionTone(row.action)}>{row.action}</Chip>
+                      </td>
                       <td className="py-1.5">
                         <Link
                           href={`/admin/venues/${row.organisationId}`}
@@ -119,6 +126,20 @@ export default async function AdminAuditPage({
                           "—"
                         )}
                       </td>
+                      <td className="text-ash py-1.5">
+                        {row.metadata && Object.keys(row.metadata).length > 0 ? (
+                          <details>
+                            <summary className="hover:text-ink cursor-pointer select-none">
+                              view
+                            </summary>
+                            <pre className="bg-cloud rounded-tag mt-1 max-w-xs overflow-x-auto p-2 text-[10px] whitespace-pre-wrap">
+                              {JSON.stringify(row.metadata, null, 1)}
+                            </pre>
+                          </details>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -129,6 +150,17 @@ export default async function AdminAuditPage({
       </Card>
     </div>
   );
+}
+
+// Tint by action family so failures and GDPR events pop out of the
+// scroll. Anything unrecognised stays neutral.
+function actionTone(action: string): ChipTone {
+  if (action.includes("fail") || action.startsWith("dsar.") || action.startsWith("gdpr."))
+    return "rose";
+  if (action.startsWith("stripe.") || action.startsWith("deposit_rule.")) return "coral";
+  if (action.startsWith("booking.") || action.startsWith("venue.") || action.startsWith("review."))
+    return "ink";
+  return "neutral";
 }
 
 function buildExportQs(params: { prefix: string; org_id: string }): string {
