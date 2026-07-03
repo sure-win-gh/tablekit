@@ -22,20 +22,29 @@ import "server-only";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
+import { databaseUrlFor } from "@/lib/regions/config";
+import { DEFAULT_REGION, type Region } from "@/lib/regions/mapping";
+
 import * as schema from "../../db/schema";
 
-let _pool: Pool | null = null;
+// One service-role pool per region (docs/specs/multi-region.md, Phase 1).
+// URL resolution + the fail-closed unset-US behaviour live in
+// lib/regions/config.ts.
+const _pools = new Map<Region, Pool>();
 
-function pool(): Pool {
-  if (_pool) return _pool;
-  const connectionString = process.env["DATABASE_URL"];
-  if (!connectionString) {
-    throw new Error("lib/server/admin/db.ts: DATABASE_URL is not set. See .env.local.example.");
-  }
-  _pool = new Pool({ connectionString, max: 5 });
-  return _pool;
+function pool(region: Region): Pool {
+  const existing = _pools.get(region);
+  if (existing) return existing;
+  const created = new Pool({ connectionString: databaseUrlFor(region), max: 5 });
+  _pools.set(region, created);
+  return created;
 }
 
-export function adminDb(): NodePgDatabase<typeof schema> {
-  return drizzle(pool(), { schema });
+/**
+ * `region` picks which regional database this service-role client
+ * targets. Defaults to `eu` — every existing caller resolves there
+ * until Phase 3 lands, so behaviour is unchanged.
+ */
+export function adminDb(region: Region = DEFAULT_REGION): NodePgDatabase<typeof schema> {
+  return drizzle(pool(region), { schema });
 }

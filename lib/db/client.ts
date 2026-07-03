@@ -26,27 +26,29 @@ import { sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
+import { databaseUrlFor } from "@/lib/regions/config";
+import { DEFAULT_REGION, type Region } from "@/lib/regions/mapping";
+
 import * as schema from "./schema";
 import { supabaseServer } from "./supabase-server";
 
 type Db = NodePgDatabase<typeof schema>;
 
-let _pool: Pool | null = null;
+// One pool per region (docs/specs/multi-region.md, Phase 1). URL
+// resolution — including the DATABASE_URL_EU → DATABASE_URL fallback and
+// the fail-closed unset-US behaviour — lives in lib/regions/config.ts.
+const _pools = new Map<Region, Pool>();
 
-function pool(): Pool {
-  if (_pool) return _pool;
-  const connectionString = process.env["DATABASE_URL"];
-  if (!connectionString) {
-    throw new Error(
-      "lib/db/client.ts: DATABASE_URL is not set. See .env.local.example — use the Session pooler URL.",
-    );
-  }
-  _pool = new Pool({ connectionString, max: 10 });
-  return _pool;
+function pool(region: Region): Pool {
+  const existing = _pools.get(region);
+  if (existing) return existing;
+  const created = new Pool({ connectionString: databaseUrlFor(region), max: 10 });
+  _pools.set(region, created);
+  return created;
 }
 
-function drizzleClient(): Db {
-  return drizzle(pool(), { schema });
+function drizzleClient(region: Region): Db {
+  return drizzle(pool(region), { schema });
 }
 
 // Sets role + JWT claim settings on the current transaction so
@@ -69,8 +71,16 @@ async function setRlsContext(
  * enforcement. Throws if there is no session — callers must handle
  * the unauthenticated case before calling this (usually via
  * middleware redirect to /login).
+ *
+ * `region` picks which regional database the query runs against.
+ * Defaults to `eu` — until Phase 3 (region capture at signup) lands,
+ * every caller resolves here and behaviour is identical to the
+ * single-region setup.
  */
-export async function withUser<T>(fn: (db: Db) => Promise<T>): Promise<T> {
+export async function withUser<T>(
+  fn: (db: Db) => Promise<T>,
+  region: Region = DEFAULT_REGION,
+): Promise<T> {
   const supabase = await supabaseServer();
   const {
     data: { user },
@@ -81,7 +91,7 @@ export async function withUser<T>(fn: (db: Db) => Promise<T>): Promise<T> {
     throw new Error("withUser: no authenticated session");
   }
 
-  const db = drizzleClient();
+  const db = drizzleClient(region);
   return db.transaction(async (tx) => {
     await setRlsContext(tx, "authenticated", user.id);
     return fn(tx);
@@ -91,10 +101,13 @@ export async function withUser<T>(fn: (db: Db) => Promise<T>): Promise<T> {
 /**
  * Run `fn` as an unauthenticated caller (Postgres `anon` role). RLS
  * policies that allow `anon` still apply; policies scoped to
- * `authenticated` do not match.
+ * `authenticated` do not match. `region` as in withUser.
  */
-export async function anonymous<T>(fn: (db: Db) => Promise<T>): Promise<T> {
-  const db = drizzleClient();
+export async function anonymous<T>(
+  fn: (db: Db) => Promise<T>,
+  region: Region = DEFAULT_REGION,
+): Promise<T> {
+  const db = drizzleClient(region);
   return db.transaction(async (tx) => {
     await setRlsContext(tx, "anon", null);
     return fn(tx);
