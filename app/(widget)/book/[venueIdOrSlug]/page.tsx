@@ -13,11 +13,17 @@ import {
 import { hasPlan } from "@/lib/auth/plan-level";
 import { widgetThemeStyle } from "@/lib/branding/theme";
 
+import { buildFaq } from "@/lib/public/faq";
+
 import { WidgetHeader, WidgetThemeProvider } from "./branding";
 import { BookingWizard } from "./booking-wizard";
 import { AboutSection, VenueInfoHeader } from "./profile";
 import { ReviewsSection } from "./reviews";
 import { PhotoGallery } from "./gallery";
+import { HeroMosaic } from "./hero-mosaic";
+import { AnchorNav } from "./anchor-nav";
+import { BookBar } from "./book-bar";
+import { FaqSection } from "./faq";
 
 // Public, unauthenticated booking page. Reads go through adminDb helpers in
 // lib/public/venue.ts — RLS doesn't apply to anonymous. The booking itself is
@@ -105,16 +111,24 @@ export default async function PublicBookingPage({
     <BookingWizard venue={venue} basePath={basePath} captchaSitekey={captchaSitekey} sp={sp} />
   );
 
-  // --- Rich page (Core+) -------------------------------------------------
+  // --- Rich page (Core+) — TheFork-style layout ---------------------------
+  // Mosaic hero → identity header → sticky anchor nav → two-column body:
+  // content left, sticky "Book a table" card right (single column on
+  // mobile with the wizard first + a floating Book bar). The wizard flow
+  // and its URL contract are identical to the Free page and the embed.
   if (rich) {
     const [reviews, photos, openingHours] = await Promise.all([
       loadPublicReviews(venue.id),
       loadPublicPhotos(venue.id),
       loadPublicOpeningHours(venue.id),
     ]);
+    const faq = buildFaq({ venueName: venue.name, profile, openingHours });
     return (
       <WidgetThemeProvider style={themeStyle}>
-        <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 p-6">
+        {/* pb-20 keeps the mobile BookBar from covering the last section. */}
+        <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-5 p-6 pb-20 lg:pb-6">
+          <HeroMosaic photos={photos} venueName={venue.name} />
+
           <VenueInfoHeader
             venueName={venue.name}
             logoUrl={logoUrl}
@@ -123,13 +137,44 @@ export default async function PublicBookingPage({
             reviewCount={reviews.count}
           />
 
-          {photos.length > 0 ? <PhotoGallery photos={photos} venueName={venue.name} /> : null}
+          <AnchorNav
+            hasAbout={Boolean(
+              profile?.description ||
+              // Mirror AboutSection's own guard: an address object whose
+              // fields are all absent renders nothing.
+              [profile?.address?.street, profile?.address?.city, profile?.address?.postcode].some(
+                Boolean,
+              ) ||
+              profile?.phone ||
+              profile?.website ||
+              openingHours.some((d) => d.windows.length > 0),
+            )}
+            hasReviews={reviews.count > 0}
+            hasPhotos={photos.length > 0}
+            hasFaq={faq.length > 0}
+            menuUrl={profile?.menuUrl ?? null}
+          />
 
-          {wizard}
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_400px]">
+            {/* Booking card — first in DOM (mobile shows it on top),
+                sticky right column on desktop. */}
+            <div id="book" className="scroll-mt-16 lg:col-start-2 lg:row-start-1">
+              <div className="rounded-card border-hairline shadow-panel border bg-white p-5 lg:sticky lg:top-14">
+                <h2 className="text-ink text-lg font-bold tracking-tight">Book a table</h2>
+                <p className="text-ash mb-4 text-xs">Free · instant confirmation</p>
+                {wizard}
+              </div>
+            </div>
 
-          <AboutSection profile={profile ?? {}} openingHours={openingHours} />
+            <div className="flex min-w-0 flex-col gap-6 lg:col-start-1 lg:row-start-1">
+              <AboutSection profile={profile ?? {}} openingHours={openingHours} />
+              <ReviewsSection reviews={reviews} />
+              {photos.length > 0 ? <PhotoGallery photos={photos} venueName={venue.name} /> : null}
+              <FaqSection items={faq} />
+            </div>
+          </div>
 
-          <ReviewsSection reviews={reviews} />
+          <BookBar />
         </main>
       </WidgetThemeProvider>
     );

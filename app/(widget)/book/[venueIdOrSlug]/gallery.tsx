@@ -9,7 +9,12 @@ import type { PublicPhoto } from "@/lib/public/venue";
 export function PhotoGallery({ photos, venueName }: { photos: PublicPhoto[]; venueName: string }) {
   if (photos.length === 0) return null;
   return (
-    <section aria-label={`Photos of ${venueName}`}>
+    <section
+      id="photos"
+      aria-label={`Photos of ${venueName}`}
+      className="border-hairline flex scroll-mt-16 flex-col gap-3 border-t pt-6"
+    >
+      <h2 className="text-ink text-lg font-bold tracking-tight">Photos</h2>
       <ul className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1">
         {photos.map((p, i) => (
           <li

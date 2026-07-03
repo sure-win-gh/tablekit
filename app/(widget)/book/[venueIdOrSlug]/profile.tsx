@@ -24,24 +24,50 @@ export function VenueInfoHeader({
   reviewCount: number;
 }) {
   const ta = profile?.tripadvisorRating;
+  const addressLine = [profile?.address?.street, profile?.address?.city, profile?.address?.postcode]
+    .filter(Boolean)
+    .join(", ");
+  const directions = profile ? directionsUrl(profile) : null;
   return (
-    <header className="flex flex-col gap-3">
-      <p className="text-coral text-xs font-semibold tracking-wider uppercase">Book a table</p>
-      {logoUrl ? (
-        // Plain <img>, not next/image — operator logos are arbitrary HTTPS
-        // hosts (see branding.tsx for the SSRF rationale). CSP img-src https:.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={logoUrl} alt={venueName} loading="lazy" className="h-12 w-auto" />
-      ) : (
-        <h1 className="text-ink text-4xl font-bold tracking-tight">{venueName}</h1>
-      )}
-      {logoUrl ? <h1 className="text-ink text-2xl font-bold tracking-tight">{venueName}</h1> : null}
+    <header className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-3">
+        {logoUrl ? (
+          // Plain <img>, not next/image — operator logos are arbitrary HTTPS
+          // hosts (see branding.tsx for the SSRF rationale). CSP img-src https:.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logoUrl} alt="" loading="lazy" className="h-10 w-auto" />
+        ) : null}
+        <h1 className="text-ink text-3xl font-bold tracking-tight sm:text-4xl">{venueName}</h1>
+      </div>
+      {addressLine ? (
+        <p className="text-ash text-sm">
+          {addressLine}
+          {directions ? (
+            <>
+              {" · "}
+              <a
+                href={directions}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-coral underline underline-offset-2"
+              >
+                Get directions
+              </a>
+            </>
+          ) : null}
+        </p>
+      ) : null}
       <div className="text-ash flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
         {profile?.cuisine ? <Badge tone="coral">{profile.cuisine}</Badge> : null}
         {profile?.priceRange ? (
           <span className="text-charcoal font-medium">{profile.priceRange}</span>
         ) : null}
-        {reviewCount > 0 ? <StarRating rating={average} count={reviewCount} size="sm" /> : null}
+        {reviewCount > 0 ? (
+          <span className="flex items-baseline gap-1.5">
+            <span className="text-ink text-lg font-bold tabular-nums">{average.toFixed(1)}</span>
+            <StarRating rating={average} count={reviewCount} size="sm" />
+          </span>
+        ) : null}
         {ta != null ? <TripAdvisorBadge rating={ta} url={profile?.tripadvisorUrl ?? null} /> : null}
       </div>
     </header>
@@ -96,8 +122,9 @@ export function AboutSection({
 
   return (
     <section
+      id="about"
       aria-label="About this venue"
-      className="border-hairline flex flex-col gap-4 border-t pt-6"
+      className="border-hairline flex scroll-mt-16 flex-col gap-4 border-t pt-6"
     >
       <h2 className="text-ink text-lg font-bold tracking-tight">About</h2>
       {profile.description ? (
