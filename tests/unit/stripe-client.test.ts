@@ -3,7 +3,7 @@
 // Covers the placeholder-detection defence (prevents the "running but
 // broken" failure mode we hit with HCAPTCHA) + the kill switch.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   StripeNotConfiguredError,
@@ -13,14 +13,29 @@ import {
   stripeEnabled,
 } from "@/lib/stripe/client";
 
-const originalKey = process.env["STRIPE_SECRET_KEY"];
-const originalDisabled = process.env["PAYMENTS_DISABLED"];
+const ENV_KEYS = [
+  "STRIPE_SECRET_KEY",
+  "STRIPE_SECRET_KEY_UK",
+  "STRIPE_SECRET_KEY_US",
+  "PAYMENTS_DISABLED",
+] as const;
+const original = new Map<string, string | undefined>(ENV_KEYS.map((k) => [k, process.env[k]]));
+
+// Start every case from a clean multi-entity slate so the legacy
+// (un-suffixed) cases below aren't perturbed by a _UK/_US value in the
+// ambient env; each case then sets exactly what it needs.
+beforeEach(() => {
+  delete process.env["STRIPE_SECRET_KEY_UK"];
+  delete process.env["STRIPE_SECRET_KEY_US"];
+  _resetStripeClientForTests();
+});
 
 afterEach(() => {
-  if (originalKey === undefined) delete process.env["STRIPE_SECRET_KEY"];
-  else process.env["STRIPE_SECRET_KEY"] = originalKey;
-  if (originalDisabled === undefined) delete process.env["PAYMENTS_DISABLED"];
-  else process.env["PAYMENTS_DISABLED"] = originalDisabled;
+  for (const key of ENV_KEYS) {
+    const value = original.get(key);
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
   _resetStripeClientForTests();
 });
 
@@ -50,6 +65,53 @@ describe("stripe() client factory", () => {
     expect(client).toBeDefined();
     // Singleton — second call returns the same instance.
     expect(stripe()).toBe(client);
+  });
+});
+
+describe("entity keying (multi-region Phase 2)", () => {
+  const UK_KEY = "sk_test_uk" + "a".repeat(90);
+  const US_KEY = "sk_test_us" + "b".repeat(90);
+  const LEGACY_KEY = "sk_test_legacy" + "c".repeat(90);
+
+  it("uk prefers STRIPE_SECRET_KEY_UK over the legacy name", () => {
+    process.env["STRIPE_SECRET_KEY_UK"] = UK_KEY;
+    process.env["STRIPE_SECRET_KEY"] = LEGACY_KEY;
+    _resetStripeClientForTests();
+    expect(stripeEnabled("uk")).toBe(true);
+    expect(() => stripe("uk")).not.toThrow();
+  });
+
+  it("uk falls back to the legacy STRIPE_SECRET_KEY (alias)", () => {
+    delete process.env["STRIPE_SECRET_KEY_UK"];
+    process.env["STRIPE_SECRET_KEY"] = LEGACY_KEY;
+    _resetStripeClientForTests();
+    expect(stripeEnabled("uk")).toBe(true);
+  });
+
+  it("us FAILS CLOSED without STRIPE_SECRET_KEY_US — never falls back to a UK key", () => {
+    delete process.env["STRIPE_SECRET_KEY_US"];
+    process.env["STRIPE_SECRET_KEY"] = LEGACY_KEY;
+    process.env["STRIPE_SECRET_KEY_UK"] = UK_KEY;
+    _resetStripeClientForTests();
+    expect(stripeEnabled("us")).toBe(false);
+    expect(() => stripe("us")).toThrow(StripeNotConfiguredError);
+  });
+
+  it("keeps one client per entity — uk and us are distinct instances", () => {
+    process.env["STRIPE_SECRET_KEY"] = LEGACY_KEY;
+    process.env["STRIPE_SECRET_KEY_US"] = US_KEY;
+    _resetStripeClientForTests();
+    const uk = stripe("uk");
+    const us = stripe("us");
+    expect(uk).not.toBe(us);
+    expect(stripe("uk")).toBe(uk);
+    expect(stripe("us")).toBe(us);
+  });
+
+  it("defaults to the uk entity when called without an argument", () => {
+    process.env["STRIPE_SECRET_KEY"] = LEGACY_KEY;
+    _resetStripeClientForTests();
+    expect(stripe()).toBe(stripe("uk"));
   });
 });
 
