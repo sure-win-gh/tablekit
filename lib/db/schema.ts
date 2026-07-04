@@ -20,6 +20,7 @@ import {
   bigint,
   boolean,
   char,
+  check,
   customType,
   index,
   integer,
@@ -117,6 +118,11 @@ export const organisations = pgTable(
     index("organisations_unclaimed_idx")
       .on(t.createdAt)
       .where(sql`${t.claimedAt} is null`),
+    // Region/entity domain constraints. Applied by hand in migration 0053;
+    // mirrored here so the drizzle snapshot matches the DB and a future
+    // generate can't re-emit them. See docs/specs/multi-region.md.
+    check("organisations_region_check", sql`${t.region} in ('eu', 'us')`),
+    check("organisations_billing_entity_check", sql`${t.billingEntity} in ('uk', 'us')`),
   ],
 );
 
@@ -918,6 +924,10 @@ export const stripeEvents = pgTable(
     index("stripe_events_unhandled_idx")
       .on(t.receivedAt)
       .where(sql`${t.handledAt} is null`),
+    // Entity domain constraint. Applied by hand in migration 0054;
+    // mirrored here so the drizzle snapshot matches the DB. See
+    // docs/specs/multi-region.md.
+    check("stripe_events_entity_check", sql`${t.entity} in ('uk', 'us')`),
   ],
 );
 
