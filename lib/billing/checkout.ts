@@ -16,11 +16,10 @@ import "server-only";
 import { eq } from "drizzle-orm";
 
 import { organisations } from "@/lib/db/schema";
-import { assertBillingEntity } from "@/lib/regions/mapping";
+import { assertBillingEntity, type BillingEntity } from "@/lib/regions/mapping";
 import { adminDb } from "@/lib/server/admin/db";
 import { stripe } from "@/lib/stripe/client";
 
-import { entityForOrg } from "./entity";
 import { optionalUsagePriceId, type PaidPlan, priceIdForPlan } from "./plans";
 
 export function appUrl(): string {
@@ -34,7 +33,12 @@ export function appUrl(): string {
 // create a second customer for the same org (and two concurrent checkouts
 // both racing here converge on the same customer for the same reason).
 // Exported so the credit top-up flow reuses the one-customer-per-org rule.
-export async function ensureCustomer(orgId: string): Promise<string> {
+// Returns the customer id AND the org's billing entity — both come from
+// the same org row, so callers get the entity for free rather than a
+// second entityForOrg() round-trip.
+export async function ensureCustomer(
+  orgId: string,
+): Promise<{ customerId: string; entity: BillingEntity }> {
   const db = adminDb();
   const [org] = await db
     .select({
@@ -46,14 +50,16 @@ export async function ensureCustomer(orgId: string): Promise<string> {
     .where(eq(organisations.id, orgId))
     .limit(1);
   if (!org) throw new Error(`lib/billing/checkout.ts: org ${orgId} not found`);
-  if (org.customerId) return org.customerId;
+  // Assert on every path (fail closed): the entity we hand back must
+  // always match a Stripe account, whether or not the customer exists
+  // yet. Unknown value → throw, never default (same rule as entityForOrg).
+  const entity = assertBillingEntity(org.billingEntity);
+  if (org.customerId) return { customerId: org.customerId, entity };
 
   // The Customer is created on the ORG'S ENTITY'S account — this is the
   // moment an org's billing gets pinned to a Stripe account, and it is
   // not portable afterwards (customers/subscriptions can't move between
-  // accounts — docs/specs/multi-region.md D7). Unknown value → throw,
-  // never default (same fail-closed rule as entityForOrg).
-  const entity = assertBillingEntity(org.billingEntity);
+  // accounts — docs/specs/multi-region.md D7).
   const customer = await stripe(entity).customers.create(
     { name: org.name, metadata: { organisation_id: orgId } },
     { idempotencyKey: `org_${orgId}_billing_customer_v1` },
@@ -62,15 +68,14 @@ export async function ensureCustomer(orgId: string): Promise<string> {
     .update(organisations)
     .set({ stripeCustomerId: customer.id })
     .where(eq(organisations.id, orgId));
-  return customer.id;
+  return { customerId: customer.id, entity };
 }
 
 export async function createSubscriptionCheckout(
   orgId: string,
   targetPlan: PaidPlan,
 ): Promise<string> {
-  const entity = await entityForOrg(orgId);
-  const customer = await ensureCustomer(orgId);
+  const { customerId: customer, entity } = await ensureCustomer(orgId);
 
   const lineItems: { price: string; quantity?: number }[] = [
     { price: priceIdForPlan(targetPlan, entity), quantity: 1 },
