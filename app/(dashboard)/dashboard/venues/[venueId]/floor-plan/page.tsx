@@ -4,7 +4,12 @@ import { notFound } from "next/navigation";
 import { hasRole } from "@/lib/auth/role-level";
 import { requireRole } from "@/lib/auth/require-role";
 import { enrichBookingsForDisplay } from "@/lib/bookings/enriched-detail";
-import { deriveFloorState, type FloorTableState } from "@/lib/bookings/floor-state";
+import {
+  FLOOR_STATE_DOT,
+  FLOOR_STATE_LABEL,
+  deriveFloorState,
+  type FloorTableState,
+} from "@/lib/bookings/floor-state";
 import { formatVenueTime, todayInZone, venueLocalDayRange } from "@/lib/bookings/time";
 import { withUser } from "@/lib/db/client";
 import {
@@ -17,7 +22,6 @@ import {
   venues,
 } from "@/lib/db/schema";
 
-import { AutoRefresh } from "./auto-refresh";
 import { FloorPlanCanvas, type CanvasArea, type CanvasTable } from "./canvas";
 import type { ActiveBookingDetail } from "./side-panel";
 
@@ -222,16 +226,57 @@ export default async function FloorPlanPage({ params }: { params: Promise<{ venu
     );
   }
 
+  // Live strip for the header — counts by floor state + covers on the
+  // floor right now. All derived from maps already built above; multi-
+  // table bookings dedupe by booking id so a joined 8-top isn't counted
+  // twice.
+  const stateCounts: Record<FloorTableState, number> = {
+    empty: 0,
+    soon: 0,
+    confirmed: 0,
+    seated: 0,
+    overdue: 0,
+  };
+  for (const t of tableRows) stateCounts[floorStateByTableId[t.id] ?? "empty"] += 1;
+  // Seated bookings only — "on the floor" must not count parties whose
+  // window covers now but who haven't been seated yet.
+  const coversNow = [...new Map(Object.values(activeByTableId).map((b) => [b.id, b])).values()]
+    .filter((b) => b.status === "seated")
+    .reduce((s, b) => s + b.partySize, 0);
+  const stripStates: FloorTableState[] = ["seated", "overdue", "confirmed", "soon", "empty"];
+
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex items-center justify-between gap-3">
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-ink text-xl font-bold tracking-tight">Floor plan</h2>
-          <p className="text-ash mt-0.5 text-xs">
-            {tableRows.length === 0
-              ? "No tables yet — switch to edit mode to add areas and tables."
-              : `${tableRows.length} table${tableRows.length === 1 ? "" : "s"} across ${areaRows.length} area${areaRows.length === 1 ? "" : "s"}`}
-          </p>
+          {tableRows.length === 0 ? (
+            <p className="text-ash mt-0.5 text-xs">
+              No tables yet — switch to edit mode to add areas and tables.
+            </p>
+          ) : (
+            <p className="text-ash mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs">
+              {coversNow > 0 ? (
+                <span className="text-ink font-semibold tabular-nums">
+                  {coversNow} covers seated now
+                </span>
+              ) : null}
+              {stripStates
+                .filter((s) => stateCounts[s] > 0)
+                .map((s) => (
+                  <span key={s} className="flex items-center gap-1 tabular-nums">
+                    <span
+                      className={`inline-block h-2 w-2 rounded-sm ${FLOOR_STATE_DOT[s]}`}
+                      aria-hidden
+                    />
+                    {stateCounts[s]} {FLOOR_STATE_LABEL[s].toLowerCase()}
+                  </span>
+                ))}
+              <span className="text-mute">
+                updated {formatVenueTime(now, { timezone: venueTimezone })} · refreshes every 30s
+              </span>
+            </p>
+          )}
         </div>
       </header>
 
@@ -245,8 +290,6 @@ export default async function FloorPlanPage({ params }: { params: Promise<{ venu
         upcomingByTableId={upcomingByTableId}
         floorStateByTableId={floorStateByTableId}
       />
-
-      <AutoRefresh />
     </section>
   );
 }

@@ -15,9 +15,21 @@ export type TableShapeData = {
   maxCover: number;
 };
 
+// Live booking context rendered ON the shape — turns the canvas from a
+// colour map into a service board. "active" = currently on the table
+// (show who + until when); "upcoming" = arriving soon (show when).
+export type TableOccupant = {
+  kind: "active" | "upcoming";
+  guestFirstName: string;
+  partySize: number;
+  // Wall-clock in the venue zone: end time for active, start for upcoming.
+  timeWall: string;
+};
+
 type Props = {
   table: TableShapeData;
   state: FloorTableState;
+  occupant: TableOccupant | null;
   selected: boolean;
   editMode: boolean;
   svgRef: RefObject<SVGSVGElement | null>;
@@ -30,6 +42,16 @@ type ResizeDir = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 const MIN_DIM = 1;
 const POS_BOUND = 100;
 const clampPos = (v: number) => Math.min(POS_BOUND, Math.max(-POS_BOUND, v));
+
+// First names only ever render here; clip to what plausibly fits the
+// shape's width (~4 chars per grid unit at the 0.19 font), reserving
+// room for the " ×N" party suffix that shares the line, so SVG text
+// doesn't spill past narrow tables.
+function truncateName(name: string, widthUnits: number, partySize: number): string {
+  const suffix = String(partySize).length + 2; // " ×" + digits
+  const maxChars = Math.max(3, Math.floor(widthUnits * 4) - suffix);
+  return name.length > maxChars ? `${name.slice(0, Math.max(2, maxChars - 1))}…` : name;
+}
 
 // Convert a pointer event's screen-space coordinates into SVG user
 // space (the same units as `viewBox`). `getScreenCTM().inverse()` is
@@ -96,6 +118,7 @@ function applyResize(
 export function TableShape({
   table,
   state,
+  occupant,
   selected,
   editMode,
   svgRef,
@@ -265,18 +288,34 @@ export function TableShape({
 
   return (
     <g
-      className={`${editMode ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"} ${drag || resize ? "opacity-90" : ""} outline-none focus:outline-none focus-visible:outline-none`}
+      className={`${editMode ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"} ${drag || resize ? "opacity-90" : ""} focus-visible:outline-coral outline-none focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
       onClick={onClick}
+      onKeyDown={(e) => {
+        // role="button" needs the keyboard affordance wired manually
+        // on SVG elements — Enter/Space select like a click.
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(table.id);
+        }
+      }}
       tabIndex={0}
       role="button"
-      aria-label={`Table ${table.label}, ${state}`}
+      aria-label={
+        occupant
+          ? `Table ${table.label}, ${state} — ${occupant.guestFirstName}, party of ${occupant.partySize}, ${occupant.kind === "active" ? "until" : "arriving"} ${occupant.timeWall}`
+          : `Table ${table.label}, ${state}`
+      }
     >
       <title>
-        {`Table ${table.label} · ${table.minCover}–${table.maxCover} covers · ${state}`}
+        {occupant
+          ? `Table ${table.label} · ${occupant.guestFirstName} ×${occupant.partySize} · ${
+              occupant.kind === "active" ? "until" : "arrives"
+            } ${occupant.timeWall}`
+          : `Table ${table.label} · ${table.minCover}–${table.maxCover} covers · ${state}`}
       </title>
       {table.shape === "circle" ? (
         <ellipse
@@ -303,26 +342,67 @@ export function TableShape({
           strokeWidth={selected ? 0.15 : 0.08}
         />
       )}
-      <text
-        x={cx}
-        y={cy - Math.min(w, h) * 0.1}
-        textAnchor="middle"
-        dominantBaseline="central"
-        className={`${style.textClass} pointer-events-none select-none`}
-        style={{ fontSize: Math.min(w, h) * 0.35, fontWeight: 600 }}
-      >
-        {table.label}
-      </text>
-      <text
-        x={cx}
-        y={cy + Math.min(w, h) * 0.28}
-        textAnchor="middle"
-        dominantBaseline="central"
-        className={`${style.textClass} pointer-events-none opacity-70 select-none`}
-        style={{ fontSize: Math.min(w, h) * 0.2, fontWeight: 500 }}
-      >
-        {table.minCover}–{table.maxCover}
-      </text>
+      {/* In edit mode (or when empty) the shape shows its static
+          capacity; during service an occupied/soon table shows the
+          live booking instead — who, party size, and the time that
+          matters (end for active, arrival for soon). */}
+      {occupant && !editMode ? (
+        <>
+          <text
+            x={cx}
+            y={cy - Math.min(w, h) * 0.22}
+            textAnchor="middle"
+            dominantBaseline="central"
+            className={`${style.textClass} pointer-events-none select-none`}
+            style={{ fontSize: Math.min(w, h) * 0.3, fontWeight: 600 }}
+          >
+            {table.label}
+          </text>
+          <text
+            x={cx}
+            y={cy + Math.min(w, h) * 0.08}
+            textAnchor="middle"
+            dominantBaseline="central"
+            className={`${style.textClass} pointer-events-none select-none`}
+            style={{ fontSize: Math.min(w, h) * 0.19, fontWeight: 600 }}
+          >
+            {truncateName(occupant.guestFirstName, w, occupant.partySize)} ×{occupant.partySize}
+          </text>
+          <text
+            x={cx}
+            y={cy + Math.min(w, h) * 0.33}
+            textAnchor="middle"
+            dominantBaseline="central"
+            className={`${style.textClass} pointer-events-none opacity-70 select-none`}
+            style={{ fontSize: Math.min(w, h) * 0.16, fontWeight: 500 }}
+          >
+            {occupant.kind === "active" ? "til" : "at"} {occupant.timeWall}
+          </text>
+        </>
+      ) : (
+        <>
+          <text
+            x={cx}
+            y={cy - Math.min(w, h) * 0.1}
+            textAnchor="middle"
+            dominantBaseline="central"
+            className={`${style.textClass} pointer-events-none select-none`}
+            style={{ fontSize: Math.min(w, h) * 0.35, fontWeight: 600 }}
+          >
+            {table.label}
+          </text>
+          <text
+            x={cx}
+            y={cy + Math.min(w, h) * 0.28}
+            textAnchor="middle"
+            dominantBaseline="central"
+            className={`${style.textClass} pointer-events-none opacity-70 select-none`}
+            style={{ fontSize: Math.min(w, h) * 0.2, fontWeight: 500 }}
+          >
+            {table.minCover}–{table.maxCover}
+          </text>
+        </>
+      )}
       {showHandles
         ? handles.map((p) => (
             <rect

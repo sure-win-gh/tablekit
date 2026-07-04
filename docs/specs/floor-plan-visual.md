@@ -1,6 +1,15 @@
 # Spec: Visual floor plan with booking overlay
 
-**Status:** shipped
+**Status:** shipped; service-board polish (2026-07-02)
+
+### 2026-07 polish notes
+
+- **Live info on shapes** — occupied tables render guest first name (width-truncated) · ×party · "til HH:MM" (or "at HH:MM" for soon tables) instead of the static min–max capacity; capacity still shows when empty or in edit mode. Tooltips + `aria-label` carry the same detail. No new queries — data was already client-side in `activeByTableId`/`upcomingByTableId`.
+- **Live header strip** — covers on the floor now (multi-table bookings deduped by booking id) + per-state table counts + "updated HH:MM · refreshes every 30s".
+- **Auto-refresh pauses in edit mode** — `AutoRefresh` gained a `paused` prop and moved inside the canvas; a 30s `router.refresh()` mid-drag could revert optimistic positions and reset the position-keyed side-panel form. Refreshes immediately on leaving edit mode (ref-guarded so plain mount doesn't double-fetch).
+- **First-run overlay** — empty canvas shows a centred prompt (managers get a "Start editing" button on md+; hosts get a pointer to their manager).
+- **Keyboard selection** — table shapes (`role="button"`) now handle Enter/Space, with a visible coral focus outline.
+
 **Depends on:** `bookings.md`, `venues.md`, `timeline.md` (status-colour vocabulary)
 
 ## What we're building

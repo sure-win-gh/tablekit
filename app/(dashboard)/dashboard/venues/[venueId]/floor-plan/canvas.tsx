@@ -21,9 +21,15 @@ import {
 } from "@/lib/bookings/floor-state";
 
 import { createTable, saveTablePosition } from "./actions";
+import { AutoRefresh } from "./auto-refresh";
 import { NewAreaForm } from "./forms";
 import { SidePanel, type ActiveBookingDetail } from "./side-panel";
-import { TableShape, type TablePosition, type TableShapeData } from "./table-shape";
+import {
+  TableShape,
+  type TableOccupant,
+  type TablePosition,
+  type TableShapeData,
+} from "./table-shape";
 import type { ActionState } from "./types";
 
 export type CanvasArea = {
@@ -461,11 +467,29 @@ export function FloorPlanCanvas({
         {/* Tables */}
         {visibleTables.map((t) => {
           const state: FloorTableState = floorStateByTableId[t.id] ?? "empty";
+          const active = activeByTableId[t.id];
+          const upcoming = upcomingByTableId[t.id];
+          const occupant: TableOccupant | null = active
+            ? {
+                kind: "active",
+                guestFirstName: active.guestFirstName,
+                partySize: active.partySize,
+                timeWall: active.endWall,
+              }
+            : upcoming
+              ? {
+                  kind: "upcoming",
+                  guestFirstName: upcoming.guestFirstName,
+                  partySize: upcoming.partySize,
+                  timeWall: upcoming.startWall,
+                }
+              : null;
           return (
             <TableShape
               key={t.id}
               table={t}
               state={state}
+              occupant={occupant}
               selected={t.id === selectedTableId}
               editMode={editMode}
               svgRef={svgRef}
@@ -476,6 +500,45 @@ export function FloorPlanCanvas({
         })}
       </svg>
 
+      {/* First-run overlay — an empty grid gives no clue what to do. */}
+      {tables.length === 0 ? (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+          <div className="pointer-events-auto flex max-w-xs flex-col items-center gap-2 text-center">
+            <p className="text-ink text-sm font-semibold">No tables yet</p>
+            {canEdit ? (
+              editMode ? (
+                <p className="text-ash text-xs">
+                  Use <span className="text-ink font-semibold">Add table</span> in the toolbar, then
+                  drag to position and resize. Add areas (Inside, Patio…) below-left.
+                </p>
+              ) : (
+                <>
+                  <p className="text-ash text-xs">
+                    Lay out your floor so hosts can see the room at a glance.
+                  </p>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setEditMode(true)}
+                    className="hidden md:inline-flex"
+                  >
+                    <Pencil className="h-3.5 w-3.5" aria-hidden />
+                    Start editing
+                  </Button>
+                  <p className="text-ash text-xs md:hidden">
+                    Editing needs a desktop — open this page on a bigger screen.
+                  </p>
+                </>
+              )
+            ) : (
+              <p className="text-ash text-xs">
+                A manager can lay out the floor from this screen on a desktop.
+              </p>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       <SidePanel
         venueId={venueId}
         date={date}
@@ -485,6 +548,11 @@ export function FloorPlanCanvas({
         editMode={editMode}
         onClose={() => setSelectedTableId(null)}
       />
+
+      {/* Polling lives here (not the page) so it can pause during edit
+          mode — a refresh mid-drag would revert optimistic positions
+          and reset the side panel's edit form. */}
+      <AutoRefresh paused={editMode} />
     </div>
   );
 }
