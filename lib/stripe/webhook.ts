@@ -30,10 +30,14 @@ import { adminDb } from "@/lib/server/admin/db";
 import { stripe } from "./client";
 
 export class WebhookSignatureError extends Error {
-  constructor(cause?: unknown) {
-    super("lib/stripe/webhook.ts: signature verification failed");
+  // `reason` is a fixed, developer-authored string only — never the raw
+  // upstream error. Stripe's verification error carries the raw request
+  // payload (guest PII), and chaining it via `cause` would leak that into
+  // Sentry / console when the error serialises. See gdpr.md §Logs
+  // ("no error chaining").
+  constructor(reason?: string) {
+    super(`lib/stripe/webhook.ts: signature verification failed${reason ? ` (${reason})` : ""}`);
     this.name = "WebhookSignatureError";
-    if (cause) (this as { cause?: unknown }).cause = cause;
   }
 }
 
@@ -74,8 +78,10 @@ export function verifyAndParse(
   try {
     // constructEvent wants Buffer or string; string is fine.
     return stripe(entity).webhooks.constructEvent(rawBody, signature, secret);
-  } catch (err) {
-    throw new WebhookSignatureError(err);
+  } catch {
+    // constructEvent rejected: bad signature or timestamp outside
+    // tolerance. Deliberately drop the raw error (see class comment).
+    throw new WebhookSignatureError("constructEvent rejected");
   }
 }
 
