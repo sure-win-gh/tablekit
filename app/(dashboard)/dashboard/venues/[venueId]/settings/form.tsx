@@ -24,6 +24,7 @@ type Props = {
   escalationEmail: string;
   showcaseEnabled: boolean;
   aiEnquiryAutoSendEnabled: boolean;
+  serviceFlow: { autoFinishEnabled: boolean; overduePromptMinutes: number | null };
   profile: {
     description: string;
     cuisine: string;
@@ -56,6 +57,7 @@ export function VenueSettingsForm({
   escalationEmail,
   showcaseEnabled,
   aiEnquiryAutoSendEnabled,
+  serviceFlow,
   profile,
 }: Props) {
   const [state, formAction, pending] = useActionState(updateVenue, initial);
@@ -344,6 +346,46 @@ export function VenueSettingsForm({
             className="border-hairline h-4 w-4 rounded"
           />
           <span>Auto-send replies on simple booking requests</span>
+        </label>
+      </fieldset>
+
+      <fieldset id="service-flow" className="border-hairline flex flex-col gap-3 border-t pt-4">
+        <legend className="text-ink text-sm font-semibold">Service flow</legend>
+        <p className="text-ash text-xs">
+          Keep the floor honest without clicking &quot;finish&quot; on every table. Auto-finish
+          closes out still-seated bookings once the venue has shut for the night (an hour after your
+          last service ends, with a nightly backstop). Overdue prompts pop up on any dashboard
+          screen asking whether a table past its booked end time is still seated.
+        </p>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="service_flow_auto_finish"
+            defaultChecked={serviceFlow.autoFinishEnabled}
+            className="border-hairline h-4 w-4 rounded"
+          />
+          <span>Automatically mark seated tables as finished after closing</span>
+        </label>
+        <label className="flex max-w-xs flex-col gap-1 text-sm">
+          <span className="text-charcoal">Ask about overdue tables every</span>
+          <select
+            name="service_flow_prompt_minutes"
+            defaultValue={
+              serviceFlow.overduePromptMinutes === null
+                ? "never"
+                : String(serviceFlow.overduePromptMinutes)
+            }
+            className="border-hairline text-ink rounded-md border px-2 py-1"
+          >
+            <option value="never">Never</option>
+            <option value="5">5 minutes</option>
+            <option value="10">10 minutes</option>
+            <option value="15">15 minutes</option>
+            <option value="20">20 minutes</option>
+            <option value="30">30 minutes</option>
+            <option value="45">45 minutes</option>
+            <option value="60">60 minutes</option>
+          </select>
         </label>
       </fieldset>
 

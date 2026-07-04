@@ -53,6 +53,8 @@ This folder holds the source of truth for every feature. Claude should read the 
 |------|--------|-------|
 | [`password-reset.md`](password-reset.md) | draft | Self-owned reset: 15-min single-use token table (`password_reset_tokens`, RLS deny-all) + `/forgot-password` + `/reset-password`, enumeration-safe, rate-limited, sessions revoked on reset. Supabase does only the final password write. Security audit P2 (req #2). Extends `auth.md`. |
 
+| [`service-flow.md`](service-flow.md) | in progress | Auto-finish seated bookings after close (inline venue sweep + nightly cron backstop) + configurable overdue-table prompts on any dashboard screen. `venues.settings.serviceFlow` slice, no migration. |
+
 ## How to use
 
 1. Before implementing a feature, open its spec and check the acceptance criteria.

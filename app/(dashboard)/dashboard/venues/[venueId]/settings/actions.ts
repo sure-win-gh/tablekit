@@ -9,6 +9,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { startOnboarding } from "@/lib/stripe/connect";
 import { venues } from "@/lib/db/schema";
 import { adminDb } from "@/lib/server/admin/db";
+import { parseServiceFlow } from "@/lib/venues/service-flow";
 import { audit } from "@/lib/server/admin/audit";
 import { validateSlug } from "@/lib/venues/slug";
 
@@ -62,6 +63,9 @@ const Schema = z.object({
   // it off here stops the next enquiry without affecting in-flight
   // ones (the parse + persist already happened on those).
   aiEnquiryAutoSendEnabled: z.coerce.boolean().optional(),
+  // Service flow (service-flow.md) — auto-finish + overdue prompts.
+  serviceFlowAutoFinish: z.coerce.boolean().optional(),
+  serviceFlowPromptMinutes: z.enum(["never", "5", "10", "15", "20", "30", "45", "60"]).optional(),
   // Venue profile (booking-page.md) — the rich page's public info. All
   // optional/empty-tolerant; parseProfile re-validates on read. Empty
   // string clears a field. Website https + geo bounds checked below.
@@ -110,6 +114,8 @@ export async function updateVenue(
     escalationThreshold: formData.get("escalation_threshold"),
     escalationEmail: formData.get("escalation_email"),
     aiEnquiryAutoSendEnabled: formData.get("ai_enquiry_auto_send_enabled") === "on",
+    serviceFlowAutoFinish: formData.get("service_flow_auto_finish") === "on",
+    serviceFlowPromptMinutes: formData.get("service_flow_prompt_minutes") ?? undefined,
     profileDescription: formData.get("profile_description"),
     profileCuisine: formData.get("profile_cuisine"),
     profilePriceRange: formData.get("profile_price_range"),
@@ -251,6 +257,20 @@ export async function updateVenue(
     escalationThreshold: escalationThreshold ?? 2,
     escalationEmail: trimmedEscalationEmail.length > 0 ? trimmedEscalationEmail : null,
     aiEnquiryAutoSendEnabled: parsed.data.aiEnquiryAutoSendEnabled ?? false,
+    // Only overwrite serviceFlow when the fieldset was actually in the
+    // posted form (the select always posts when rendered) — a legacy
+    // tab open across a deploy must not silently flip a default-ON
+    // feature off. Checkboxes can't signal presence on their own.
+    serviceFlow: formData.has("service_flow_prompt_minutes")
+      ? {
+          autoFinishEnabled: parsed.data.serviceFlowAutoFinish === true,
+          overduePromptMinutes:
+            parsed.data.serviceFlowPromptMinutes === undefined ||
+            parsed.data.serviceFlowPromptMinutes === "never"
+              ? null
+              : Number(parsed.data.serviceFlowPromptMinutes),
+        }
+      : parseServiceFlow(existing.settings),
     profile: Object.keys(profile).length > 0 ? profile : null,
   };
 

@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
 import { venueSendingDomains, venues } from "@/lib/db/schema";
 import { parseProfile } from "@/lib/venues/profile";
+import { parseServiceFlow } from "@/lib/venues/service-flow";
 
 import { VenueSettingsForm } from "./form";
 import { SendingDomainSection, type SendingDomainRow } from "./sending-domain-section";
@@ -89,6 +90,7 @@ export default async function VenueSettingsPage({
   // surface the toggle to every venue and let the runner's
   // requirePlan-equivalent gate (if/when added) refuse. Default off.
   const aiEnquiryAutoSendEnabled = settings["aiEnquiryAutoSendEnabled"] === true;
+  const serviceFlow = parseServiceFlow(settings);
 
   // Per-venue sending domain. Optional — most venues use the platform
   // default until they care about "via tablekit.uk" in client UX.
@@ -141,6 +143,7 @@ export default async function VenueSettingsPage({
         escalationEmail={escalationSettings.email}
         showcaseEnabled={showcaseEnabled}
         aiEnquiryAutoSendEnabled={aiEnquiryAutoSendEnabled}
+        serviceFlow={serviceFlow}
         profile={profileFields}
       />
 

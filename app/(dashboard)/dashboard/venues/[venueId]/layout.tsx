@@ -3,10 +3,12 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { OverduePrompt } from "@/components/bookings/overdue-prompt";
 import { VenueSwitcher } from "@/components/venue-switcher";
 import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
 import { venues } from "@/lib/db/schema";
+import { parseServiceFlow } from "@/lib/venues/service-flow";
 
 // Shared chrome for every route under /dashboard/venues/[venueId]:
 // venue name as h1 and a breadcrumb. The per-venue tab nav moved
@@ -31,7 +33,12 @@ export default async function VenueLayout({
 
   const { venue, siblings } = await withUser(async (db) => {
     const [v] = await db
-      .select({ id: venues.id, name: venues.name, organisationId: venues.organisationId })
+      .select({
+        id: venues.id,
+        name: venues.name,
+        organisationId: venues.organisationId,
+        settings: venues.settings,
+      })
       .from(venues)
       .where(eq(venues.id, venueId))
       .limit(1);
@@ -64,6 +71,13 @@ export default async function VenueLayout({
       </header>
 
       <div className="mt-6">{children}</div>
+
+      {/* Overdue-table prompt — venue-level so it appears on any
+          screen. Renders nothing when prompts are set to Never. */}
+      <OverduePrompt
+        venueId={venue.id}
+        promptMinutes={parseServiceFlow(venue.settings).overduePromptMinutes}
+      />
     </div>
   );
 }
