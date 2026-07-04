@@ -14,7 +14,6 @@ import { currencyForEntity } from "@/lib/regions/mapping";
 import { stripe } from "@/lib/stripe/client";
 
 import { appUrl, ensureCustomer } from "./checkout";
-import { entityForOrg } from "./entity";
 import { recordTopup } from "./credit";
 import { type TopupAmount } from "./topup-amounts";
 
@@ -33,8 +32,7 @@ export async function createTopupCheckout(
   amountPence: TopupAmount,
   returnPath: string,
 ): Promise<string> {
-  const entity = await entityForOrg(orgId);
-  const customer = await ensureCustomer(orgId);
+  const { customerId: customer, entity } = await ensureCustomer(orgId);
   const base = appUrl();
   // Only allow returning to an in-app dashboard path (no open redirect).
   const safePath = returnPath.startsWith("/dashboard/") ? returnPath : "/dashboard/organisation";
