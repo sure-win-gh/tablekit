@@ -1,22 +1,26 @@
 # Multi-region roadmap — what's remaining
 
-**Status after 2026-07-03:** Phases 0–2 landed (commits `01dd710..c729d43`).
-Everything below is outstanding. Companion to `multi-region.md` (the spec —
-decisions and invariants live there; this file is the working checklist).
+**Status 2026-07-04:** Phases 0–2 landed on `main` (commits
+`01dd710..c729d43`), CI green, staging deployed with migrations 0053/0054
+applied. Companion to `docs/specs/multi-region.md` (the spec — decisions
+and invariants live there; this file is the working checklist).
 Tick items off as they land and delete this file when Phase 4 ships.
 
-## 0. Before pushing / deploying Phases 0–2
+## 0. Remaining verification before promoting to production
 
-- [ ] Run the full local gate: `pnpm typecheck && pnpm lint && pnpm test`
-      (sandbox verification covered all 87 unit/security files + scoped
-      typecheck/lint, but not the full one-shot run).
-- [ ] Run the integration suite against a local DB (`pnpm test:integration`)
-      — the `stripe_events` (entity, id) round-trip is covered there.
-- [ ] Apply migrations 0053 + 0054 to staging (`pnpm db:migrate`), then
-      `pnpm check:rls`.
-- [ ] Check `stripe_events` row count before running 0054 in prod — the PK
-      swap takes ACCESS EXCLUSIVE while it rebuilds the index (fine at small
-      volume; note deploy.md's <10s rule).
+- [x] Full gate `pnpm typecheck && pnpm lint && pnpm test` — covered by CI
+      on the push to main (green 2026-07-04).
+- [x] Migrations 0053 + 0054 applied to staging (Vercel build step on push).
+- [ ] Run the integration suite against a real DB (`pnpm test:integration`)
+      — the `stripe_events` (entity, id) round-trip lives there.
+- [ ] `pnpm check:rls` against staging (CI only runs it if the
+      `DATABASE_URL` secret is wired — confirm it actually ran).
+- [ ] Send a Stripe test event at staging `/api/stripe/webhook`: expect 200
+      and a `stripe_events` row with `entity='uk'`.
+- [ ] Before TAGGING for prod: check `stripe_events` row count — 0054's PK
+      swap takes ACCESS EXCLUSIVE while it rebuilds (fine at small volume;
+      deploy.md's <10s rule). Skip if staging and prod share the database
+      (already applied in that case).
 
 ## 1. Stripe webhook cutover (any time after deploy, low risk)
 
@@ -59,12 +63,12 @@ Tick items off as they land and delete this file when Phase 4 ships.
       or document as EU-resident control-plane data in `gdpr.md`.
 - [ ] Per-region master keys: `TABLEKIT_MASTER_KEY_EU`/`_US` (a US key must
       never decrypt EU PII). Extend `lib/security/crypto.ts` accordingly.
-- [ ] Thread entity through the paths Phase 2 left on the `uk` default:
-      - `lib/payments/*` (deposits — connected accounts are entity-tied)
-      - `lib/server/admin/dashboard/stripe-billing.ts` (MRR must iterate
-        BOTH accounts)
-      - widget deposit form publishable key:
-        `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_UK`/`_US` picked by venue entity
+- [ ] Thread entity through `lib/payments/*` (deposits — connected accounts
+      are entity-tied); Phase 2 left it on the `uk` default.
+- [ ] Same for `lib/server/admin/dashboard/stripe-billing.ts` — the MRR
+      pull must iterate BOTH accounts.
+- [ ] Widget deposit form publishable key:
+      `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_UK`/`_US` picked by venue entity.
 - [ ] Cron fan-out: every job in `vercel.json` that touches tenant data runs
       per region (or iterates both pools).
 - [ ] US Stripe account config: products/prices (USD, points TBD), usage
@@ -95,17 +99,22 @@ Tick items off as they land and delete this file when Phase 4 ships.
 
 ## 5. Deferred hygiene (non-blocking, from the review pass)
 
-- [ ] Declare the three CHECK constraints (`organisations_region_check`,
+- [x] Declare the three CHECK constraints (`organisations_region_check`,
       `organisations_billing_entity_check`, `stripe_events_entity_check`)
       via drizzle `check()` in `schema.ts` so snapshots match the DB and a
-      future generate can't collide with the hand-written SQL.
-- [ ] Update the stale "import ONLY from lib/server/admin/**" comment in
-      `lib/server/admin/db.ts` to name the actually-sanctioned callers
-      (`lib/billing/*` etc.).
-- [ ] Drop the raw `cause` from `WebhookSignatureError` (pre-existing;
-      Stripe's error object carries the raw payload — contradicts gdpr.md
-      §Logs "no error chaining").
+      future generate can't collide with the hand-written SQL. Migration
+      0055 is a guarded, idempotent no-op (DDL already ran in 0053/0054);
+      it exists only to advance the snapshot. Done 2026-07-04.
+- [x] Update the stale "import ONLY from `lib/server/admin/**`" comment in
+      `lib/server/admin/db.ts` — reworded to state the real invariant
+      (server-only, RLS-bypass, caller owns tenant scoping). Done 2026-07-04.
+- [x] Drop the raw `cause` from `WebhookSignatureError` — constructor now
+      takes a fixed developer-authored `reason` string only, so chaining the
+      raw payload-carrying Stripe error is structurally impossible. gdpr.md
+      §Logs. Done 2026-07-04.
 - [ ] `lib/sms/send.ts` still attaches raw provider errors (pre-existing,
-      already noted in gdpr.md:148) — harden when next touched.
-- [ ] Optional: have `ensureCustomer` return `{ customerId, entity }` so
-      checkout/top-up stop hitting the DB twice per call.
+      already noted in gdpr.md:148) — harden when next touched. (Same class
+      as the `WebhookSignatureError` fix above; left per "when next touched".)
+- [x] Have `ensureCustomer` return `{ customerId, entity }` so checkout/
+      top-up stop hitting the DB twice per call — entity asserted on every
+      path (fail closed). Done 2026-07-04.
