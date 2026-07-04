@@ -61,3 +61,6 @@ scripts/metrics-dashboard/metrics-dashboard.html
 # so don't ignore .claude/plans/
 .claude/scheduled_tasks.lock
 .claude/scheduled_tasks.json
+
+# Security audit exports — external artifacts, not source
+Tablekit-Security-Audit.docx
