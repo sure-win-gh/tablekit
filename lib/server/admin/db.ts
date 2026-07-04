@@ -9,8 +9,12 @@
 //     session (we want to log failed auth attempts too)
 //   - scheduled jobs: GDPR erasure scrubs, retention cleanups
 //
-// Import ONLY from other modules under lib/server/admin/**. The
-// code-reviewer subagent is configured to flag imports from elsewhere.
+// `server-only` (below) is the real guard: this must NEVER be reachable
+// from client or edge code. It IS imported widely across server-side
+// domain modules (lib/billing/*, lib/payments/*, lib/pos/*, lib/bookings/*,
+// stripe handlers, cron routes, server actions, …) — anywhere an operation
+// legitimately can't run under RLS. Because RLS is bypassed, every caller
+// owns its own tenant scoping: filter by organisationId/venueId explicitly.
 // See docs/playbooks/security.md §Cross-tenant bugs.
 //
 // Unlike lib/db/client.ts's authed pool, this uses a service_role
