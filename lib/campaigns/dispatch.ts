@@ -32,6 +32,7 @@ import { parseBranding } from "@/lib/messaging/venue-settings";
 
 import { reconcileCampaign } from "@/lib/billing/credit";
 
+import { parseBodyDoc } from "./blocks";
 import { renderCampaign } from "./render";
 import { isStillEligible } from "./recipients";
 
@@ -109,9 +110,11 @@ async function processOne(row: ClaimedRow, appUrl: string, now: Date): Promise<O
       guestEmailCipher: guests.emailCipher,
       guestPhoneCipher: guests.phoneCipher,
       venueName: venues.name,
+      venueSlug: venues.slug,
       venueSettings: venues.settings,
       campaignSubject: campaigns.subjectOverride,
       campaignBody: campaigns.body,
+      campaignBodyDoc: campaigns.bodyDoc,
       campaignSegment: campaigns.segment,
     })
     .from(campaignSends)
@@ -151,15 +154,26 @@ async function processOne(row: ClaimedRow, appUrl: string, now: Date): Promise<O
     channel,
   });
 
+  // Block-doc campaigns re-validate the stored doc at send time (it came
+  // through the boundary parse at create, but jsonb is still untrusted on
+  // read); an invalid doc falls back to the plain-text body.
+  const parsedDoc = ctx.campaignBodyDoc ? parseBodyDoc(ctx.campaignBodyDoc) : null;
+  const widgetOrigin = process.env["NEXT_PUBLIC_WIDGET_URL"] ?? "";
   const rendered = await renderCampaign({
     channel,
     subject: ctx.campaignSubject,
     body: ctx.campaignBody,
+    bodyDoc: parsedDoc?.ok ? parsedDoc.doc : null,
     ctx: {
       guestFirstName: ctx.guestFirstName,
       venueName: ctx.venueName,
       unsubscribeUrl: unsub,
       branding: parseBranding(ctx.venueSettings),
+      campaignId: row.campaignId,
+      bookingUrl: widgetOrigin
+        ? `${widgetOrigin.replace(/\/$/, "")}/book/${ctx.venueSlug ?? row.venueId}`
+        : undefined,
+      appUrl,
     },
   });
 
@@ -295,7 +309,15 @@ async function finaliseDrainedCampaigns(campaignIds: string[]): Promise<void> {
       await db
         .update(campaigns)
         .set({ status: "sent", sentAt: sql`now()` })
-        .where(sql`${campaigns.id} = ${id} and ${campaigns.status} = 'sending'`);
+        // Both live states must finalise: send-now campaigns sit at 'sending',
+        // but scheduled ones stay at 'scheduled' (enqueue never promotes them
+        // to 'sending'). Restricting to 'sending' left scheduled campaigns
+        // stuck post-drain — sent_at never stamped, and the still-'scheduled'
+        // status let a re-enqueue slip past the already-sent guard and re-fan.
+        // Safe against future-dated schedules: this only runs once every
+        // queued/sending row has drained (pending == 0 above), and a
+        // not-yet-due scheduled campaign always has queued rows.
+        .where(sql`${campaigns.id} = ${id} and ${campaigns.status} in ('sending','scheduled')`);
       // Refund reserved − actually-sent (no-op for email / already-refunded).
       await reconcileCampaign(id);
     }
