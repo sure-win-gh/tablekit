@@ -393,6 +393,27 @@
       "when": 1783159151393,
       "tag": "0055_lying_shape",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1783420059378,
+      "tag": "0056_email_broadcast_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1783440904142,
+      "tag": "0057_campaign_body_doc",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1783442655149,
+      "tag": "0058_booking_campaign_attribution",
+      "breakpoints": true
     }
   ]
 }

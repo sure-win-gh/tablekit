@@ -1,0 +1,1 @@
+ALTER TABLE "campaigns" ADD COLUMN "body_doc" jsonb;

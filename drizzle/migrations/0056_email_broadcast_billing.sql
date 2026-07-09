@@ -1,0 +1,3 @@
+ALTER TABLE "campaigns" ADD COLUMN "allowance_remaining_at_reserve" integer;--> statement-breakpoint
+ALTER TABLE "campaigns" ADD COLUMN "overage_pence_per_1000_at_reserve" integer;--> statement-breakpoint
+CREATE INDEX "campaign_sends_org_email_sent_idx" ON "campaign_sends" USING btree ("organisation_id","sent_at") WHERE "campaign_sends"."channel" = 'email' and "campaign_sends"."sent_at" is not null;
