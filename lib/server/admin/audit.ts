@@ -40,6 +40,7 @@ export type AuditAction =
   | "campaign.enqueued"
   | "campaign.cancelled"
   | "campaign.send_failed"
+  | "campaign.image_uploaded"
   // guests-minimal phase
   | "guest.created"
   | "guest.reused"

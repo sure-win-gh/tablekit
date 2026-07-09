@@ -53,7 +53,10 @@ export const FEATURES: Record<Feature, FeatureMeta> = {
   },
   campaigns: {
     label: "Campaigns",
-    minPlan: "plus",
+    // Email broadcasts unlock at Core (with a monthly allowance); SMS/
+    // WhatsApp broadcasts + audience segments are gated Plus inside the
+    // feature. See docs/specs/email-broadcast-billing.md.
+    minPlan: "core",
     blurb: "Broadcast events and offers to your consented guests over email, SMS and WhatsApp.",
   },
   apiKeys: {

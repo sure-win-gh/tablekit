@@ -84,6 +84,7 @@ export async function BookingWizard({
           date={params.date!}
           wallStart={picked.wallStart}
           partySize={params.party!}
+          campaignId={params.campaign ?? null}
           captchaSitekey={captchaSitekey}
         />
       );

@@ -1,11 +1,16 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition, type MouseEvent, type ReactNode } from "react";
 
 import { cn } from "@/components/ui";
 import { monthGridDays } from "@/lib/services/calendar";
-import { addMonths, buildStepUrl, type WizardParams } from "@/lib/public/wizard-step";
+import {
+  addMonths,
+  buildStepUrl,
+  validCampaign,
+  type WizardParams,
+} from "@/lib/public/wizard-step";
 import type { MonthAvailability } from "@/lib/public/venue";
 
 type SlotLite = { serviceId: string; serviceName: string; wallStart: string };
@@ -17,10 +22,14 @@ type LinkProps = { href: string; onClick: (e: MouseEvent<HTMLAnchorElement>) => 
 function useWizardNav(): { linkProps: (p: WizardParams) => LinkProps; pending: boolean } {
   const router = useRouter();
   const pathname = usePathname();
+  const search = useSearchParams();
   const [pending, startTransition] = useTransition();
   const base = pathname ?? "";
+  // Campaign attribution (?tk_c=) is step-independent: merged into every
+  // forward link here so no step component has to know about it.
+  const campaign = validCampaign(search?.get("tk_c") ?? undefined);
   const linkProps = (params: WizardParams): LinkProps => {
-    const qs = buildStepUrl(params);
+    const qs = buildStepUrl(campaign ? { ...params, campaign } : params);
     // qs is always non-empty in practice (every nav carries at least party);
     // the bare-base fallback matches the server's empty-params edit URL.
     const href = qs ? `${base}?${qs}` : base;

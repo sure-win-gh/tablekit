@@ -23,6 +23,8 @@ type SearchParams = {
   serviceId?: string;
   wallStart?: string;
   month?: string;
+  // Campaign attribution param from marketing email links (Phase B).
+  tk_c?: string;
 };
 
 export async function generateMetadata({ params }: { params: Promise<{ venueIdOrSlug: string }> }) {

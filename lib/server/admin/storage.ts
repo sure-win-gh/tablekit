@@ -8,6 +8,11 @@ import "server-only";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import {
+  ALLOWED_CAMPAIGN_IMAGE_MIME,
+  CAMPAIGN_ASSETS_BUCKET,
+  MAX_CAMPAIGN_IMAGE_BYTES,
+} from "@/lib/campaigns/assets";
 import { MAX_PHOTO_BYTES, VENUE_PHOTOS_BUCKET } from "@/lib/venues/photos";
 
 let _client: SupabaseClient | null = null;
@@ -62,5 +67,39 @@ export async function uploadVenuePhotoObject(
 export async function removeVenuePhotoObjects(paths: string[]): Promise<void> {
   if (paths.length === 0) return;
   const { error } = await storageClient().storage.from(VENUE_PHOTOS_BUCKET).remove(paths);
+  if (error) throw error;
+}
+
+// --- Campaign email assets (marketing-suite Phase A) -----------------------
+// Same public-bucket pattern as venue photos; org-scoped paths are
+// enforced by the org-guarded upload action in the campaigns action layer.
+
+let _campaignBucketEnsured = false;
+export async function ensureCampaignAssetsBucket(): Promise<void> {
+  if (_campaignBucketEnsured) return;
+  const c = storageClient();
+  const { data } = await c.storage.getBucket(CAMPAIGN_ASSETS_BUCKET);
+  if (data) {
+    _campaignBucketEnsured = true;
+    return;
+  }
+  const { error } = await c.storage.createBucket(CAMPAIGN_ASSETS_BUCKET, {
+    public: true,
+    fileSizeLimit: MAX_CAMPAIGN_IMAGE_BYTES,
+    allowedMimeTypes: Object.keys(ALLOWED_CAMPAIGN_IMAGE_MIME),
+  });
+  if (error && !/already exists/i.test(error.message)) throw error;
+  _campaignBucketEnsured = true;
+}
+
+export async function uploadCampaignAssetObject(
+  path: string,
+  body: ArrayBuffer | Buffer,
+  contentType: string,
+): Promise<void> {
+  await ensureCampaignAssetsBucket();
+  const { error } = await storageClient()
+    .storage.from(CAMPAIGN_ASSETS_BUCKET)
+    .upload(path, body, { contentType, upsert: false });
   if (error) throw error;
 }

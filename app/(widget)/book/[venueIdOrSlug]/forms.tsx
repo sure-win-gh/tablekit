@@ -48,6 +48,7 @@ export function BookingForm({
   date,
   wallStart,
   partySize,
+  campaignId,
   captchaSitekey,
 }: {
   venueId: string;
@@ -55,6 +56,9 @@ export function BookingForm({
   date: string;
   wallStart: string;
   partySize: number;
+  // Marketing attribution from ?tk_c= (already uuid-validated by the
+  // wizard URL contract; the API re-validates org/venue ownership).
+  campaignId: string | null;
   captchaSitekey: string | null;
 }) {
   const [state, setState] = useState<SubmitState>({ status: "idle" });
@@ -71,6 +75,7 @@ export function BookingForm({
       date,
       wallStart,
       partySize,
+      campaignId: campaignId ?? undefined,
       notes: (form.get("notes") as string) || undefined,
       captchaToken: captchaToken || undefined,
       guest: {

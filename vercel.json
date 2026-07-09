@@ -64,6 +64,10 @@
     {
       "path": "/api/cron/reset-token-retention",
       "schedule": "30 6 * * *"
+    },
+    {
+      "path": "/api/cron/campaign-attribution",
+      "schedule": "50 6 * * *"
     }
   ]
 }
