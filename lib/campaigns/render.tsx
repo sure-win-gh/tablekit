@@ -8,7 +8,20 @@
 
 import "server-only";
 
-import { Button, Heading, Hr, Img, Link, Section, Text } from "@react-email/components";
+import {
+  Body,
+  Button,
+  Container,
+  Head,
+  Heading,
+  Hr,
+  Html,
+  Img,
+  Link,
+  Preview,
+  Section,
+  Text,
+} from "@react-email/components";
 import { render } from "@react-email/render";
 import type { ReactNode } from "react";
 
@@ -24,6 +37,7 @@ import type { MessageChannel } from "@/lib/messaging/registry";
 
 import { FONT_STACKS, type CampaignBlock, type CampaignBodyDoc } from "./blocks";
 import { countdownImageUrl } from "./countdown";
+import { escapeHtmlValue, prepareHtmlForSend } from "./html-import";
 import { appendCampaignParam } from "./links";
 
 export type CampaignContext = {
@@ -313,11 +327,62 @@ function renderCta(
   );
 }
 
+// Custom-HTML campaigns: the operator's (sanitised) HTML rendered inside
+// a minimal shell whose compliance footer is OURS and unavoidable. The
+// send-time pass re-sanitises + stamps tk_c; merge tags interpolate here
+// with HTML-escaped values. The sanitised, .tk-content-scoped stylesheet
+// (responsive @media rules from the source tool) goes into <head> — the
+// scoping is what lets it style the operator's content while never being
+// able to touch the footer below.
+function renderCustomHtmlEmail(cleanHtml: string, subject: string, ctx: CampaignContext) {
+  const { html: prepared, css } = prepareHtmlForSend(cleanHtml, {
+    campaignId: ctx.campaignId,
+    widgetOrigin: process.env["NEXT_PUBLIC_WIDGET_URL"] ?? "",
+  });
+  const interpolated = interpolateTemplate(prepared, (name) => {
+    const v = MARKETING_TAGS[name]?.(ctx);
+    return v === undefined ? undefined : escapeHtmlValue(v);
+  });
+  return (
+    <Html>
+      <Head />
+      <Preview>{subject}</Preview>
+      <Body style={{ margin: 0, padding: 0, backgroundColor: "#fafafa" }}>
+        {/* Responsive rules from the import, sanitised + scoped to
+            .tk-content. In the body rather than <head> (react-email's
+            Head owns its children; Gmail/Apple Mail parse either). */}
+        {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}
+        {/* Sanitised upstream (save + send passes) — never raw operator input.
+            Nested inside .tk-shell so the compliance footer below is NOT a
+            sibling of .tk-content: operator CSS is scoped to .tk-content (and
+            its descendants), and with no sibling relationship there is no CSS
+            path from it to the footer — a `.tk-content ~ *` / `.tk-content:not(x) ~ *`
+            can't hide the unsubscribe link. Selector-level hardening in
+            html-import.ts#scopeSelector is the second layer. */}
+        <div className="tk-shell">
+          <div className="tk-content" dangerouslySetInnerHTML={{ __html: interpolated }} />
+        </div>
+        <Container style={{ maxWidth: "560px", margin: "0 auto", padding: "16px 24px 32px" }}>
+          <Text style={{ fontSize: "12px", color: "#737373", margin: "0 0 4px 0" }}>
+            Sent by {ctx.venueName} via TableKit.
+          </Text>
+          <Text style={{ fontSize: "12px", color: "#737373", margin: 0 }}>
+            <Link href={ctx.unsubscribeUrl} style={{ color: "#737373" }}>
+              Unsubscribe from {ctx.venueName} emails
+            </Link>
+          </Text>
+        </Container>
+      </Body>
+    </Html>
+  );
+}
+
 export async function renderCampaign(input: {
   channel: MessageChannel;
   subject: string | null;
   body: string;
   bodyDoc?: CampaignBodyDoc | null;
+  htmlBody?: string | null;
   ctx: CampaignContext;
 }): Promise<CampaignRendered> {
   if (input.channel === "sms") {
@@ -334,12 +399,48 @@ export async function renderCampaign(input: {
     ? interpolate(input.subject, input.ctx)
     : `News from ${input.ctx.venueName}`;
 
+  // Custom-HTML mode takes the whole email body; blocks/plain don't apply.
+  if (input.htmlBody) {
+    const el = renderCustomHtmlEmail(input.htmlBody, subject, input.ctx);
+    return {
+      kind: "email",
+      rendered: {
+        subject,
+        html: await render(el),
+        text: await render(el, { plainText: true }),
+      },
+    };
+  }
+
   // Block-doc emails render each block; legacy plain-text campaigns keep
   // the paragraph rendering. Both live inside EmailLayout, so the branded
   // shell + unsubscribe footer are identical and unavoidable.
   const theme = input.bodyDoc ? resolveTheme(input.bodyDoc, input.ctx) : null;
+  const docTheme = input.bodyDoc?.theme;
+
+  // Operator banner replaces the venue-name header on builder emails.
+  // A linked banner participates in attribution like any booking link.
+  const banner = docTheme?.banner
+    ? (() => {
+        const img = (
+          <Img
+            src={docTheme.banner.src}
+            alt={docTheme.banner.alt || `${input.ctx.venueName} banner`}
+            style={{ width: "100%", borderRadius: "6px", margin: "0 0 16px 0" }}
+          />
+        );
+        return docTheme.banner.href ? (
+          <Link key="banner" href={bookingLink(docTheme.banner.href, input.ctx)}>
+            {img}
+          </Link>
+        ) : (
+          <Section key="banner">{img}</Section>
+        );
+      })()
+    : null;
+
   const children = input.bodyDoc
-    ? input.bodyDoc.blocks.map((b, i) => renderBlock(b, input.ctx, i, theme!))
+    ? [banner, ...input.bodyDoc.blocks.map((b, i) => renderBlock(b, input.ctx, i, theme!))]
     : interpolate(input.body, input.ctx)
         .split(/\n{2,}/)
         .map((p, i) => <P key={i}>{p}</P>);
@@ -350,6 +451,10 @@ export async function renderCampaign(input: {
       unsubscribeUrl={input.ctx.unsubscribeUrl}
       venueName={input.ctx.venueName}
       branding={input.ctx.branding}
+      // Builder emails carry their own banner; legacy plain-text
+      // campaigns keep the branded venue header.
+      showVenueHeader={!input.bodyDoc}
+      footerNote={docTheme?.footerText ? interpolate(docTheme.footerText, input.ctx) : undefined}
     >
       {children}
     </EmailLayout>

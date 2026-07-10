@@ -8,6 +8,7 @@ import { getPlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { getBalance } from "@/lib/billing/credit";
 import { getEmailAllowanceState, isEmailOverageEnforced } from "@/lib/billing/email-allowance";
+import { parseBodyDoc } from "@/lib/campaigns/blocks";
 import {
   MARKETING_EMAIL,
   emailCampaignCostPence,
@@ -17,7 +18,7 @@ import { CHANNEL_COST_PENCE } from "@/lib/billing/usage";
 import { estimateAudience } from "@/lib/campaigns/recipients";
 import { MARKETING_TAG_NAMES } from "@/lib/campaigns/render";
 import { withUser } from "@/lib/db/client";
-import { campaigns, venues } from "@/lib/db/schema";
+import { campaigns, campaignTemplates, venues } from "@/lib/db/schema";
 import { SEGMENTS, SEGMENT_LABEL } from "@/lib/guests/segments";
 import { parseBranding } from "@/lib/messaging/venue-settings";
 
@@ -67,6 +68,27 @@ export default async function CampaignsPage({ params }: { params: Promise<{ venu
   const segments = SEGMENTS.map((key) => ({ key, label: SEGMENT_LABEL[key] }));
   const plusUnlocked = hasPlan(plan, "plus");
 
+  // Saved templates for the builder's picker — RLS scopes to the org; the
+  // stored doc is re-validated on read (jsonb is untrusted) and invalid
+  // rows are dropped rather than breaking the page.
+  const savedTemplates = (
+    await withUser((db) =>
+      db
+        .select({
+          id: campaignTemplates.id,
+          name: campaignTemplates.name,
+          subject: campaignTemplates.subject,
+          bodyDoc: campaignTemplates.bodyDoc,
+        })
+        .from(campaignTemplates)
+        .orderBy(campaignTemplates.name)
+        .limit(30),
+    )
+  ).flatMap((t) => {
+    const parsed = parseBodyDoc(t.bodyDoc);
+    return parsed.ok ? [{ id: t.id, name: t.name, subject: t.subject, doc: parsed.doc }] : [];
+  });
+
   const list = await withUser(async (db) =>
     db
       .select({
@@ -104,6 +126,7 @@ export default async function CampaignsPage({ params }: { params: Promise<{ venu
         mergeTags={[...MARKETING_TAG_NAMES]}
         channelCostPence={CHANNEL_COST_PENCE}
         emailAllowanceRemaining={allowanceState.remaining}
+        savedTemplates={savedTemplates}
         recent={list.map((c) => {
           const counts = (c.counts ?? {}) as Record<string, number>;
           return {

@@ -104,6 +104,56 @@ describe("themed rendering", () => {
     expect(r.rendered.html).toContain("text-align:center");
   });
 
+  it("banner replaces the venue header; footer text sits above the unsubscribe line", async () => {
+    const r = await renderCampaign({
+      channel: "email",
+      subject: null,
+      body: "x",
+      bodyDoc: {
+        v: 1,
+        theme: {
+          banner: { src: "https://cdn.example/banner.jpg", alt: "Summer at Jane's" },
+          footerText: "{{venueName}} · 12 High Street\nTue–Sun from 5pm",
+        },
+        blocks: [{ type: "text", text: "Hello" }],
+      },
+      ctx,
+    });
+    if (r.kind !== "email") return;
+    // No venue-name h1 header on builder emails…
+    expect(r.rendered.html).not.toContain("<h1");
+    // …the operator banner renders instead…
+    expect(r.rendered.html).toContain('src="https://cdn.example/banner.jpg"');
+    expect(r.rendered.html).toContain('alt="Summer at Jane&#x27;s"');
+    // …footer copy is interpolated and present, and the compliance
+    // footer is still unavoidable.
+    expect(r.rendered.html).toContain("12 High Street");
+    expect(r.rendered.html).toContain("Unsubscribe");
+  });
+
+  it("legacy plain-text campaigns keep the branded venue header", async () => {
+    const r = await renderCampaign({ channel: "email", subject: null, body: "Hi there", ctx });
+    if (r.kind !== "email") return;
+    expect(r.rendered.html).toContain("<h1");
+  });
+
+  it("banner src must be http(s); footer text is capped", () => {
+    expect(
+      parseBodyDoc({
+        v: 1,
+        theme: { banner: { src: "javascript:alert(1)", alt: "x" } },
+        blocks: [{ type: "divider" }],
+      }).ok,
+    ).toBe(false);
+    expect(
+      parseBodyDoc({
+        v: 1,
+        theme: { footerText: "x".repeat(501) },
+        blocks: [{ type: "divider" }],
+      }).ok,
+    ).toBe(false);
+  });
+
   it("no theme → venue brand colour still drives the accent (pre-theme docs unchanged)", async () => {
     const r = await renderCampaign({
       channel: "email",

@@ -31,64 +31,171 @@ const FONT_LABEL: Record<NonNullable<DocTheme["font"]>, string> = {
 };
 
 export function ThemePanel({
+  venueId,
   theme,
   onChange,
   brandColour,
 }: {
+  venueId: string;
   theme: DocTheme;
   onChange: (t: DocTheme) => void;
   brandColour: string | null;
 }) {
   return (
-    <div className="border-hairline bg-cloud/50 flex flex-wrap items-end gap-3 rounded-md border p-3">
+    <div className="border-hairline bg-cloud/50 flex flex-col gap-3 rounded-md border p-3">
+      <BannerField venueId={venueId} theme={theme} onChange={onChange} />
+
       <label className="flex flex-col gap-1 text-xs">
-        <span className="text-ink font-medium">Font</span>
-        <select
-          value={theme.font ?? "modern"}
-          onChange={(e) =>
-            onChange({ ...theme, font: e.target.value as NonNullable<DocTheme["font"]> })
-          }
+        <span className="text-ink font-medium">
+          Footer <span className="text-ash font-normal">(shown above the unsubscribe link)</span>
+        </span>
+        <textarea
+          value={theme.footerText ?? ""}
+          onChange={(e) => onChange({ ...theme, footerText: e.target.value || undefined })}
+          rows={2}
+          maxLength={500}
+          placeholder={"{{venueName}} · 12 High Street · 01234 456789\nTue–Sun from 5pm"}
           className="border-hairline rounded-md border bg-white px-2 py-1.5 text-xs"
-        >
-          {(Object.keys(FONT_LABEL) as (keyof typeof FONT_LABEL)[]).map((f) => (
-            <option key={f} value={f}>
-              {FONT_LABEL[f]}
-            </option>
-          ))}
-        </select>
+        />
       </label>
-      <ColourField
-        label="Accent"
-        hint="buttons & headings"
-        value={theme.accent}
-        fallback={brandColour ?? DEFAULT_INK}
-        onChange={(v) => onChange({ ...theme, accent: v })}
-      />
-      <ColourField
-        label="Text"
-        value={theme.textColour}
-        fallback={DEFAULT_INK}
-        onChange={(v) => onChange({ ...theme, textColour: v })}
-      />
-      <label className="flex flex-col gap-1 text-xs">
-        <span className="text-ink font-medium">Button shape</span>
-        <select
-          value={theme.buttonShape ?? "rounded"}
-          onChange={(e) =>
-            onChange({
-              ...theme,
-              buttonShape: e.target.value as NonNullable<DocTheme["buttonShape"]>,
-            })
-          }
-          className="border-hairline rounded-md border bg-white px-2 py-1.5 text-xs"
-        >
-          <option value="square">Square</option>
-          <option value="rounded">Rounded</option>
-          <option value="pill">Pill</option>
-        </select>
-      </label>
-      <p className="text-ash w-full text-xs sm:w-auto sm:flex-1 sm:text-right">
-        Applies to the whole email; each block can override below.
+
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-ink font-medium">Font</span>
+          <select
+            value={theme.font ?? "modern"}
+            onChange={(e) =>
+              onChange({ ...theme, font: e.target.value as NonNullable<DocTheme["font"]> })
+            }
+            className="border-hairline rounded-md border bg-white px-2 py-1.5 text-xs"
+          >
+            {(Object.keys(FONT_LABEL) as (keyof typeof FONT_LABEL)[]).map((f) => (
+              <option key={f} value={f}>
+                {FONT_LABEL[f]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <ColourField
+          label="Accent"
+          hint="buttons & headings"
+          value={theme.accent}
+          fallback={brandColour ?? DEFAULT_INK}
+          onChange={(v) => onChange({ ...theme, accent: v })}
+        />
+        <ColourField
+          label="Text"
+          value={theme.textColour}
+          fallback={DEFAULT_INK}
+          onChange={(v) => onChange({ ...theme, textColour: v })}
+        />
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-ink font-medium">Button shape</span>
+          <select
+            value={theme.buttonShape ?? "rounded"}
+            onChange={(e) =>
+              onChange({
+                ...theme,
+                buttonShape: e.target.value as NonNullable<DocTheme["buttonShape"]>,
+              })
+            }
+            className="border-hairline rounded-md border bg-white px-2 py-1.5 text-xs"
+          >
+            <option value="square">Square</option>
+            <option value="rounded">Rounded</option>
+            <option value="pill">Pill</option>
+          </select>
+        </label>
+        <p className="text-ash w-full text-xs sm:w-auto sm:flex-1 sm:text-right">
+          Applies to the whole email; each block can override below.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Banner image at the top of the email — replaces the old logo +
+// venue-name header. Upload guidance matters here: emails render at
+// 560px wide, so we ask for 2× width for sharp retina display and warn
+// on weight (heavy heroes are the #1 cause of clipped/slow emails).
+function BannerField({
+  venueId,
+  theme,
+  onChange,
+}: {
+  venueId: string;
+  theme: DocTheme;
+  onChange: (t: DocTheme) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function upload(file: File) {
+    setUploading(true);
+    setError(null);
+    const fd = new FormData();
+    fd.set("venue_id", venueId);
+    fd.set("file", file);
+    const r = await uploadCampaignImage(fd);
+    setUploading(false);
+    if (r.ok) onChange({ ...theme, banner: { src: r.url, alt: "" } });
+    else setError(r.message);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-ink text-xs font-medium">
+        Banner{" "}
+        <span className="text-ash font-normal">(tops the email — your logo lives here now)</span>
+      </span>
+      {theme.banner ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element -- storage URL preview */}
+          <img src={theme.banner.src} alt="Banner preview" className="max-h-16 rounded" />
+          <input
+            value={theme.banner.alt}
+            onChange={(e) =>
+              onChange({ ...theme, banner: { ...theme.banner!, alt: e.target.value } })
+            }
+            maxLength={200}
+            placeholder="Describe the banner (for screen readers)"
+            className="border-hairline min-w-40 flex-1 rounded-md border bg-white px-2 py-1.5 text-xs"
+          />
+          <button
+            type="button"
+            onClick={() => onChange({ ...theme, banner: undefined })}
+            className="text-ash text-xs underline underline-offset-2 hover:text-red-600"
+          >
+            Remove
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void upload(f);
+            }}
+            className="text-xs"
+            aria-label="Upload banner image"
+          />
+          {uploading ? <span className="text-ash text-xs">Uploading…</span> : null}
+          {error ? (
+            <span role="alert" className="text-xs text-red-600">
+              {error}
+            </span>
+          ) : null}
+        </div>
+      )}
+      <p className="text-ash text-xs">
+        Best results: <strong>1120 × 380px</strong> (roughly 3:1 — it displays at 560px wide, so
+        double width keeps it sharp on phones). JPEG or WebP, under 2MB — aim for ~200KB so the
+        email loads fast.
       </p>
     </div>
   );

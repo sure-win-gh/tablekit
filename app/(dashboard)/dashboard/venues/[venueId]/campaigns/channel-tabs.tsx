@@ -7,6 +7,7 @@ import { useState } from "react";
 import { MARKETING_EMAIL } from "@/lib/billing/marketing-email";
 
 import { CampaignComposer, type AudienceEstimate, type SegmentOption } from "./campaign-composer";
+import type { SavedTemplate } from "./templates-bar";
 
 // One tab per broadcast channel. The active tab drives the composer's
 // channel and filters the recent-campaigns list, so each channel reads as
@@ -49,6 +50,7 @@ export function ChannelTabs({
   mergeTags,
   channelCostPence,
   emailAllowanceRemaining,
+  savedTemplates,
   recent,
 }: {
   venueId: string;
@@ -62,6 +64,7 @@ export function ChannelTabs({
   mergeTags: string[];
   channelCostPence: Record<string, number>;
   emailAllowanceRemaining: number;
+  savedTemplates: SavedTemplate[];
   recent: RecentCampaign[];
 }) {
   const [channel, setChannel] = useState<Channel>("email");
@@ -148,6 +151,7 @@ export function ChannelTabs({
             channelLabel={CHANNEL_LABEL[channel]}
             segments={segments}
             canSegment={canSegment}
+            savedTemplates={savedTemplates}
             initialEstimate={initialEstimate}
             initialBalancePence={initialBalancePence}
             mergeTags={mergeTags}

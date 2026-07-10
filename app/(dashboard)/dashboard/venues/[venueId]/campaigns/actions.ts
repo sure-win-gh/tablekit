@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -26,12 +26,13 @@ import {
   parseBodyDoc,
   type CampaignBodyDoc,
 } from "@/lib/campaigns/blocks";
+import { combineHtml, htmlToPlainText, sanitizeCampaignHtml } from "@/lib/campaigns/html-import";
 import { enqueueCampaign } from "@/lib/campaigns/enqueue";
 import { processNextCampaignBatch } from "@/lib/campaigns/dispatch";
 import { estimateAudience } from "@/lib/campaigns/recipients";
 import { findUnknownMarketingTags, renderCampaign } from "@/lib/campaigns/render";
 import { withUser } from "@/lib/db/client";
-import { campaigns, users, venues } from "@/lib/db/schema";
+import { campaigns, campaignTemplates, users, venues } from "@/lib/db/schema";
 import { sendEmail } from "@/lib/email/send";
 import { SEGMENTS } from "@/lib/guests/segments";
 import { parseBranding } from "@/lib/messaging/venue-settings";
@@ -107,6 +108,22 @@ export async function createCampaign(
     bodyDoc = r.doc;
   }
 
+  // Custom-HTML body (docs/specs/custom-email-html.md): sanitised HERE and
+  // stored only in its clean form; re-sanitised again at send.
+  let htmlBody: string | null = null;
+  const htmlRaw = ((fd.get("html_body") as string | null) ?? "").trim();
+  if (htmlRaw) {
+    if (fd.get("channel") !== "email") {
+      return { status: "error", message: "Custom HTML can only be sent on the email channel." };
+    }
+    if (bodyDoc) {
+      return { status: "error", message: "A campaign can't be both a design and custom HTML." };
+    }
+    const r = sanitizeCampaignHtml(htmlRaw);
+    if (!r.ok) return { status: "error", message: r.error };
+    htmlBody = combineHtml(r); // markup + sanitised responsive CSS together
+  }
+
   const parsed = z
     .object({
       venueId: z.uuid(),
@@ -123,9 +140,13 @@ export async function createCampaign(
       channel: fd.get("channel"),
       segment: fd.get("segment") ?? "all",
       subject: (fd.get("subject") as string | null) ?? undefined,
-      // Builder campaigns store the doc's plain-text projection in `body`
+      // Builder/HTML campaigns store a plain-text projection in `body`
       // (fallback + legacy column); plain campaigns post body directly.
-      body: bodyDoc ? docToPlainText(bodyDoc).slice(0, 2000) : fd.get("body"),
+      body: bodyDoc
+        ? docToPlainText(bodyDoc).slice(0, 2000)
+        : htmlBody
+          ? htmlToPlainText(htmlBody).slice(0, 2000) || "(custom HTML email)"
+          : fd.get("body"),
       send: fd.get("send") === "now",
     });
   if (!parsed.success) {
@@ -178,6 +199,7 @@ export async function createCampaign(
       subjectOverride: channel === "email" ? subject || null : null,
       body,
       bodyDoc,
+      htmlBody,
       createdByUserId: userId,
     })
     .returning({ id: campaigns.id });
@@ -293,7 +315,14 @@ export async function estimateCampaignAudience(input: {
 
 // Live preview of campaign copy against a sample guest. Plus-gated.
 export type CampaignPreview =
-  | { ok: true; kind: "email"; subject: string; html: string; unknownTags: string[] }
+  | {
+      ok: true;
+      kind: "email";
+      subject: string;
+      html: string;
+      unknownTags: string[];
+      htmlWarnings?: string[];
+    }
   | { ok: true; kind: "sms" | "whatsapp"; body: string; unknownTags: string[] }
   | { ok: false; message: string };
 
@@ -303,6 +332,7 @@ export async function previewCampaign(input: {
   subject?: string;
   body?: string;
   bodyDoc?: unknown;
+  htmlBody?: string;
 }): Promise<CampaignPreview> {
   const { orgId } = await requireRole("manager");
   const channel = CHANNEL.safeParse(input.channel);
@@ -329,6 +359,17 @@ export async function previewCampaign(input: {
     doc = r.doc;
   }
 
+  // Optional custom HTML (raw paste — sanitised here, warnings surfaced).
+  let cleanHtml: string | null = null;
+  let htmlWarnings: string[] = [];
+  if (input.htmlBody !== undefined && (input.htmlBody ?? "").trim() !== "") {
+    if (channel.data !== "email") return { ok: false, message: "Custom HTML is email-only." };
+    const r = sanitizeCampaignHtml(input.htmlBody!);
+    if (!r.ok) return { ok: false, message: r.error };
+    cleanHtml = combineHtml(r);
+    htmlWarnings = r.warnings;
+  }
+
   const body = (input.body ?? "").slice(0, 2000);
   const subject = (input.subject ?? "").slice(0, 200);
   const unknownTags = [
@@ -343,6 +384,7 @@ export async function previewCampaign(input: {
     subject: subject || null,
     body: body || "(your message)",
     bodyDoc: doc,
+    htmlBody: cleanHtml,
     ctx: {
       guestFirstName: "Jamie",
       venueName: venue.name,
@@ -359,6 +401,7 @@ export async function previewCampaign(input: {
       subject: rendered.rendered.subject,
       html: rendered.rendered.html,
       unknownTags,
+      ...(htmlWarnings.length > 0 ? { htmlWarnings } : {}),
     };
   }
   return { ok: true, kind: rendered.kind, body: rendered.rendered.body, unknownTags };
@@ -411,6 +454,79 @@ export async function uploadCampaignImage(formData: FormData): Promise<UploadCam
   return { ok: true, url: campaignAssetPublicUrl(storagePath) };
 }
 
+// --- Saved templates (marketing-suite) --------------------------------------
+// Org-scoped saved designs. Reads happen in the page via withUser (RLS);
+// writes come through here (org implicit from the session, adminDb).
+
+const MAX_TEMPLATES_PER_ORG = 20;
+
+export type SaveTemplateResult =
+  | { ok: true; id: string; name: string }
+  | { ok: false; message: string };
+
+export async function saveCampaignTemplate(input: {
+  name: string;
+  subject?: string;
+  bodyDoc: unknown;
+}): Promise<SaveTemplateResult> {
+  const { orgId, userId } = await requireRole("manager");
+  const planError = await checkCampaignPlan(orgId, "email", "all");
+  if (planError) return { ok: false, message: planError };
+
+  const name = (input.name ?? "").trim().slice(0, 80);
+  if (!name) return { ok: false, message: "Give the template a name." };
+  const parsed = parseBodyDoc(input.bodyDoc);
+  if (!parsed.ok) return { ok: false, message: `Invalid design — ${parsed.error}` };
+  const subject = (input.subject ?? "").trim().slice(0, 200) || null;
+
+  const db = adminDb();
+  const [{ n } = { n: 0 }] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(campaignTemplates)
+    .where(eq(campaignTemplates.organisationId, orgId));
+  if (n >= MAX_TEMPLATES_PER_ORG) {
+    return {
+      ok: false,
+      message: `You can save up to ${MAX_TEMPLATES_PER_ORG} templates — delete one first.`,
+    };
+  }
+
+  const [row] = await db
+    .insert(campaignTemplates)
+    .values({ organisationId: orgId, name, subject, bodyDoc: parsed.doc, createdByUserId: userId })
+    .returning({ id: campaignTemplates.id });
+  if (!row) return { ok: false, message: "Couldn't save the template." };
+
+  await audit.log({
+    organisationId: orgId,
+    actorUserId: userId,
+    action: "campaign.template_saved",
+    targetType: "campaign_template",
+    targetId: row.id,
+    metadata: { name },
+  });
+  return { ok: true, id: row.id, name };
+}
+
+export async function deleteCampaignTemplate(input: { id: string }): Promise<void> {
+  const { orgId, userId } = await requireRole("manager");
+  const id = z.uuid().safeParse(input.id);
+  if (!id.success) return;
+  const deleted = await adminDb()
+    .delete(campaignTemplates)
+    .where(and(eq(campaignTemplates.id, id.data), eq(campaignTemplates.organisationId, orgId)))
+    .returning({ id: campaignTemplates.id });
+  if (deleted.length > 0) {
+    await audit.log({
+      organisationId: orgId,
+      actorUserId: userId,
+      action: "campaign.template_deleted",
+      targetType: "campaign_template",
+      targetId: id.data,
+    });
+  }
+}
+
 // Send the current draft to the signed-in operator's own email. Deliberately
 // NOT a campaign send: no campaign_sends row, no message_usage, no allowance
 // consumption — test sends never count (spec acceptance criterion).
@@ -421,6 +537,7 @@ export async function sendTestCampaignEmail(input: {
   subject?: string;
   body?: string;
   bodyDoc?: unknown;
+  htmlBody?: string;
 }): Promise<TestSendResult> {
   const { orgId, userId } = await requireRole("manager");
   const planError = await checkCampaignPlan(orgId, "email", "all");
@@ -450,12 +567,20 @@ export async function sendTestCampaignEmail(input: {
     doc = r.doc;
   }
 
+  let cleanHtml: string | null = null;
+  if ((input.htmlBody ?? "").trim() !== "") {
+    const r = sanitizeCampaignHtml(input.htmlBody!);
+    if (!r.ok) return { ok: false, message: r.error };
+    cleanHtml = combineHtml(r);
+  }
+
   const sampleUnsub = "https://app.tablekit.uk/unsubscribe?p=sample";
   const rendered = await renderCampaign({
     channel: "email",
     subject: (input.subject ?? "").trim() || null,
     body: (input.body ?? "").slice(0, 2000) || "(your message)",
     bodyDoc: doc,
+    htmlBody: cleanHtml,
     ctx: {
       guestFirstName: "Jamie",
       venueName: venue.name,

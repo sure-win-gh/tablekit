@@ -41,6 +41,8 @@ export type AuditAction =
   | "campaign.cancelled"
   | "campaign.send_failed"
   | "campaign.image_uploaded"
+  | "campaign.template_saved"
+  | "campaign.template_deleted"
   // guests-minimal phase
   | "guest.created"
   | "guest.reused"
@@ -172,6 +174,7 @@ export type AuditTargetType =
   | "payment"
   | "message"
   | "campaign"
+  | "campaign_template"
   | "waitlist"
   | "dsar_request"
   | "review"

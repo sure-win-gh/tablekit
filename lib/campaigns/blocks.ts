@@ -59,6 +59,18 @@ export const themeSchema = z.object({
   accent: hexColour.optional(), // default = venue brand colour
   textColour: hexColour.optional(),
   buttonShape: z.enum(["square", "rounded", "pill"]).optional(),
+  // Operator banner shown at the top of the email (replaces the old
+  // logo + venue-name header, which campaign emails no longer render).
+  banner: z
+    .object({
+      src: httpUrl,
+      alt: z.string().trim().max(200).default(""),
+      href: httpUrl.optional(),
+    })
+    .optional(),
+  // Footer copy (address, contact, hours) shown above the unsubscribe
+  // line — which remains non-removable regardless.
+  footerText: z.string().trim().min(1).max(500).optional(),
 });
 export type DocTheme = z.infer<typeof themeSchema>;
 

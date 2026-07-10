@@ -18,6 +18,7 @@ import {
 } from "./actions";
 import { EmailBuilder, ThemePanel, newBlock, toDocBlocks, type EditorBlock } from "./email-builder";
 import { LivePreview } from "./live-preview";
+import { TemplatesBar, type SavedTemplate } from "./templates-bar";
 
 const initial: CreateCampaignState = { status: "idle" };
 
@@ -40,6 +41,7 @@ export function CampaignComposer({
   channelLabel,
   segments,
   canSegment,
+  savedTemplates,
   initialEstimate,
   initialBalancePence,
   mergeTags,
@@ -50,6 +52,7 @@ export function CampaignComposer({
   channelLabel: string;
   segments: SegmentOption[];
   canSegment: boolean;
+  savedTemplates: SavedTemplate[];
   initialEstimate: AudienceEstimate;
   initialBalancePence: number;
   mergeTags: string[];
@@ -64,10 +67,13 @@ export function CampaignComposer({
   // Email builder (marketing-suite Phase A): block mode is the default
   // email experience; plain mode remains for quick text sends and is the
   // only mode for SMS/WhatsApp.
-  const [mode, setMode] = useState<"blocks" | "plain">("blocks");
+  const [mode, setMode] = useState<"blocks" | "plain" | "html">("blocks");
   const [blocks, setBlocks] = useState<EditorBlock[]>([newBlock("heading"), newBlock("text")]);
   const [theme, setTheme] = useState<DocTheme>({});
+  const [htmlBody, setHtmlBody] = useState("");
   const builderActive = channel === "email" && mode === "blocks";
+  const htmlActive = channel === "email" && mode === "html";
+  const splitActive = builderActive || htmlActive;
   const docBlocks = builderActive ? toDocBlocks(blocks) : [];
   // Only store theme keys the operator actually set — an absent theme
   // means "venue branding + defaults" and keeps the doc minimal.
@@ -113,6 +119,7 @@ export function CampaignComposer({
   const emailBilling = channel === "email" ? est.emailBilling : null;
   const costApplies = channel !== "email" || (emailBilling?.enforced ?? false);
   const insufficientCredit = costApplies && est.costPence > balancePence;
+  const contentMissing = (builderActive && !bodyDoc) || (htmlActive && !htmlBody.trim());
 
   function runPreview() {
     startPreview(async () => {
@@ -136,6 +143,7 @@ export function CampaignComposer({
         subject,
         body,
         ...(bodyDoc ? { bodyDoc } : {}),
+        ...(htmlActive && htmlBody.trim() ? { htmlBody } : {}),
       });
       setTestState(r.ok ? `Test sent to ${r.to}.` : r.message);
     });
@@ -143,7 +151,7 @@ export function CampaignComposer({
 
   return (
     <div
-      className={`border-hairline rounded-card flex flex-col gap-4 border bg-white p-6 ${builderActive ? "" : "max-w-2xl"}`}
+      className={`border-hairline rounded-card flex flex-col gap-4 border bg-white p-6 ${splitActive ? "" : "max-w-2xl"}`}
     >
       <div>
         <h2 className="text-ink text-base font-semibold">New {channelLabel} campaign</h2>
@@ -152,11 +160,11 @@ export function CampaignComposer({
         </p>
       </div>
 
-      {/* Builder mode is a Kit-style split pane: compose on the left,
-          the real rendered email updating live on the right. */}
+      {/* Builder/HTML modes are a Kit-style split pane: compose on the
+          left, the real rendered email updating live on the right. */}
       <div
         className={
-          builderActive ? "grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "contents"
+          splitActive ? "grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "contents"
         }
       >
         <form action={formAction} className="flex min-w-0 flex-col gap-4">
@@ -166,6 +174,7 @@ export function CampaignComposer({
           <input type="hidden" name="body" value={body} />
           <input type="hidden" name="schedule_at" value={scheduleAt} />
           <input type="hidden" name="body_doc" value={bodyDoc ? JSON.stringify(bodyDoc) : ""} />
+          <input type="hidden" name="html_body" value={htmlActive ? htmlBody : ""} />
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-ink font-medium">Campaign name</span>
@@ -299,7 +308,7 @@ export function CampaignComposer({
             <div className="flex items-center gap-2 text-sm">
               <span className="text-ink font-medium">Content</span>
               <div className="border-hairline flex w-fit gap-0.5 rounded-md border p-0.5">
-                {(["blocks", "plain"] as const).map((m) => (
+                {(["blocks", "plain", "html"] as const).map((m) => (
                   <button
                     key={m}
                     type="button"
@@ -310,7 +319,11 @@ export function CampaignComposer({
                         : "text-ash hover:text-charcoal rounded px-2.5 py-1 text-xs font-medium"
                     }
                   >
-                    {m === "blocks" ? "Design with blocks" : "Plain text"}
+                    {m === "blocks"
+                      ? "Design with blocks"
+                      : m === "plain"
+                        ? "Plain text"
+                        : "Paste HTML"}
                   </button>
                 ))}
               </div>
@@ -319,7 +332,22 @@ export function CampaignComposer({
 
           {builderActive ? (
             <div className="flex flex-col gap-3">
-              <ThemePanel theme={theme} onChange={setTheme} brandColour={brandColour} />
+              <TemplatesBar
+                saved={savedTemplates}
+                currentDoc={bodyDoc}
+                currentSubject={subject}
+                onApply={(doc, tplSubject) => {
+                  setTheme(doc.theme ?? {});
+                  setBlocks(doc.blocks.map((b) => ({ ...b, _id: crypto.randomUUID() })));
+                  if (tplSubject) setSubject(tplSubject);
+                }}
+              />
+              <ThemePanel
+                venueId={venueId}
+                theme={theme}
+                onChange={setTheme}
+                brandColour={brandColour}
+              />
               <EmailBuilder
                 venueId={venueId}
                 blocks={blocks}
@@ -330,6 +358,44 @@ export function CampaignComposer({
               <span className="text-ash text-xs">
                 The unsubscribe link is added automatically and can&apos;t be removed.
               </span>
+            </div>
+          ) : htmlActive ? (
+            <div className="flex flex-col gap-2">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-ink font-medium">Email HTML</span>
+                <textarea
+                  value={htmlBody}
+                  onChange={(e) => setHtmlBody(e.target.value)}
+                  rows={14}
+                  spellCheck={false}
+                  placeholder="Paste the HTML export from Canva Email (Share → Download → HTML), BeeFree, or any email tool…"
+                  className="border-hairline rounded-md border px-3 py-2 font-mono text-xs"
+                />
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="text-ash text-xs">
+                  or upload a .html file:{" "}
+                  <input
+                    type="file"
+                    accept=".html,.htm,text/html"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      void f.text().then(setHtmlBody);
+                      e.target.value = "";
+                    }}
+                    className="text-xs"
+                    aria-label="Upload an HTML file"
+                  />
+                </label>
+              </div>
+              <p className="text-ash text-xs">
+                We clean the HTML for safety (scripts and trackers are removed) and keep your
+                layout, images and <strong>mobile/responsive styles</strong> — check the phone
+                toggle in the preview. The unsubscribe footer is always added and can&apos;t be
+                removed. Merge tags like {"{{guestFirstName}}"} work inside your HTML, and booking
+                links get campaign tracking automatically.
+              </p>
             </div>
           ) : (
             <label className="flex flex-col gap-1 text-sm">
@@ -362,7 +428,7 @@ export function CampaignComposer({
           </label>
 
           <div className="flex flex-wrap items-center gap-3">
-            {!builderActive ? (
+            {!splitActive ? (
               <button
                 type="button"
                 onClick={runPreview}
@@ -376,7 +442,7 @@ export function CampaignComposer({
               <button
                 type="button"
                 onClick={runTestSend}
-                disabled={testing || (builderActive && !bodyDoc)}
+                disabled={testing || contentMissing}
                 title="Send this draft to your own email — doesn't count towards your allowance"
                 className="border-hairline rounded-md border px-4 py-2 text-sm font-semibold disabled:opacity-50"
               >
@@ -387,7 +453,7 @@ export function CampaignComposer({
               type="submit"
               name="send"
               value="draft"
-              disabled={pending || (builderActive && !bodyDoc)}
+              disabled={pending || contentMissing}
               className="border-hairline rounded-md border px-4 py-2 text-sm font-semibold disabled:opacity-50"
             >
               Save draft
@@ -396,7 +462,7 @@ export function CampaignComposer({
               type="submit"
               name="send"
               value="now"
-              disabled={pending || insufficientCredit || (builderActive && !bodyDoc)}
+              disabled={pending || insufficientCredit || contentMissing}
               title={insufficientCredit ? "Top up messaging credit to send" : undefined}
               className="bg-ink rounded-md px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
@@ -425,8 +491,13 @@ export function CampaignComposer({
           </div>
         </form>
 
-        {builderActive ? (
-          <LivePreview venueId={venueId} subject={subject} bodyDoc={bodyDoc} />
+        {splitActive ? (
+          <LivePreview
+            venueId={venueId}
+            subject={subject}
+            bodyDoc={builderActive ? bodyDoc : null}
+            htmlBody={htmlActive ? htmlBody : null}
+          />
         ) : null}
       </div>
 

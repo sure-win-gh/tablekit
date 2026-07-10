@@ -31,12 +31,23 @@ export function EmailLayout({
   unsubscribeUrl,
   venueName,
   branding,
+  showVenueHeader = true,
+  footerNote,
 }: {
   preview: string;
   children: ReactNode;
   unsubscribeUrl: string;
   venueName: string;
   branding?: VenueBranding | undefined;
+  // Campaign builder emails hide the logo + venue-name header — the
+  // operator designs their own banner instead. Transactional emails
+  // (confirmations/reminders) keep it: guests should instantly recognise
+  // who a booking email is from. The compliance footer below is shared
+  // and NOT optional on any path.
+  showVenueHeader?: boolean;
+  // Operator footer copy (venue address, contact, opening hours) shown
+  // above the unsubscribe line. Plain text; newlines preserved.
+  footerNote?: string | undefined;
 }) {
   const headingColour = branding?.brandColour || DEFAULT_HEADING;
   const logoUrl = branding?.logoUrl || null;
@@ -62,26 +73,28 @@ export function EmailLayout({
             border: "1px solid #e5e5e5",
           }}
         >
-          <Section>
-            {logoUrl ? (
-              <Img
-                src={logoUrl}
-                alt={venueName}
-                style={{ maxHeight: "48px", margin: "0 0 16px 0" }}
-              />
-            ) : null}
-            <Heading
-              as="h1"
-              style={{
-                fontSize: "20px",
-                fontWeight: 600,
-                margin: "0 0 16px 0",
-                color: headingColour,
-              }}
-            >
-              {venueName}
-            </Heading>
-          </Section>
+          {showVenueHeader ? (
+            <Section>
+              {logoUrl ? (
+                <Img
+                  src={logoUrl}
+                  alt={venueName}
+                  style={{ maxHeight: "48px", margin: "0 0 16px 0" }}
+                />
+              ) : null}
+              <Heading
+                as="h1"
+                style={{
+                  fontSize: "20px",
+                  fontWeight: 600,
+                  margin: "0 0 16px 0",
+                  color: headingColour,
+                }}
+              >
+                {venueName}
+              </Heading>
+            </Section>
+          ) : null}
           <Section>{children}</Section>
           {signature ? (
             <Section>
@@ -92,6 +105,18 @@ export function EmailLayout({
           ) : null}
           <Hr style={{ borderColor: "#e5e5e5", margin: "24px 0" }} />
           <Section>
+            {footerNote ? (
+              <Text
+                style={{
+                  fontSize: "12px",
+                  color: "#737373",
+                  margin: "0 0 8px 0",
+                  whiteSpace: "pre-line" as const,
+                }}
+              >
+                {footerNote}
+              </Text>
+            ) : null}
             <Text style={{ fontSize: "12px", color: "#737373", margin: "0 0 4px 0" }}>
               Sent by {venueName} via TableKit.
             </Text>

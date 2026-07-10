@@ -115,6 +115,7 @@ async function processOne(row: ClaimedRow, appUrl: string, now: Date): Promise<O
       campaignSubject: campaigns.subjectOverride,
       campaignBody: campaigns.body,
       campaignBodyDoc: campaigns.bodyDoc,
+      campaignHtmlBody: campaigns.htmlBody,
       campaignSegment: campaigns.segment,
     })
     .from(campaignSends)
@@ -164,6 +165,7 @@ async function processOne(row: ClaimedRow, appUrl: string, now: Date): Promise<O
     subject: ctx.campaignSubject,
     body: ctx.campaignBody,
     bodyDoc: parsedDoc?.ok ? parsedDoc.doc : null,
+    htmlBody: ctx.campaignHtmlBody,
     ctx: {
       guestFirstName: ctx.guestFirstName,
       venueName: ctx.venueName,
