@@ -1224,6 +1224,10 @@ export const campaigns = pgTable(
     // campaign (body renders as paragraphs). When set, `body` holds the
     // plain-text projection. Email channel only.
     bodyDoc: jsonb("body_doc"),
+    // Custom-HTML email body (docs/specs/custom-email-html.md). Stored
+    // ONLY post-sanitise (lib/campaigns/html-import.ts) and re-sanitised
+    // at send. Mutually exclusive with body_doc; email channel only.
+    htmlBody: text("html_body"),
     scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     // Rolling tallies {queued,sent,delivered,failed,opened,clicked} kept
@@ -1302,6 +1306,30 @@ export const campaignSends = pgTable(
       .on(t.organisationId, t.sentAt)
       .where(sql`${t.channel} = 'email' and ${t.sentAt} is not null`),
   ],
+);
+
+// Saved email designs (marketing-suite: templates). Org-scoped like the
+// billing tables — organisation_id is the natural top-level key (no venue
+// parent, no enforce trigger). RLS grants members SELECT; all writes go
+// through org-guarded server actions via adminDb. body_doc holds a
+// validated CampaignBodyDoc (re-validated on read — jsonb is untrusted).
+export const campaignTemplates = pgTable(
+  "campaign_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    subject: text("subject"),
+    bodyDoc: jsonb("body_doc").notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("campaign_templates_org_idx").on(t.organisationId)],
 );
 
 // Monthly per-channel send tally for pass-through billing. First
