@@ -1,4 +1,5 @@
 import { desc, eq } from "drizzle-orm";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { LockedFeature } from "@/components/billing/locked-feature";
@@ -107,11 +108,19 @@ export default async function CampaignsPage({ params }: { params: Promise<{ venu
 
   return (
     <section className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-ink text-2xl font-bold tracking-tight">Campaigns</h1>
-        <p className="text-ash mt-1 text-sm">
-          Promote events and offers to guests who opted in. {venue.name}.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-ink text-2xl font-bold tracking-tight">Campaigns</h1>
+          <p className="text-ash mt-1 text-sm">
+            Promote events and offers to guests who opted in. {venue.name}.
+          </p>
+        </div>
+        <Link
+          href={`/dashboard/venues/${venue.id}/campaigns/reports`}
+          className="border-hairline text-ink hover:bg-cloud inline-flex items-center rounded-md border bg-white px-3 py-2 text-sm font-medium"
+        >
+          Marketing overview
+        </Link>
       </div>
 
       <ChannelTabs
