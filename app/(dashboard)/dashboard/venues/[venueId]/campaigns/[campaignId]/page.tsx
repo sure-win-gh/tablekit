@@ -9,7 +9,7 @@ import { hasPlan } from "@/lib/auth/plan-level";
 import { getPlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
-import { bookings, campaignSends, campaigns, payments } from "@/lib/db/schema";
+import { bookings, campaignLinkClicks, campaignSends, campaigns, payments } from "@/lib/db/schema";
 
 export const metadata = { title: "Campaign report · TableKit" };
 
@@ -132,6 +132,23 @@ export default async function CampaignReportPage({
 
   const isEmail = campaign.channel === "email";
 
+  // Link-level clicks (Phase C, Core+ engagement detail). Each row is a
+  // unique (send, url), so count(*) per url = unique clickers. Email only.
+  const topLinks = isEmail
+    ? await withUser((db) =>
+        db
+          .select({
+            url: campaignLinkClicks.url,
+            clickers: sql<number>`count(*)::int`,
+          })
+          .from(campaignLinkClicks)
+          .where(eq(campaignLinkClicks.campaignId, campaignId))
+          .groupBy(campaignLinkClicks.url)
+          .orderBy(desc(sql`count(*)`))
+          .limit(15),
+      )
+    : [];
+
   return (
     <section className="flex flex-col gap-8">
       <div>
@@ -227,6 +244,38 @@ export default async function CampaignReportPage({
           </Link>
         </div>
       )}
+
+      {/* Top links (Core+ engagement detail) */}
+      {isEmail && topLinks.length > 0 ? (
+        <div>
+          <h2 className="text-ink mb-3 text-base font-semibold">Most-clicked links</h2>
+          <div className="border-hairline rounded-card overflow-hidden border bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-cloud text-ash text-left text-xs font-semibold tracking-wider uppercase">
+                <tr>
+                  <th className="px-4 py-2.5">Link</th>
+                  <th className="px-4 py-2.5 text-right whitespace-nowrap">Unique clickers</th>
+                </tr>
+              </thead>
+              <tbody className="divide-hairline divide-y">
+                {topLinks.map((l) => (
+                  <tr key={l.url}>
+                    <td className="text-charcoal max-w-0 px-4 py-3">
+                      <span className="block truncate" title={l.url}>
+                        {l.url}
+                      </span>
+                    </td>
+                    <td className="text-ink px-4 py-3 text-right font-medium">{l.clickers}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-ash mt-2 text-xs">
+            Counts unique guests per link (a guest clicking the same link twice counts once).
+          </p>
+        </div>
+      ) : null}
 
       {/* Failures */}
       {failures.length > 0 ? (
