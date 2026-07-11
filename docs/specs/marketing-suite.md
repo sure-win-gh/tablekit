@@ -108,7 +108,7 @@ bookings.attribution_kind   text null check (attribution_kind in ('link','click_
 -- + index on (campaign_id) where campaign_id is not null
 ```
 
-1. **Link attribution (deterministic).** Every URL in a rendered campaign email pointing at our booking surfaces (`book.tablekit.uk/*`, `/book/[slug]`) gets `?tk_c=<campaignId>` appended at render time (including `bookingCta` blocks). The widget/booking page carries it through the wizard (first-party, cookieless — piggyback the existing session flow) and stamps `campaign_id` + `attribution_kind='link'` on the created booking.
+1. **Link attribution (deterministic).** Every URL in a rendered campaign email pointing at our booking surfaces (`book.tablekitapp.com/*`, `/book/[slug]`) gets `?tk_c=<campaignId>` appended at render time (including `bookingCta` blocks). The widget/booking page carries it through the wizard (first-party, cookieless — piggyback the existing session flow) and stamps `campaign_id` + `attribution_kind='link'` on the created booking.
 2. **Click-window fallback (probabilistic).** Nightly job: bookings without link attribution whose guest has a `campaign_sends.clicked_at` within **7 days** before booking creation → stamp `attribution_kind='click_window'`. Uses only data we already hold; reported separately, never blended silently.
 
 DSAR erasure already scrubs `campaign_sends`; booking attribution columns carry no PII beyond the existing guest linkage and follow the booking's lifecycle.

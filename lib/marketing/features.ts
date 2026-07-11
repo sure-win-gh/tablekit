@@ -313,7 +313,7 @@ export const FEATURES: MarketingFeature[] = [
     icon: "Webhook",
     outcome: "Connect bookings to everything else you run",
     benefits: [
-      "Bearer-auth REST API at api.tablekit.uk/v1",
+      "Bearer-auth REST API at api.tablekitapp.com/v1",
       "Webhook subscriptions with replay",
       "OpenAPI 3.1 docs you can actually read",
     ],

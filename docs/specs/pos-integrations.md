@@ -177,7 +177,7 @@ Group-CRM: if `organisations.group_crm_enabled`, matching is org-wide; otherwise
 - **Signature:** verify per Lightspeed's webhook signing scheme (HMAC over raw body with the registered secret); store the secret in `webhook_secret_cipher`.
 
 ### Generic (CSV + signed webhook)
-- **Webhook:** `POST api.tablekit.uk/v1/pos/ingest` — Plus-tier, authenticated with a per-connection secret; body signed `X-TableKit-POS-Signature: sha256=<hmac(secret, body)>` (mirrors our **outbound** signing in `public-api.md`, inverted). A documented minimal JSON shape (external_order_id, total_minor, currency, closed_at, optional email/phone, optional line items).
+- **Webhook:** `POST api.tablekitapp.com/v1/pos/ingest` — Plus-tier, authenticated with a per-connection secret; body signed `X-TableKit-POS-Signature: sha256=<hmac(secret, body)>` (mirrors our **outbound** signing in `public-api.md`, inverted). A documented minimal JSON shape (external_order_id, total_minor, currency, closed_at, optional email/phone, optional line items).
 - **CSV:** reuses the `import-export.md` mapping-wizard + two-pass + crash-resumable runner. Columns map to the same `NormalisedOrder`. Marketing consent is never inferred from a POS upload.
 
 ## Real-time to the dashboard

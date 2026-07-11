@@ -68,10 +68,10 @@ export default async function PrivacyRequestPage({
           <p className="mt-3">
             Still stuck? Email{" "}
             <Link
-              href="mailto:privacy@tablekit.uk"
+              href="mailto:privacy@tablekitapp.com"
               className="text-ink hover:text-coral font-semibold underline underline-offset-4"
             >
-              privacy@tablekit.uk
+              privacy@tablekitapp.com
             </Link>{" "}
             and we&apos;ll route you.
           </p>

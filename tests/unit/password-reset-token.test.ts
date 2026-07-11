@@ -27,14 +27,14 @@ describe("hashResetToken", () => {
 
 describe("buildResetUrl", () => {
   it("builds the reset URL with the token in the query", () => {
-    expect(buildResetUrl({ token: "tok", appUrl: "https://app.tablekit.uk" })).toBe(
-      "https://app.tablekit.uk/reset-password?token=tok",
+    expect(buildResetUrl({ token: "tok", appUrl: "https://my.tablekitapp.com" })).toBe(
+      "https://my.tablekitapp.com/reset-password?token=tok",
     );
   });
 
   it("strips a trailing slash from appUrl", () => {
-    expect(buildResetUrl({ token: "tok", appUrl: "https://app.tablekit.uk/" })).toBe(
-      "https://app.tablekit.uk/reset-password?token=tok",
+    expect(buildResetUrl({ token: "tok", appUrl: "https://my.tablekitapp.com/" })).toBe(
+      "https://my.tablekitapp.com/reset-password?token=tok",
     );
   });
 

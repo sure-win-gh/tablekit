@@ -27,7 +27,7 @@ import { withSentryConfig } from "@sentry/nextjs";
 // Every host or scheme any first-screen feature reaches.
 //
 // - 'self' covers same-origin /api/v1/* in dev + the React bundle.
-// - api.tablekit.uk is the production API host (different subdomain
+// - api.tablekitapp.com is the production API host (different subdomain
 //   from the widget surfaces).
 // - api.stripe.com / m.stripe.* — Stripe Elements telemetry +
 //   PaymentIntent confirmations.
@@ -55,7 +55,7 @@ function buildCsp({ frameAncestors }: { frameAncestors: string }): string {
   // hCaptcha which all inject inline styles.
   const directives: Array<[string, string[]]> = [
     ["default-src", ["'self'"]],
-    ["connect-src", ["'self'", "https://api.tablekit.uk", ...STRIPE, ...HCAPTCHA]],
+    ["connect-src", ["'self'", "https://api.tablekitapp.com", ...STRIPE, ...HCAPTCHA]],
     ["script-src", ["'self'", "'unsafe-inline'", ...STRIPE_SCRIPTS, ...HCAPTCHA]],
     ["style-src", ["'self'", "'unsafe-inline'", ...HCAPTCHA]],
     ["img-src", ["'self'", "data:", "https:"]],

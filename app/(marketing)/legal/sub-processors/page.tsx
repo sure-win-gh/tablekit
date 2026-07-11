@@ -127,10 +127,10 @@ export default function SubProcessorsPage() {
           organisation. To request the countersigned DPA or to subscribe an additional contact,
           email{" "}
           <Link
-            href="mailto:legal@tablekit.uk"
+            href="mailto:legal@tablekitapp.com"
             className="text-ink hover:text-coral font-semibold underline underline-offset-4"
           >
-            legal@tablekit.uk
+            legal@tablekitapp.com
           </Link>
           .
         </p>

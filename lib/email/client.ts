@@ -44,10 +44,10 @@ export function messagingDisabled(): boolean {
 }
 
 // The sender address — already validated as a real value at config
-// load. Placeholder ("no-reply@example.com") is only flagged at send
+// load. Placeholder ("no-reply@tablekitapp.com") is only flagged at send
 // time when send.ts checks the result.
 export function fromEmail(): string {
-  return process.env["RESEND_FROM_EMAIL"] ?? "TableKit <no-reply@example.com>";
+  return process.env["RESEND_FROM_EMAIL"] ?? "TableKit <no-reply@tablekitapp.com>";
 }
 
 // Test helper — drop the cached singleton.

@@ -44,8 +44,8 @@ Not the primary target (yet): nation-state actors, supply-chain compromise of al
 - Certificate auto-renewed via Vercel / Cloudflare.
 
 ### Content Security Policy
-- Dashboard (`app.tablekit.uk`): strict CSP, no inline scripts except nonced, `frame-ancestors 'none'`.
-- Widget host (`book.tablekit.uk`): allow framing by `*` (embeddable), but strict script-src.
+- Dashboard (`my.tablekitapp.com`): strict CSP, no inline scripts except nonced, `frame-ancestors 'none'`.
+- Widget host (`book.tablekitapp.com`): allow framing by `*` (embeddable), but strict script-src.
 - No `unsafe-inline` in production.
 
 **Current state:**
@@ -133,7 +133,7 @@ Endpoints that fail verification return 400 and are logged (but not counted towa
 ## Widget XSS
 
 The booking widget is embedded on venue websites we don't control. Rules:
-- Widget script is served from `book.tablekit.uk` only (not a CDN mirror) so we can update it.
+- Widget script is served from `book.tablekitapp.com` only (not a CDN mirror) so we can update it.
 - No `postMessage` wildcards — validate origin against the venue's allowed domains (stored in `venues.allowed_origins`).
 - Widget never reflects user input as HTML. React's default JSX escaping is sufficient; no `dangerouslySetInnerHTML`.
 - SRI hash in the embed snippet.

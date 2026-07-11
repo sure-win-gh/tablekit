@@ -12,7 +12,7 @@ import {
 } from "@/lib/campaigns/countdown";
 import { renderCampaign } from "@/lib/campaigns/render";
 
-const ORIGIN = "https://book.tablekit.uk";
+const ORIGIN = "https://book.tablekitapp.com";
 const CID = "3b9f2b6a-1a2b-4c3d-8e9f-0a1b2c3d4e5f";
 
 describe("Phase C block schemas", () => {
@@ -97,7 +97,7 @@ describe("rendering Phase C blocks", () => {
     venueName: "Jane's Café",
     unsubscribeUrl: `${ORIGIN}/unsubscribe?p=abc`,
     bookingUrl: `${ORIGIN}/book/janes-cafe`,
-    appUrl: "https://app.tablekit.uk",
+    appUrl: "https://my.tablekitapp.com",
   };
 
   it("bookingCta builds the prefilled booking URL and carries attribution on real sends", async () => {
@@ -147,7 +147,7 @@ describe("rendering Phase C blocks", () => {
       ctx,
     });
     if (r.kind !== "email") return;
-    expect(r.rendered.html).toContain("https://app.tablekit.uk/api/countdown/");
+    expect(r.rendered.html).toContain("https://my.tablekitapp.com/api/countdown/");
     expect(r.rendered.html).toContain("Doors open in");
     expect(r.rendered.html).toContain('href="https://instagram.com/janes"');
 

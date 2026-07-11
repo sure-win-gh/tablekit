@@ -183,7 +183,7 @@ export function buildOpenApiDocument() {
       description:
         "REST API for Plus-tier customers. Bearer auth via API keys issued from /dashboard/organisation/api-keys.",
     },
-    servers: [{ url: "https://api.tablekit.uk/v1" }],
+    servers: [{ url: "https://api.tablekitapp.com/v1" }],
     components: {
       securitySchemes: {
         bearerAuth: {

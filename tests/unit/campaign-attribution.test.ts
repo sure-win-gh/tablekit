@@ -9,7 +9,7 @@ import { renderCampaign } from "@/lib/campaigns/render";
 import { buildStepUrl, deriveStep, validCampaign } from "@/lib/public/wizard-step";
 
 const CID = "3b9f2b6a-1a2b-4c3d-8e9f-0a1b2c3d4e5f";
-const ORIGIN = "https://book.tablekit.uk";
+const ORIGIN = "https://book.tablekitapp.com";
 
 describe("appendCampaignParam", () => {
   it("appends tk_c to booking-surface URLs on the widget origin", () => {

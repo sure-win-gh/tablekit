@@ -13,7 +13,7 @@ Independent operators often have a Squarespace site, a Lightspeed till, and a ma
 
 ## Endpoints (launch set)
 
-All under `https://api.tablekit.uk/v1`. JSON in, JSON out.
+All under `https://api.tablekitapp.com/v1`. JSON in, JSON out.
 
 - `GET /bookings` — list bookings, filterable by venue, date range, status.
 - `GET /bookings/:id`

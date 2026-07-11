@@ -388,7 +388,7 @@ export async function previewCampaign(input: {
     ctx: {
       guestFirstName: "Jamie",
       venueName: venue.name,
-      unsubscribeUrl: "https://app.tablekit.uk/unsubscribe?p=sample",
+      unsubscribeUrl: "https://my.tablekitapp.com/unsubscribe?p=sample",
       branding: parseBranding(venue.settings),
       ...campaignSurfaceCtx(venue.slug, vid.data),
     },
@@ -574,7 +574,7 @@ export async function sendTestCampaignEmail(input: {
     cleanHtml = combineHtml(r);
   }
 
-  const sampleUnsub = "https://app.tablekit.uk/unsubscribe?p=sample";
+  const sampleUnsub = "https://my.tablekitapp.com/unsubscribe?p=sample";
   const rendered = await renderCampaign({
     channel: "email",
     subject: (input.subject ?? "").trim() || null,

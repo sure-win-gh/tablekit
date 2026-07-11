@@ -43,7 +43,7 @@ import { adminDb } from "@/lib/server/admin/db";
 // subdomain routes <slug>@... back into our resend-inbound webhook,
 // so guests' replies become new enquiries on the same venue. Must
 // match `INBOUND_DOMAIN` in app/api/webhooks/resend-inbound/route.ts.
-const INBOUND_DOMAIN = "enquiries.tablekit.uk";
+const INBOUND_DOMAIN = "enquiries.tablekitapp.com";
 
 const SendDraftInput = z.object({
   venueId: z.string().uuid(),
@@ -97,7 +97,7 @@ export async function sendDraftAction(
   });
   if (!decision.ok) return { ok: false, error: rejectionMessage(decision.rejection) };
 
-  // Reply-to: <slug>@enquiries.tablekit.uk so a guest reply lands
+  // Reply-to: <slug>@enquiries.tablekitapp.com so a guest reply lands
   // back as a new inbound enquiry on the same venue. A slugless
   // venue can't receive enquiries via the inbound webhook in the
   // first place, so this branch is unreachable in practice — but

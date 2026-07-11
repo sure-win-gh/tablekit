@@ -142,7 +142,7 @@ afterAll(async () => {
 describe("POST /api/webhooks/resend-inbound — happy path", () => {
   it("creates an encrypted enquiry row + audit entry for a Plus venue", async () => {
     const body = fixturePayload({
-      to: `${ctx.plusVenueSlug}@enquiries.tablekit.uk`,
+      to: `${ctx.plusVenueSlug}@enquiries.tablekitapp.com`,
       from: "Jane@Example.com",
       subject: "Booking enquiry",
       text: "Hi — table for 4 next Saturday evening, please. Birthday celebration.",
@@ -198,7 +198,7 @@ describe("POST /api/webhooks/resend-inbound — happy path", () => {
 
   it("is idempotent on svix-id (Resend retries land as duplicates)", async () => {
     const body = fixturePayload({
-      to: `${ctx.plusVenueSlug}@enquiries.tablekit.uk`,
+      to: `${ctx.plusVenueSlug}@enquiries.tablekitapp.com`,
       from: "joe@example.com",
       subject: "Idempotency probe",
       text: "Same payload twice.",
@@ -236,7 +236,7 @@ describe("POST /api/webhooks/resend-inbound — happy path", () => {
       type: "inbound.email.received",
       data: {
         from: { email: "kit@example.com" },
-        to: [{ email: `${ctx.plusVenueSlug}@enquiries.tablekit.uk` }],
+        to: [{ email: `${ctx.plusVenueSlug}@enquiries.tablekitapp.com` }],
         subject: "HTML only",
         html: "<p>tracking pixel here</p>",
       },
@@ -264,7 +264,7 @@ describe("POST /api/webhooks/resend-inbound — happy path", () => {
   it("rejects RFC-5321 quoted-locals as bad slugs", async () => {
     const body = fixturePayload({
       // Quoted-local that lastIndexOf("@") would otherwise tolerate.
-      to: `"a@b"@enquiries.tablekit.uk`,
+      to: `"a@b"@enquiries.tablekitapp.com`,
       from: "guest@example.com",
       subject: "Probe",
       text: "...",
@@ -286,7 +286,7 @@ describe("POST /api/webhooks/resend-inbound — happy path", () => {
 describe("POST /api/webhooks/resend-inbound — drop paths (200 OK)", () => {
   it("drops a non-Plus org with 'not-entitled'", async () => {
     const body = fixturePayload({
-      to: `${ctx.freeVenueSlug}@enquiries.tablekit.uk`,
+      to: `${ctx.freeVenueSlug}@enquiries.tablekitapp.com`,
       from: "guest@example.com",
       subject: "Hi",
       text: "...",
@@ -321,7 +321,7 @@ describe("POST /api/webhooks/resend-inbound — drop paths (200 OK)", () => {
 
   it("drops an unknown slug with 'unknown-venue'", async () => {
     const body = fixturePayload({
-      to: `nobody-${run}@enquiries.tablekit.uk`,
+      to: `nobody-${run}@enquiries.tablekitapp.com`,
       from: "guest@example.com",
       subject: "Hi",
       text: "...",
@@ -363,7 +363,7 @@ describe("POST /api/webhooks/resend-inbound — drop paths (200 OK)", () => {
 describe("POST /api/webhooks/resend-inbound — auth failure paths (4xx)", () => {
   it("returns 400 when the signature is invalid", async () => {
     const body = fixturePayload({
-      to: `${ctx.plusVenueSlug}@enquiries.tablekit.uk`,
+      to: `${ctx.plusVenueSlug}@enquiries.tablekitapp.com`,
       from: "guest@example.com",
       subject: "Hi",
       text: "...",
@@ -385,7 +385,7 @@ describe("POST /api/webhooks/resend-inbound — auth failure paths (4xx)", () =>
 
   it("returns 400 when Svix headers are missing entirely", async () => {
     const body = fixturePayload({
-      to: `${ctx.plusVenueSlug}@enquiries.tablekit.uk`,
+      to: `${ctx.plusVenueSlug}@enquiries.tablekitapp.com`,
       from: "guest@example.com",
       subject: "Hi",
       text: "...",

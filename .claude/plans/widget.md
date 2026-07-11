@@ -2,7 +2,7 @@
 
 ## Goal
 
-A hospitality guest can visit `https://tablekit.uk/book/<venueId>`, pick a date / party size / time, fill their details, and confirm. No login. The same API that powers this form is the public contract for iframe embeds and Reserve-with-Google later.
+A hospitality guest can visit `https://tablekitapp.com/book/<venueId>`, pick a date / party size / time, fill their details, and confirm. No login. The same API that powers this form is the public contract for iframe embeds and Reserve-with-Google later.
 
 `bookings` shipped host-only; this phase adds the anonymous path without changing any of the core domain logic.
 

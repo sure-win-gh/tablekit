@@ -41,7 +41,7 @@ export function SendingDomainSection({
       </legend>
       <p className="text-ash text-xs">
         By default, replies go from TableKit&apos;s shared domain (Gmail shows &quot;via
-        tablekit.uk&quot; below the venue name). Add a domain you own to send from your venue&apos;s
+        tablekitapp.com&quot; below the venue name). Add a domain you own to send from your venue&apos;s
         own address — add the DNS records Resend issues, click verify, and you&apos;re set.
       </p>
 

@@ -29,7 +29,7 @@ export default async function EmbedSnippetPage({
   });
   if (!venue) notFound();
 
-  const appUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "https://book.tablekit.uk";
+  const appUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "https://book.tablekitapp.com";
   const loaderUrl = `${appUrl}/widget.js`;
   // Prefer the slug everywhere user-visible — short, memorable, the
   // form the public 308 redirect normalises to. UUID stays as the

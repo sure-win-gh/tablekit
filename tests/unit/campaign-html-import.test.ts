@@ -15,7 +15,7 @@ import {
 } from "@/lib/campaigns/html-import";
 import { renderCampaign } from "@/lib/campaigns/render";
 
-const ORIGIN = "https://book.tablekit.uk";
+const ORIGIN = "https://book.tablekitapp.com";
 const CID = "3b9f2b6a-1a2b-4c3d-8e9f-0a1b2c3d4e5f";
 
 // Mirrors what the actions layer stores: markup + sanitised CSS combined.

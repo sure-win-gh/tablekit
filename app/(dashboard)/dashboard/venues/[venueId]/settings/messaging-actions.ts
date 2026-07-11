@@ -343,8 +343,8 @@ const SAMPLE_CTX: MessageBookingContext = {
   venueLocale: "en-GB",
   serviceName: "Dinner",
   notes: null,
-  unsubscribeUrl: "https://app.tablekit.uk/unsubscribe?p=sample",
-  reviewUrl: "https://app.tablekit.uk/review?p=sample",
+  unsubscribeUrl: "https://my.tablekitapp.com/unsubscribe?p=sample",
+  reviewUrl: "https://my.tablekitapp.com/review?p=sample",
 };
 
 export type PreviewResult =

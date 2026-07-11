@@ -5,7 +5,7 @@
 //   1. Verify Svix signature (RESEND_INBOUND_SECRET).
 //   2. Idempotency: short-circuit if `svix-id` already seen
 //      (inbound_webhook_events; INSERT ON CONFLICT DO NOTHING).
-//   3. Extract `<slug>@enquiries.tablekit.uk` from the recipient
+//   3. Extract `<slug>@enquiries.tablekitapp.com` from the recipient
 //      and verify the slug against the venue-slug regex (defends
 //      against RFC-5321 quoted-locals / oversized inputs).
 //   4. Resolve the venue → org via `loadPublicVenueByIdOrSlug`.
@@ -59,15 +59,15 @@ type InboundEvent = {
   };
 };
 
-// `<slug>@enquiries.tablekit.uk` — the catch-all on the inbound
+// `<slug>@enquiries.tablekitapp.com` — the catch-all on the inbound
 // subdomain. Any other domain is rejected (the route is configured
 // for one MX target; anything else is a misconfiguration upstream).
-const INBOUND_DOMAIN = "enquiries.tablekit.uk";
+const INBOUND_DOMAIN = "enquiries.tablekitapp.com";
 
 // Slug shape — same regex the venue-slug feature enforces at the
 // form layer + DB CHECK. Tighter than RFC 5321 local-parts on
 // purpose: a sender-controlled string can otherwise exploit
-// quoted-locals (`"a@b"@enquiries.tablekit.uk`) or oversized inputs.
+// quoted-locals (`"a@b"@enquiries.tablekitapp.com`) or oversized inputs.
 const SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])?$/;
 
 // Reject inbound bodies above 256KB. Resend's stated cap is larger
@@ -256,7 +256,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true, enquiryId: row.id });
 }
 
-// `<slug>@enquiries.tablekit.uk` → `slug`. Returns null for any
+// `<slug>@enquiries.tablekitapp.com` → `slug`. Returns null for any
 // recipient on a different domain, a malformed address, or a
 // slug that fails the venue-slug regex.
 function parseRecipientSlug(recipient: string): string | null {

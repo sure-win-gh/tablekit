@@ -151,7 +151,7 @@ beforeAll(async () => {
     organisationId: orgBId,
     campaignId: campaignBId,
     campaignSendId: sendB1Id,
-    url: "https://book.tablekit.uk/b",
+    url: "https://book.tablekitapp.com/b",
   });
 
   ctx = { userAId, userBId, orgAId, campaignAId, sendA1Id, sendA2Id };
@@ -169,7 +169,7 @@ describe("campaign_link_clicks — enforce trigger", () => {
         organisationId: "00000000-0000-0000-0000-000000000000", // wrong on purpose
         campaignId: ctx.campaignAId,
         campaignSendId: ctx.sendA1Id,
-        url: "https://book.tablekit.uk/trigger-test",
+        url: "https://book.tablekitapp.com/trigger-test",
       })
       .returning({ organisationId: schema.campaignLinkClicks.organisationId });
     expect(row!.organisationId).toBe(ctx.orgAId);
@@ -178,7 +178,7 @@ describe("campaign_link_clicks — enforce trigger", () => {
 
 describe("campaign_link_clicks — unique (send, url) dedup", () => {
   it("a repeat click on the same link is idempotent via onConflictDoNothing", async () => {
-    const url = "https://book.tablekit.uk/menu";
+    const url = "https://book.tablekitapp.com/menu";
     const insertOnce = () =>
       db
         .insert(schema.campaignLinkClicks)
@@ -209,7 +209,7 @@ describe("campaign_link_clicks — unique (send, url) dedup", () => {
 describe("campaign_link_clicks — top-links aggregation", () => {
   it("counts unique clickers per URL", async () => {
     // Same URL clicked by two different sends → 2 unique clickers.
-    const url = "https://book.tablekit.uk/event";
+    const url = "https://book.tablekitapp.com/event";
     for (const sendId of [ctx.sendA1Id, ctx.sendA2Id]) {
       await db.insert(schema.campaignLinkClicks).values({
         organisationId: ctx.orgAId,
@@ -264,7 +264,7 @@ describe("campaign_link_clicks — FK cascade (DSAR / retention coverage)", () =
       organisationId: ctx.orgAId,
       campaignId: ctx.campaignAId,
       campaignSendId: send!.id,
-      url: "https://book.tablekit.uk/cascade",
+      url: "https://book.tablekitapp.com/cascade",
     });
 
     await db.delete(schema.campaignSends).where(eq(schema.campaignSends.id, send!.id));

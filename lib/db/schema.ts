@@ -1690,7 +1690,7 @@ export const importJobs = pgTable(
 // AI enquiries (Plus tier)
 // =============================================================================
 //
-// One row per inbound email at `<venue-slug>@enquiries.tablekit.uk`.
+// One row per inbound email at `<venue-slug>@enquiries.tablekitapp.com`.
 // Lifecycle: received → parsing → draft_ready → replied | failed
 // (`discarded` is the operator's "this isn't an enquiry" escape hatch).
 //
@@ -1773,7 +1773,7 @@ export const enquiries = pgTable(
 // Operators can add a domain they own (e.g. `mail.jane-cafe.co.uk`)
 // and prove ownership via DKIM/SPF DNS records; once verified, enquiry
 // replies go out from that domain instead of the platform default —
-// dropping the "via tablekit.uk" suffix Gmail otherwise appends.
+// dropping the "via tablekitapp.com" suffix Gmail otherwise appends.
 //
 // Source of truth for verification status is Resend's Domains API.
 // We mirror enough into this row to render status server-side without
@@ -1861,7 +1861,7 @@ export const inboundWebhookEvents = pgTable("inbound_webhook_events", {
 // API keys (Plus tier)
 // =============================================================================
 //
-// Bearer tokens for the public REST API at api.tablekit.uk/v1.
+// Bearer tokens for the public REST API at api.tablekitapp.com/v1.
 // Format: `sk_live_<base64url(24 random bytes)>` — 32 chars after the
 // prefix, ~192 bits of entropy. The plaintext key is shown to the
 // operator exactly once at issuance and never persisted; we store

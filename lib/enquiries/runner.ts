@@ -58,7 +58,7 @@ const MAX_PARSE_ATTEMPTS = 3;
 // app/api/webhooks/resend-inbound/route.ts INBOUND_DOMAIN. Duplicated
 // rather than imported so the cron-time runner stays decoupled from
 // the webhook route's module graph.
-const INBOUND_DOMAIN = "enquiries.tablekit.uk";
+const INBOUND_DOMAIN = "enquiries.tablekitapp.com";
 
 export type ProcessResult =
   | { status: "draft_ready"; enquiryId: string }

@@ -41,7 +41,7 @@ export default async function VenueSettingsPage({
   });
   if (!venue) notFound();
 
-  const publicBaseUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "https://book.tablekit.uk";
+  const publicBaseUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "https://book.tablekitapp.com";
 
   const settings = (venue.settings ?? {}) as Record<string, unknown>;
   const delayHours: 24 | 48 | 72 =
@@ -93,7 +93,7 @@ export default async function VenueSettingsPage({
   const serviceFlow = parseServiceFlow(settings);
 
   // Per-venue sending domain. Optional — most venues use the platform
-  // default until they care about "via tablekit.uk" in client UX.
+  // default until they care about "via tablekitapp.com" in client UX.
   const sendingDomainRowRaw = await withUser(async (db) => {
     const rows = await db
       .select({

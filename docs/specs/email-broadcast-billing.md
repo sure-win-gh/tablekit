@@ -45,7 +45,7 @@ Today marketing **email** broadcasts are free, unmetered, and Plus-only, while S
 
 ### Deliverability note (cost-model adjacent)
 
-Because marketing and transactional email share one Resend account/API, a venue's marketing complaints could hurt booking-confirmation deliverability. Before volume grows: send marketing from a **separate subdomain** (e.g. `mail-mkt.tablekit.uk` vs the transactional domain) with its own DKIM, and ensure campaign emails carry a **`List-Unsubscribe` header** (one-click, RFC 8058 — Gmail/Yahoo bulk-sender requirement) in addition to the footer link. Both are small dispatcher/render changes; tracked here because they protect the cost basis (staying in Resend's good graces on the transactional API).
+Because marketing and transactional email share one Resend account/API, a venue's marketing complaints could hurt booking-confirmation deliverability. Before volume grows: send marketing from a **separate subdomain** (e.g. `mail-mkt.tablekitapp.com` vs the transactional domain) with its own DKIM, and ensure campaign emails carry a **`List-Unsubscribe` header** (one-click, RFC 8058 — Gmail/Yahoo bulk-sender requirement) in addition to the footer link. Both are small dispatcher/render changes; tracked here because they protect the cost basis (staying in Resend's good graces on the transactional API).
 
 ## Why allowance + PAYG (options considered)
 
