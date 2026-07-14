@@ -407,6 +407,13 @@
       "when": 1784120001000,
       "tag": "0057_lying_shape",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1784053305515,
+      "tag": "0056_easy_king_bedlam",
+      "breakpoints": true
     }
   ]
 }

@@ -406,6 +406,44 @@ export const venueTables = pgTable(
   ],
 );
 
+// Operator-declared "these two tables can be pushed together" edges — an
+// undirected adjacency graph. A booking combines a connected set of these.
+// org/venue/area are denormalised, populated by the
+// enforce_table_combinations_denorm trigger from the endpoint tables (which
+// also RAISEs if the two tables sit in different areas — edges are
+// same-area, keeping combined bookings single-area). Canonical ordering
+// (table_a_id < table_b_id, a CHECK in the migration) stores each unordered
+// pair once. See docs/specs/table-combining.md.
+export const tableCombinations = pgTable(
+  "table_combinations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    areaId: uuid("area_id")
+      .notNull()
+      .references(() => areas.id, { onDelete: "cascade" }),
+    tableAId: uuid("table_a_id")
+      .notNull()
+      .references(() => venueTables.id, { onDelete: "cascade" }),
+    tableBId: uuid("table_b_id")
+      .notNull()
+      .references(() => venueTables.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("table_combinations_pair_uq").on(t.tableAId, t.tableBId),
+    index("table_combinations_a_idx").on(t.tableAId),
+    index("table_combinations_b_idx").on(t.tableBId),
+    index("table_combinations_venue_idx").on(t.venueId),
+    index("table_combinations_org_idx").on(t.organisationId),
+  ],
+);
+
 export const services = pgTable(
   "services",
   {
