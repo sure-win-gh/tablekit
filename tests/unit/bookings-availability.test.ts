@@ -372,6 +372,43 @@ describe("findSlots — operator join graph", () => {
     expect(hasSet(opts, ["T1", "T2"])).toBe(true);
   });
 
+  it("does not truncate a legacy area's pairs when another area is configured", () => {
+    // Area B has 8 two-tops and no edges → 28 legacy pairs, more than the
+    // per-slot cap. Configuring area A must not drop any of B's pairs.
+    const bTables = Array.from({ length: 8 }, (_, i) => t(`B${i}`, "B", 1, 2));
+    const opts = firstOptions({
+      timezone: TZ,
+      date: DATE,
+      partySize: 4, // needs a pair; no single 2-top fits
+      services: [cafeService],
+      tables: [t("A1", "A", 1, 2), t("A2", "A", 1, 2), ...bTables],
+      occupied: [],
+      combinable: [edge("A1", "A2")], // area A configured, area B not
+    });
+    const bPairs = opts.filter(
+      (o) => o.tableIds.length === 2 && o.tableIds.every((id) => id.startsWith("B")),
+    );
+    expect(bPairs.length).toBe(28); // C(8,2) — none truncated
+  });
+
+  it("a dense configured area offers only edge-pairs, never all same-area pairs", () => {
+    // 15 tables (> DENSE_AREA_TABLE_LIMIT) in a configured area with a
+    // single edge. The degraded path must stay edge-restricted, not fall
+    // back to any-same-area pairing.
+    const many = Array.from({ length: 15 }, (_, i) => t(`D${i}`, "A", 1, 2));
+    const opts = firstOptions({
+      timezone: TZ,
+      date: DATE,
+      partySize: 4,
+      services: [cafeService],
+      tables: many,
+      occupied: [],
+      combinable: [edge("D0", "D1")], // configures area A; only D0-D1 join
+    });
+    expect(opts.length).toBe(1);
+    expect(hasSet(opts, ["D0", "D1"])).toBe(true);
+  });
+
   it("empty combinable behaves exactly like legacy pairs", () => {
     const legacy = firstOptions({
       timezone: TZ,

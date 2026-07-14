@@ -232,11 +232,16 @@ function buildTableOptions(
 
   const combos: TableOption[] = [];
   for (const [areaId, group] of byArea.entries()) {
-    if (ctx.configuredAreas.has(areaId) && group.length <= DENSE_AREA_TABLE_LIMIT) {
-      combos.push(...graphOptions(group, partySize, ctx));
+    if (ctx.configuredAreas.has(areaId)) {
+      // A configured area ONLY combines along its declared edges. If it's
+      // pathologically dense we cap enumeration to edge-pairs (size 2) —
+      // still edge-restricted, never any-same-area-pair, so the operator's
+      // constraint is honoured even in the degraded path.
+      const effMax = group.length > DENSE_AREA_TABLE_LIMIT ? 2 : ctx.maxSize;
+      combos.push(...graphOptions(group, partySize, ctx.adj, effMax));
     } else {
-      // Legacy mode: any same-area pair. Also the safety fallback for a
-      // pathologically dense configured area (see DENSE_AREA_TABLE_LIMIT).
+      // Unconfigured area: legacy any-same-area pair. Uncapped, so this
+      // path stays byte-identical to the pre-feature behaviour.
       combos.push(...legacyPairOptions(group, partySize));
     }
   }
@@ -245,21 +250,24 @@ function buildTableOptions(
   // party), then least waste (smallest total that still fits). With no
   // configured area every combo is a legacy pair (length 2), so this
   // reduces to the old sort-by-totalMaxCover and stays byte-identical.
+  // Graph areas are already capped per-area in graphOptions; legacy pairs
+  // are never truncated, keeping per-area behaviour independent.
   combos.sort((x, y) => x.tableIds.length - y.tableIds.length || x.totalMaxCover - y.totalMaxCover);
-  // Only cap when graph mode contributed — a purely-legacy venue must
-  // keep returning every same-area pair exactly as before.
-  if (ctx.configuredAreas.size > 0 && combos.length > MAX_OPTIONS_PER_SLOT) {
-    return combos.slice(0, MAX_OPTIONS_PER_SLOT);
-  }
   return combos;
 }
 
 // Graph mode — every connected set of free tables (size 2..maxSize) in a
-// configured area whose combined capacity can seat the party.
-function graphOptions(group: TableSpec[], partySize: number, ctx: CombineContext): TableOption[] {
+// configured area whose combined capacity can seat the party. Ranked and
+// capped per-area so a dense graph can't return an unbounded option list.
+function graphOptions(
+  group: TableSpec[],
+  partySize: number,
+  adj: Map<string, Set<string>>,
+  maxSize: number,
+): TableOption[] {
   const specById = new Map(group.map((t) => [t.id, t]));
   const out: TableOption[] = [];
-  for (const set of connectedSubsets(group, ctx.adj, ctx.maxSize)) {
+  for (const set of connectedSubsets(group, adj, maxSize)) {
     let totalMax = 0;
     let minFloor = 0;
     for (const id of set) {
@@ -278,7 +286,8 @@ function graphOptions(group: TableSpec[], partySize: number, ctx: CombineContext
       });
     }
   }
-  return out;
+  out.sort((x, y) => x.tableIds.length - y.tableIds.length || x.totalMaxCover - y.totalMaxCover);
+  return out.length > MAX_OPTIONS_PER_SLOT ? out.slice(0, MAX_OPTIONS_PER_SLOT) : out;
 }
 
 // Enumerate connected subsets of size 2..maxSize over the adjacency map,

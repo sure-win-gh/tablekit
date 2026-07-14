@@ -121,3 +121,9 @@ scopes the canvas to one area at a time:
   3 is not modelled.
 - **Same-area only** — a physical row spanning two areas can't be joined until the cross-area
   follow-up (reworks `bookings.area_id` + the junction trigger).
+
+> **Security invariant (do not remove without care):** tenant isolation on `table_combinations`
+> rests on the `enforce_table_combinations_denorm` trigger's same-area assertion. Because an area
+> belongs to exactly one venue and one org, "both tables share an area" transitively guarantees
+> same-venue and same-org. If a future migration loosens this to allow cross-area (or cross-venue)
+> joins, that transitive guarantee breaks and the trigger must gain an explicit same-org assertion.

@@ -381,7 +381,11 @@ export async function toggleTableCombination(
     tableBId: formData.get("table_b_id"),
   });
   if (!parsed.success) return { status: "error", message: "Bad request." };
-  const { tableAId, tableBId } = parsed.data;
+  // Normalise to lowercase so JS string ordering agrees with Postgres'
+  // uuid ordering (the table_a_id < table_b_id CHECK) — z.uuid() accepts
+  // upper-case input but stored uuids are lower-case.
+  const tableAId = parsed.data.tableAId.toLowerCase();
+  const tableBId = parsed.data.tableBId.toLowerCase();
   if (tableAId === tableBId) return { status: "error", message: "Pick two different tables." };
 
   const { orgId } = await requireRole("manager");
@@ -413,13 +417,19 @@ export async function toggleTableCombination(
   if (existing.length > 0) {
     await adminDb().delete(tableCombinations).where(eq(tableCombinations.id, existing[0]!.id));
   } else {
-    await adminDb().insert(tableCombinations).values({
-      organisationId: orgId, // overwritten by enforce_table_combinations_denorm
-      venueId: r1.venueId, // ditto
-      areaId: r1.areaId, // ditto
-      tableAId: lo,
-      tableBId: hi,
-    });
+    // onConflictDoNothing guards a double-tap race where two concurrent
+    // "not exists" reads both try to insert the same pair — the unique
+    // (table_a_id, table_b_id) index would otherwise raise a raw 23505.
+    await adminDb()
+      .insert(tableCombinations)
+      .values({
+        organisationId: orgId, // overwritten by enforce_table_combinations_denorm
+        venueId: r1.venueId, // ditto
+        areaId: r1.areaId, // ditto
+        tableAId: lo,
+        tableBId: hi,
+      })
+      .onConflictDoNothing();
   }
 
   revalidatePath(`/dashboard/venues/${r1.venueId}/floor-plan`);

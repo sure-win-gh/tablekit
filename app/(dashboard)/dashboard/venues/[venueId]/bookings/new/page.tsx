@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { requireRole } from "@/lib/auth/require-role";
 import { findSlots, type ServiceSpec } from "@/lib/bookings/availability";
+import { loadVenueCombining } from "@/lib/bookings/combinable";
 import { todayInZone, venueLocalDayRange } from "@/lib/bookings/time";
 import { withUser } from "@/lib/db/client";
 import { bookingTables, services, venueTables, venues } from "@/lib/db/schema";
@@ -96,6 +97,11 @@ export default async function NewBookingPage({
     schedule: s.schedule as ServiceSpec["schedule"],
     turnMinutes: s.turnMinutes,
   }));
+  // Same combinable input as the public + create paths — otherwise the
+  // host picker offers legacy any-same-area pairs the operator didn't draw
+  // (and 3+ combos never appear), and picking one dead-ends at createBooking
+  // as a spurious slot-taken.
+  const { combinable, maxCombineTables } = await withUser((db) => loadVenueCombining(db, venueId));
   const slots = findSlots({
     timezone: venue.timezone,
     date,
@@ -103,6 +109,8 @@ export default async function NewBookingPage({
     services: serviceSpecs,
     tables: tableRows,
     occupied,
+    combinable,
+    maxCombineTables,
   });
 
   const picked =

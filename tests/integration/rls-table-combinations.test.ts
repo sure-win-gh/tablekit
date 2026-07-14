@@ -53,6 +53,7 @@ type Ctx = {
   areaBId: string;
   tableA1Id: string;
   tableA2Id: string;
+  tableA3Id: string;
   tableB1Id: string;
   tableB2Id: string;
   comboAId: string;
@@ -126,8 +127,21 @@ beforeAll(async () => {
         maxCover: 2,
       })
       .returning({ id: schema.venueTables.id });
-    if (!tbl1 || !tbl2) throw new Error("table insert returned no row");
-    return { venueId: venue.id, areaId: area.id, t1: tbl1.id, t2: tbl2.id };
+    // A third table so the "authenticated cannot insert" test can use a
+    // pair that isn't already stored — isolating the RLS denial from a
+    // possible unique-constraint violation.
+    const [tbl3] = await db
+      .insert(schema.venueTables)
+      .values({
+        organisationId: orgId,
+        venueId: venue.id,
+        areaId: area.id,
+        label: "3",
+        maxCover: 2,
+      })
+      .returning({ id: schema.venueTables.id });
+    if (!tbl1 || !tbl2 || !tbl3) throw new Error("table insert returned no row");
+    return { venueId: venue.id, areaId: area.id, t1: tbl1.id, t2: tbl2.id, t3: tbl3.id };
   };
 
   const A = await mkVenueAreaTables(orgA.id, "A");
@@ -168,6 +182,7 @@ beforeAll(async () => {
     areaBId: B.areaId,
     tableA1Id: A.t1,
     tableA2Id: A.t2,
+    tableA3Id: A.t3,
     tableB1Id: B.t1,
     tableB2Id: B.t2,
     comboAId: comboA.id,
@@ -235,7 +250,9 @@ describe("table_combinations RLS cross-tenant isolation", () => {
   });
 
   it("authenticated role cannot insert a join edge directly", async () => {
-    const [lo, hi] = canonical(ctx.tableA1Id, ctx.tableA2Id);
+    // Fresh pair (1,3) — not the stored (1,2) — so this proves the RLS
+    // denial, not a unique-constraint violation.
+    const [lo, hi] = canonical(ctx.tableA1Id, ctx.tableA3Id);
     await expect(
       asUser(ctx.userAId, (tx) =>
         tx.insert(schema.tableCombinations).values({
