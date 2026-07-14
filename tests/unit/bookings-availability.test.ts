@@ -207,3 +207,189 @@ describe("findSlots", () => {
     expect(services.has(dinnerService.id)).toBe(true);
   });
 });
+
+// Operator-controlled joins (docs/specs/table-combining.md). All tables
+// below are 2-tops so no single seats a party >= 3 — combinations are
+// always exercised. `edge` builds a symmetric join edge.
+const edge = (a: string, b: string) => ({ aId: a, bId: b });
+
+// Occupy a table across the whole cafe service window on DATE so it is
+// never free for any slot.
+const occupyAllDay = (tableId: string) => ({
+  tableId,
+  startAt: new Date("2026-05-10T00:00:00+01:00"),
+  endAt: new Date("2026-05-10T23:59:00+01:00"),
+});
+
+const firstOptions = (input: Parameters<typeof findSlots>[0]) => {
+  const slots = findSlots(input);
+  return slots[0]?.options ?? [];
+};
+
+const hasSet = (opts: { tableIds: string[] }[], ids: string[]) =>
+  opts.some((o) => o.tableIds.length === ids.length && ids.every((id) => o.tableIds.includes(id)));
+
+describe("findSlots — operator join graph", () => {
+  const chain = [t("T1", "A", 1, 2), t("T2", "A", 1, 2), t("T3", "A", 1, 2), t("T4", "A", 1, 2)];
+  const chainEdges = [edge("T1", "T2"), edge("T2", "T3"), edge("T3", "T4")];
+
+  it("offers a connected 3-table set for a party of 6 (all free)", () => {
+    const opts = firstOptions({
+      timezone: TZ,
+      date: DATE,
+      partySize: 6,
+      services: [cafeService],
+      tables: chain,
+      occupied: [],
+      combinable: chainEdges,
+    });
+    // {1,2,3} and {2,3,4} both seat 6; {1,2,3,4} also fits but is ranked
+    // after (more tables). Fewest-tables-first ⇒ a 3-set leads.
+    expect(opts[0]!.tableIds.length).toBe(3);
+    expect(hasSet(opts, ["T1", "T2", "T3"])).toBe(true);
+  });
+
+  it("scenario A: table 3 taken ⇒ {1,2,4} is never offered (4 needs 3 to connect)", () => {
+    // Party of 4 now needs a pair. Free = {1,2,4}; only 1-2 stay connected.
+    const opts = firstOptions({
+      timezone: TZ,
+      date: DATE,
+      partySize: 4,
+      services: [cafeService],
+      tables: chain,
+      occupied: [occupyAllDay("T3")],
+      combinable: chainEdges,
+    });
+    expect(hasSet(opts, ["T1", "T2"])).toBe(true);
+    // 4 is stranded — no option pairs it with 1 or 2.
+    expect(opts.some((o) => o.tableIds.includes("T4"))).toBe(false);
+  });
+
+  it("scenario A: table 3 taken ⇒ a party needing 3 tables can't be seated", () => {
+    const slots = findSlots({
+      timezone: TZ,
+      date: DATE,
+      partySize: 6,
+      services: [cafeService],
+      tables: chain,
+      occupied: [occupyAllDay("T3")],
+      combinable: chainEdges,
+    });
+    // Remaining connected components ({1,2} and {4}) top out at 4 covers.
+    expect(slots).toEqual([]);
+  });
+
+  it("scenario B: hub layout, table 7 taken ⇒ {5,6,8} still combines", () => {
+    const hub = [t("T5", "A", 1, 2), t("T6", "A", 1, 2), t("T7", "A", 1, 2), t("T8", "A", 1, 2)];
+    const hubEdges = [edge("T5", "T6"), edge("T6", "T7"), edge("T6", "T8"), edge("T7", "T8")];
+    const opts = firstOptions({
+      timezone: TZ,
+      date: DATE,
+      partySize: 6,
+      services: [cafeService],
+      tables: hub,
+      occupied: [occupyAllDay("T7")],
+      combinable: hubEdges,
+    });
+    // 5-6-8 is still a connected path (via 6) ⇒ offered.
+    expect(hasSet(opts, ["T5", "T6", "T8"])).toBe(true);
+  });
+
+  it("is per-area: wiring area A doesn't disable legacy pairing in area B", () => {
+    const opts = firstOptions({
+      timezone: TZ,
+      date: DATE,
+      partySize: 6,
+      services: [cafeService],
+      tables: [
+        t("A1", "A", 1, 2),
+        t("A2", "A", 1, 2),
+        t("A3", "A", 1, 2),
+        t("B1", "B", 1, 2),
+        t("B2", "B", 1, 4), // B has no edges → legacy any-pair
+      ],
+      occupied: [],
+      combinable: [edge("A1", "A2"), edge("A2", "A3")], // only area A configured
+    });
+    expect(hasSet(opts, ["A1", "A2", "A3"])).toBe(true); // graph triple in A
+    expect(hasSet(opts, ["B1", "B2"])).toBe(true); // legacy pair still in B
+  });
+
+  it("respects maxCombineTables", () => {
+    const base = {
+      timezone: TZ,
+      date: DATE,
+      partySize: 8, // needs all four 2-tops
+      services: [cafeService],
+      tables: chain,
+      occupied: [],
+      combinable: chainEdges,
+    };
+    expect(findSlots({ ...base, maxCombineTables: 3 })).toEqual([]); // 3 tables = 6 < 8
+    expect(hasSet(firstOptions({ ...base, maxCombineTables: 4 }), ["T1", "T2", "T3", "T4"])).toBe(
+      true,
+    );
+  });
+
+  it("ranks fewest-tables-then-least-waste", () => {
+    const opts = firstOptions({
+      timezone: TZ,
+      date: DATE,
+      partySize: 4, // a pair suffices
+      services: [cafeService],
+      tables: chain,
+      occupied: [],
+      combinable: chainEdges,
+    });
+    // Pairs (2 tables) must precede any triple.
+    expect(opts[0]!.tableIds.length).toBe(2);
+  });
+
+  it("drops a cross-area edge (defensive load-time filter)", () => {
+    const slots = findSlots({
+      timezone: TZ,
+      date: DATE,
+      partySize: 4,
+      services: [cafeService],
+      tables: [t("T1", "A", 1, 2), t("T2", "B", 1, 2)],
+      occupied: [],
+      combinable: [edge("T1", "T2")], // spans areas → ignored
+    });
+    expect(slots).toEqual([]);
+  });
+
+  it("ignores an edge to an unknown table", () => {
+    const opts = firstOptions({
+      timezone: TZ,
+      date: DATE,
+      partySize: 3,
+      services: [cafeService],
+      tables: [t("T1", "A", 1, 2), t("T2", "A", 1, 2)],
+      occupied: [],
+      combinable: [edge("T1", "GHOST"), edge("T1", "T2")],
+    });
+    // The valid 1-2 edge still forms a pair (max 4 seats 3); no crash.
+    expect(hasSet(opts, ["T1", "T2"])).toBe(true);
+  });
+
+  it("empty combinable behaves exactly like legacy pairs", () => {
+    const legacy = firstOptions({
+      timezone: TZ,
+      date: DATE,
+      partySize: 6,
+      services: [cafeService],
+      tables: [t("T1", "A", 1, 2), t("T2", "A", 1, 4)],
+      occupied: [],
+    });
+    const withEmpty = firstOptions({
+      timezone: TZ,
+      date: DATE,
+      partySize: 6,
+      services: [cafeService],
+      tables: [t("T1", "A", 1, 2), t("T2", "A", 1, 4)],
+      occupied: [],
+      combinable: [],
+    });
+    expect(withEmpty).toEqual(legacy);
+  });
+});
