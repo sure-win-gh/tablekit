@@ -10,6 +10,8 @@
 - **First-run overlay** — empty canvas shows a centred prompt (managers get a "Start editing" button on md+; hosts get a pointer to their manager).
 - **Keyboard selection** — table shapes (`role="button"`) now handle Enter/Space, with a visible coral focus outline.
 
+**Extended by:** [`table-combining.md`](table-combining.md) — adds a manager-only "Set up table joins" mode to the canvas. Operators tap two tables to draw a join line (which tables can be pushed together); those lines render **only** in join-setup mode, distinct from the live multi-table-booking connectors below.
+
 **Depends on:** `bookings.md`, `venues.md`, `timeline.md` (status-colour vocabulary)
 
 ## What we're building
