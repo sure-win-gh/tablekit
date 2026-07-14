@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { requireRole } from "@/lib/auth/require-role";
 import { findSlots } from "@/lib/bookings/availability";
+import { loadVenueCombining } from "@/lib/bookings/combinable";
 import { createBooking } from "@/lib/bookings/create";
 import { todayInZone, venueLocalDayRange } from "@/lib/bookings/time";
 import { transitionBooking } from "@/lib/bookings/transition";
@@ -428,6 +429,7 @@ export async function seatWalkIn(_prev: ActionState, formData: FormData): Promis
       ),
   ]);
 
+  const { combinable, maxCombineTables } = await loadVenueCombining(db, venue.id);
   const slots = findSlots({
     timezone: venue.timezone,
     date,
@@ -440,6 +442,8 @@ export async function seatWalkIn(_prev: ActionState, formData: FormData): Promis
     })),
     tables: venueTablesRows,
     occupied,
+    combinable,
+    maxCombineTables,
   });
 
   // Filter to slots that can seat this party on the requested table

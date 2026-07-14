@@ -36,6 +36,10 @@ export type Occupancy = {
   endAt: Date;
 };
 
+// An operator-declared "these two tables can be pushed together" edge.
+// Symmetric; order of aId/bId doesn't matter here.
+export type CombinableEdge = { aId: string; bId: string };
+
 export type AvailabilityInput = {
   timezone: string;
   date: string; // YYYY-MM-DD, venue-local
@@ -44,7 +48,32 @@ export type AvailabilityInput = {
   tables: TableSpec[];
   occupied: Occupancy[];
   slotStepMinutes?: number; // defaults to 15
+  // Operator-set join edges (docs/specs/table-combining.md). When an area
+  // has ≥1 edge, that area combines ONLY along declared edges (a connected
+  // set of free tables). Areas with no edges fall back to legacy same-area
+  // pairs. Omit/empty → behaviour identical to before this feature.
+  combinable?: CombinableEdge[];
+  // Most tables the engine will ever push together. Clamped to [2, 6].
+  // Default 3. Legacy pair combining is size 2 and always available.
+  maxCombineTables?: number;
 };
+
+// Precomputed, per-call combining context shared across every slot.
+type CombineContext = {
+  adj: Map<string, Set<string>>; // validated same-area adjacency
+  configuredAreas: Set<string>; // areas with ≥1 declared edge → graph mode
+  maxSize: number;
+};
+
+const MIN_COMBINE = 2;
+const MAX_COMBINE = 6;
+// Defensive bound: past this many free tables in one configured area we
+// cap enumeration to pairs so a pathological config can't blow up the
+// per-slot cost on the month view.
+const DENSE_AREA_TABLE_LIMIT = 14;
+// Never return more than this many options per slot — downstream only
+// needs presence + membership, and the list is ranked best-first.
+const MAX_OPTIONS_PER_SLOT = 24;
 
 export type TableOption = {
   tableIds: string[];
@@ -65,6 +94,14 @@ export type Slot = {
 export function findSlots(input: AvailabilityInput): Slot[] {
   const step = input.slotStepMinutes ?? 15;
   const slots: Slot[] = [];
+
+  const ctx = buildCombineContext(input);
+
+  // Many slots share an identical set of free tables (e.g. every slot
+  // before the day's first booking). buildTableOptions is pure in
+  // (free-set, partySize) — both constant across this call except the
+  // free-set — so memoise on the sorted free-table ids.
+  const optionCache = new Map<string, TableOption[]>();
 
   for (const svc of input.services) {
     // Determine the day-of-week the service runs in the venue's zone
@@ -89,7 +126,15 @@ export function findSlots(input: AvailabilityInput): Slot[] {
         (t) => !isTableOccupied(t.id, startAt, endAt, input.occupied),
       );
 
-      const options = buildTableOptions(free, input.partySize);
+      const cacheKey = free
+        .map((t) => t.id)
+        .sort()
+        .join(",");
+      let options = optionCache.get(cacheKey);
+      if (!options) {
+        options = buildTableOptions(free, input.partySize, ctx);
+        optionCache.set(cacheKey, options);
+      }
       if (options.length === 0) continue;
 
       slots.push({
@@ -126,9 +171,46 @@ function isTableOccupied(
   return false;
 }
 
+// Validate the operator's join edges once per findSlots call and index
+// them as a same-area adjacency map. Edges whose endpoints are unknown or
+// sit in different areas are dropped here — this is the load-time guard
+// that stops a stale cross-area edge (e.g. a table moved between areas)
+// from ever producing a combination the booking write path would reject.
+function buildCombineContext(input: AvailabilityInput): CombineContext {
+  const byId = new Map(input.tables.map((t) => [t.id, t]));
+  const adj = new Map<string, Set<string>>();
+  const configuredAreas = new Set<string>();
+
+  for (const e of input.combinable ?? []) {
+    const a = byId.get(e.aId);
+    const b = byId.get(e.bId);
+    if (!a || !b) continue; // unknown endpoint
+    if (a.id === b.id) continue; // self-edge
+    if (a.areaId !== b.areaId) continue; // cross-area (defensive)
+    addEdge(adj, a.id, b.id);
+    configuredAreas.add(a.areaId);
+  }
+
+  const raw = input.maxCombineTables ?? 3;
+  const maxSize = Math.max(MIN_COMBINE, Math.min(MAX_COMBINE, Math.trunc(raw)));
+  return { adj, configuredAreas, maxSize };
+}
+
+function addEdge(adj: Map<string, Set<string>>, a: string, b: string): void {
+  (adj.get(a) ?? adj.set(a, new Set()).get(a)!).add(b);
+  (adj.get(b) ?? adj.set(b, new Set()).get(b)!).add(a);
+}
+
 // Pick table options for a party. Prefer smallest-sufficient single
-// tables; fall back to same-area pairs if no single fits.
-function buildTableOptions(free: TableSpec[], partySize: number): TableOption[] {
+// tables; otherwise combine. A configured area (has join edges) only
+// offers connected sets of free tables along those edges; an
+// unconfigured area falls back to legacy same-area pairs. Combinations
+// are ranked fewest-tables-then-least-waste and the list is capped.
+function buildTableOptions(
+  free: TableSpec[],
+  partySize: number,
+  ctx: CombineContext,
+): TableOption[] {
   const singles = free
     .filter((t) => partySize >= t.minCover && partySize <= t.maxCover)
     .sort((a, b) => a.maxCover - b.maxCover)
@@ -141,8 +223,6 @@ function buildTableOptions(free: TableSpec[], partySize: number): TableOption[] 
 
   if (singles.length > 0) return singles;
 
-  // Combine pairs within the same area. O(n^2) — fine for realistic
-  // venues (≤ ~50 tables). Limits to pairs; triples are a follow-up.
   const byArea = new Map<string, TableSpec[]>();
   for (const t of free) {
     const list = byArea.get(t.areaId) ?? [];
@@ -150,26 +230,124 @@ function buildTableOptions(free: TableSpec[], partySize: number): TableOption[] 
     byArea.set(t.areaId, list);
   }
 
-  const pairs: TableOption[] = [];
-  for (const group of byArea.values()) {
-    for (let i = 0; i < group.length; i++) {
-      for (let j = i + 1; j < group.length; j++) {
-        const a = group[i]!;
-        const b = group[j]!;
-        const maxSum = a.maxCover + b.maxCover;
-        // Sum caps the party. Floor is max of the individual mins —
-        // neither table can be left below its own minimum split.
-        const minFloor = Math.max(a.minCover, b.minCover);
-        if (partySize >= minFloor && partySize <= maxSum) {
-          pairs.push({
-            tableIds: [a.id, b.id],
-            totalMaxCover: maxSum,
-            totalMinCover: minFloor,
-            areaId: a.areaId,
-          });
+  const combos: TableOption[] = [];
+  for (const [areaId, group] of byArea.entries()) {
+    if (ctx.configuredAreas.has(areaId) && group.length <= DENSE_AREA_TABLE_LIMIT) {
+      combos.push(...graphOptions(group, partySize, ctx));
+    } else {
+      // Legacy mode: any same-area pair. Also the safety fallback for a
+      // pathologically dense configured area (see DENSE_AREA_TABLE_LIMIT).
+      combos.push(...legacyPairOptions(group, partySize));
+    }
+  }
+
+  // Fewest tables first (a 2-top pair beats a 3-table snake for the same
+  // party), then least waste (smallest total that still fits). With no
+  // configured area every combo is a legacy pair (length 2), so this
+  // reduces to the old sort-by-totalMaxCover and stays byte-identical.
+  combos.sort(
+    (x, y) => x.tableIds.length - y.tableIds.length || x.totalMaxCover - y.totalMaxCover,
+  );
+  // Only cap when graph mode contributed — a purely-legacy venue must
+  // keep returning every same-area pair exactly as before.
+  if (ctx.configuredAreas.size > 0 && combos.length > MAX_OPTIONS_PER_SLOT) {
+    return combos.slice(0, MAX_OPTIONS_PER_SLOT);
+  }
+  return combos;
+}
+
+// Graph mode — every connected set of free tables (size 2..maxSize) in a
+// configured area whose combined capacity can seat the party.
+function graphOptions(
+  group: TableSpec[],
+  partySize: number,
+  ctx: CombineContext,
+): TableOption[] {
+  const specById = new Map(group.map((t) => [t.id, t]));
+  const out: TableOption[] = [];
+  for (const set of connectedSubsets(group, ctx.adj, ctx.maxSize)) {
+    let totalMax = 0;
+    let minFloor = 0;
+    for (const id of set) {
+      const t = specById.get(id)!;
+      totalMax += t.maxCover;
+      // Floor is the max of the individual mins — no table in the set can
+      // be seated below its own minimum.
+      if (t.minCover > minFloor) minFloor = t.minCover;
+    }
+    if (partySize >= minFloor && partySize <= totalMax) {
+      out.push({
+        tableIds: set,
+        totalMaxCover: totalMax,
+        totalMinCover: minFloor,
+        areaId: group[0]!.areaId,
+      });
+    }
+  }
+  return out;
+}
+
+// Enumerate connected subsets of size 2..maxSize over the adjacency map,
+// restricted to the given area's tables. Deduped by sorted-id key so a
+// set reached via different growth paths is emitted once.
+function connectedSubsets(
+  group: TableSpec[],
+  adj: Map<string, Set<string>>,
+  maxSize: number,
+): string[][] {
+  const inArea = new Set(group.map((t) => t.id));
+  const seen = new Set<string>();
+  const results: string[][] = [];
+  let frontier: string[][] = group.map((t) => [t.id]); // size 1 seeds
+
+  for (let size = 1; size < maxSize && frontier.length > 0; size++) {
+    const next: string[][] = [];
+    for (const subset of frontier) {
+      const members = new Set(subset);
+      // Candidate extensions = neighbours of any member, in-area, not
+      // already in the set.
+      const candidates = new Set<string>();
+      for (const id of subset) {
+        const ns = adj.get(id);
+        if (!ns) continue;
+        for (const n of ns) {
+          if (inArea.has(n) && !members.has(n)) candidates.add(n);
         }
+      }
+      for (const n of candidates) {
+        const combo = [...subset, n].sort();
+        const key = combo.join(",");
+        if (seen.has(key)) continue;
+        seen.add(key);
+        next.push(combo);
+        results.push(combo);
+      }
+    }
+    frontier = next;
+  }
+
+  return results;
+}
+
+// Legacy mode — any two tables in the same area combine, no adjacency.
+// Preserved verbatim for areas the operator has never configured.
+function legacyPairOptions(group: TableSpec[], partySize: number): TableOption[] {
+  const pairs: TableOption[] = [];
+  for (let i = 0; i < group.length; i++) {
+    for (let j = i + 1; j < group.length; j++) {
+      const a = group[i]!;
+      const b = group[j]!;
+      const maxSum = a.maxCover + b.maxCover;
+      const minFloor = Math.max(a.minCover, b.minCover);
+      if (partySize >= minFloor && partySize <= maxSum) {
+        pairs.push({
+          tableIds: [a.id, b.id],
+          totalMaxCover: maxSum,
+          totalMinCover: minFloor,
+          areaId: a.areaId,
+        });
       }
     }
   }
-  return pairs.sort((x, y) => x.totalMaxCover - y.totalMaxCover);
+  return pairs;
 }

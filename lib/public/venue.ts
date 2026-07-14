@@ -27,6 +27,7 @@ import {
   type Slot,
   type TableSpec,
 } from "@/lib/bookings/availability";
+import { loadVenueCombining } from "@/lib/bookings/combinable";
 import { todayInZone, venueLocalDayRange } from "@/lib/bookings/time";
 import { daysInMonth } from "@/lib/services/calendar";
 import { type Plan, toPlan } from "@/lib/auth/plan-level";
@@ -173,6 +174,7 @@ export async function loadPublicAvailability(
     turnMinutes: s.turnMinutes,
   }));
   const tableSpecs: TableSpec[] = tableRows;
+  const { combinable, maxCombineTables } = await loadVenueCombining(db, venue.id);
 
   const slots: Slot[] = findSlots({
     timezone: venue.timezone,
@@ -181,6 +183,8 @@ export async function loadPublicAvailability(
     services: serviceSpecs,
     tables: tableSpecs,
     occupied,
+    combinable,
+    maxCombineTables,
   });
 
   return {
@@ -271,6 +275,7 @@ export async function loadPublicMonthAvailability(
   }));
   const tableSpecs: TableSpec[] = tableRows;
   const today = todayInZone(venue.timezone);
+  const { combinable, maxCombineTables } = await loadVenueCombining(db, venue.id);
 
   const days: Record<string, DayAvailability> = {};
   for (let d = 1; d <= dim; d++) {
@@ -291,6 +296,8 @@ export async function loadPublicMonthAvailability(
       services: serviceSpecs,
       tables: tableSpecs,
       occupied,
+      combinable,
+      maxCombineTables,
     });
     days[ymd] = slots.length > 0 ? "open" : "full";
   }

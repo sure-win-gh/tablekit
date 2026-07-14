@@ -43,6 +43,7 @@ import { stripeEnabled } from "@/lib/stripe/client";
 import { getAccount } from "@/lib/stripe/connect";
 
 import { findSlots, type TableOption } from "./availability";
+import { loadVenueCombining } from "./combinable";
 import { venueLocalDayRange } from "./time";
 
 export type BookingSource = "host" | "widget" | "rwg" | "api";
@@ -193,7 +194,10 @@ export async function createBooking(
       ),
     );
 
-  // 3. Run availability. Must have at least one matching slot.
+  // 3. Run availability. Must have at least one matching slot. Same
+  // combinable input as the public availability path, or a valid
+  // combined-table booking would be rejected here as no-availability.
+  const { combinable, maxCombineTables } = await loadVenueCombining(db, venue.id);
   const slots = findSlots({
     timezone: venue.timezone,
     date: input.date,
@@ -206,6 +210,8 @@ export async function createBooking(
     })),
     tables: venueTablesRows,
     occupied,
+    combinable,
+    maxCombineTables,
   });
 
   const slot = slots.find(
