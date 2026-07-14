@@ -108,11 +108,23 @@ beforeAll(async () => {
     if (!area) throw new Error("area insert returned no row");
     const [tbl1] = await db
       .insert(schema.venueTables)
-      .values({ organisationId: orgId, venueId: venue.id, areaId: area.id, label: "1", maxCover: 2 })
+      .values({
+        organisationId: orgId,
+        venueId: venue.id,
+        areaId: area.id,
+        label: "1",
+        maxCover: 2,
+      })
       .returning({ id: schema.venueTables.id });
     const [tbl2] = await db
       .insert(schema.venueTables)
-      .values({ organisationId: orgId, venueId: venue.id, areaId: area.id, label: "2", maxCover: 2 })
+      .values({
+        organisationId: orgId,
+        venueId: venue.id,
+        areaId: area.id,
+        label: "2",
+        maxCover: 2,
+      })
       .returning({ id: schema.venueTables.id });
     if (!tbl1 || !tbl2) throw new Error("table insert returned no row");
     return { venueId: venue.id, areaId: area.id, t1: tbl1.id, t2: tbl2.id };
