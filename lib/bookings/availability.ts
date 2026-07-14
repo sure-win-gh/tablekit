@@ -245,9 +245,7 @@ function buildTableOptions(
   // party), then least waste (smallest total that still fits). With no
   // configured area every combo is a legacy pair (length 2), so this
   // reduces to the old sort-by-totalMaxCover and stays byte-identical.
-  combos.sort(
-    (x, y) => x.tableIds.length - y.tableIds.length || x.totalMaxCover - y.totalMaxCover,
-  );
+  combos.sort((x, y) => x.tableIds.length - y.tableIds.length || x.totalMaxCover - y.totalMaxCover);
   // Only cap when graph mode contributed — a purely-legacy venue must
   // keep returning every same-area pair exactly as before.
   if (ctx.configuredAreas.size > 0 && combos.length > MAX_OPTIONS_PER_SLOT) {
@@ -258,11 +256,7 @@ function buildTableOptions(
 
 // Graph mode — every connected set of free tables (size 2..maxSize) in a
 // configured area whose combined capacity can seat the party.
-function graphOptions(
-  group: TableSpec[],
-  partySize: number,
-  ctx: CombineContext,
-): TableOption[] {
+function graphOptions(group: TableSpec[], partySize: number, ctx: CombineContext): TableOption[] {
   const specById = new Map(group.map((t) => [t.id, t]));
   const out: TableOption[] = [];
   for (const set of connectedSubsets(group, ctx.adj, ctx.maxSize)) {

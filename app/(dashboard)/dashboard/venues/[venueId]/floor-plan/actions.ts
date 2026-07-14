@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, gte, lt, ne } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -10,8 +10,16 @@ import { loadVenueCombining } from "@/lib/bookings/combinable";
 import { createBooking } from "@/lib/bookings/create";
 import { todayInZone, venueLocalDayRange } from "@/lib/bookings/time";
 import { transitionBooking } from "@/lib/bookings/transition";
-import { areas, bookingTables, services, venueTables, venues } from "@/lib/db/schema";
+import {
+  areas,
+  bookingTables,
+  services,
+  tableCombinations,
+  venueTables,
+  venues,
+} from "@/lib/db/schema";
 import { adminDb } from "@/lib/server/admin/db";
+import { MAX_TABLES_MAX, MAX_TABLES_MIN } from "@/lib/venues/table-combining";
 
 import type { ActionState } from "./types";
 
@@ -347,6 +355,120 @@ export async function deleteTable(_prev: ActionState, formData: FormData): Promi
     .where(and(eq(venueTables.id, parsed.data.tableId), eq(venueTables.organisationId, orgId)));
 
   revalidatePath(`/dashboard/venues/${venueId}/floor-plan`);
+  return { status: "saved" };
+}
+
+// ---------------------------------------------------------------------------
+// Table joins (operator-set combinations — docs/specs/table-combining.md)
+// ---------------------------------------------------------------------------
+
+const TableCombinationSchema = z.object({
+  tableAId: z.uuid(),
+  tableBId: z.uuid(),
+});
+
+// Toggle a "these two tables can be pushed together" edge. Symmetric —
+// the pair is canonicalised (lo < hi) so {A,B} has exactly one row. Both
+// tables must be in the caller's org, the same venue, and the same area
+// (a combined booking stays single-area). Creating if absent, removing if
+// present, so a single tap in the floor-plan join mode flips the join.
+export async function toggleTableCombination(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = TableCombinationSchema.safeParse({
+    tableAId: formData.get("table_a_id"),
+    tableBId: formData.get("table_b_id"),
+  });
+  if (!parsed.success) return { status: "error", message: "Bad request." };
+  const { tableAId, tableBId } = parsed.data;
+  if (tableAId === tableBId) return { status: "error", message: "Pick two different tables." };
+
+  const { orgId } = await requireRole("manager");
+
+  const rows = await adminDb()
+    .select({ id: venueTables.id, venueId: venueTables.venueId, areaId: venueTables.areaId })
+    .from(venueTables)
+    .where(
+      and(eq(venueTables.organisationId, orgId), inArray(venueTables.id, [tableAId, tableBId])),
+    );
+  if (rows.length !== 2) {
+    return { status: "error", message: "Table not found or not in your organisation." };
+  }
+  const [r1, r2] = rows as [(typeof rows)[number], (typeof rows)[number]];
+  if (r1.venueId !== r2.venueId) {
+    return { status: "error", message: "Tables must be in the same venue." };
+  }
+  if (r1.areaId !== r2.areaId) {
+    return { status: "error", message: "You can only join tables in the same area." };
+  }
+
+  const [lo, hi] = tableAId < tableBId ? [tableAId, tableBId] : [tableBId, tableAId];
+  const existing = await adminDb()
+    .select({ id: tableCombinations.id })
+    .from(tableCombinations)
+    .where(and(eq(tableCombinations.tableAId, lo), eq(tableCombinations.tableBId, hi)))
+    .limit(1);
+
+  if (existing.length > 0) {
+    await adminDb().delete(tableCombinations).where(eq(tableCombinations.id, existing[0]!.id));
+  } else {
+    await adminDb().insert(tableCombinations).values({
+      organisationId: orgId, // overwritten by enforce_table_combinations_denorm
+      venueId: r1.venueId, // ditto
+      areaId: r1.areaId, // ditto
+      tableAId: lo,
+      tableBId: hi,
+    });
+  }
+
+  revalidatePath(`/dashboard/venues/${r1.venueId}/floor-plan`);
+  return { status: "saved" };
+}
+
+const MaxCombineSchema = z.object({
+  venueId: z.uuid(),
+  maxTables: z.coerce.number().int().min(MAX_TABLES_MIN).max(MAX_TABLES_MAX),
+});
+
+// Set the venue's "most tables you'd ever push together" cap. Merged into
+// venues.settings.tableCombining without clobbering sibling keys.
+export async function setVenueMaxCombineTables(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = MaxCombineSchema.safeParse({
+    venueId: formData.get("venue_id"),
+    maxTables: formData.get("max_tables"),
+  });
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: `Pick a number between ${MAX_TABLES_MIN} and ${MAX_TABLES_MAX}.`,
+    };
+  }
+
+  const { orgId } = await requireRole("manager");
+  await assertVenueInOrg(parsed.data.venueId, orgId);
+
+  const [row] = await adminDb()
+    .select({ settings: venues.settings })
+    .from(venues)
+    .where(eq(venues.id, parsed.data.venueId))
+    .limit(1);
+  const current = (row?.settings as Record<string, unknown>) ?? {};
+  const currentCombining = (current["tableCombining"] as Record<string, unknown>) ?? {};
+  const merged = {
+    ...current,
+    tableCombining: { ...currentCombining, maxTables: parsed.data.maxTables },
+  };
+
+  await adminDb()
+    .update(venues)
+    .set({ settings: merged })
+    .where(and(eq(venues.id, parsed.data.venueId), eq(venues.organisationId, orgId)));
+
+  revalidatePath(`/dashboard/venues/${parsed.data.venueId}/floor-plan`);
   return { status: "saved" };
 }
 

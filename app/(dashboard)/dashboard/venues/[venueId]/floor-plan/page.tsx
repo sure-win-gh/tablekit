@@ -18,9 +18,11 @@ import {
   bookings,
   guests,
   services,
+  tableCombinations,
   venueTables,
   venues,
 } from "@/lib/db/schema";
+import { parseTableCombining } from "@/lib/venues/table-combining";
 
 import { FloorPlanCanvas, type CanvasArea, type CanvasTable } from "./canvas";
 import type { ActiveBookingDetail } from "./side-panel";
@@ -38,7 +40,7 @@ export default async function FloorPlanPage({ params }: { params: Promise<{ venu
 
   const venue = await withUser(async (db) => {
     const rows = await db
-      .select({ id: venues.id, timezone: venues.timezone })
+      .select({ id: venues.id, timezone: venues.timezone, settings: venues.settings })
       .from(venues)
       .where(eq(venues.id, venueId))
       .limit(1);
@@ -46,73 +48,91 @@ export default async function FloorPlanPage({ params }: { params: Promise<{ venu
   });
   if (!venue) notFound();
   const venueTimezone = venue.timezone;
+  const maxCombineTables = parseTableCombining(venue.settings).maxTables;
 
   const date = todayInZone(venueTimezone);
   const { startUtc, endUtc } = venueLocalDayRange(date, venueTimezone);
   const now = new Date();
 
-  const { areaRows, tableRows, bookingsForDay, assignments } = await withUser(async (db) => {
-    const [a, t, bRows] = await Promise.all([
-      db
-        .select({ id: areas.id, name: areas.name, sort: areas.sort })
-        .from(areas)
-        .where(eq(areas.venueId, venueId))
-        .orderBy(asc(areas.sort), asc(areas.createdAt)),
-      db
-        .select({
-          id: venueTables.id,
-          areaId: venueTables.areaId,
-          label: venueTables.label,
-          minCover: venueTables.minCover,
-          maxCover: venueTables.maxCover,
-          shape: venueTables.shape,
-          position: venueTables.position,
-        })
-        .from(venueTables)
-        .where(eq(venueTables.venueId, venueId))
-        .orderBy(asc(venueTables.label)),
-      db
-        .select({
-          id: bookings.id,
-          startAt: bookings.startAt,
-          endAt: bookings.endAt,
-          partySize: bookings.partySize,
-          status: bookings.status,
-          guestId: bookings.guestId,
-          guestFirstName: guests.firstName,
-          serviceName: services.name,
-          notes: bookings.notes,
-          guestTags: guests.tags,
-          guestNotesCipher: guests.notesCipher,
-          highChairs: bookings.highChairs,
-          dietaryNotesCipher: bookings.dietaryNotesCipher,
-        })
-        .from(bookings)
-        .innerJoin(services, eq(services.id, bookings.serviceId))
-        .innerJoin(guests, eq(guests.id, bookings.guestId))
-        .where(
-          and(
-            eq(bookings.venueId, venueId),
-            gte(bookings.startAt, startUtc),
-            lt(bookings.startAt, endUtc),
+  const { areaRows, tableRows, bookingsForDay, assignments, combinationRows } = await withUser(
+    async (db) => {
+      const [a, t, bRows, combos] = await Promise.all([
+        db
+          .select({ id: areas.id, name: areas.name, sort: areas.sort })
+          .from(areas)
+          .where(eq(areas.venueId, venueId))
+          .orderBy(asc(areas.sort), asc(areas.createdAt)),
+        db
+          .select({
+            id: venueTables.id,
+            areaId: venueTables.areaId,
+            label: venueTables.label,
+            minCover: venueTables.minCover,
+            maxCover: venueTables.maxCover,
+            shape: venueTables.shape,
+            position: venueTables.position,
+          })
+          .from(venueTables)
+          .where(eq(venueTables.venueId, venueId))
+          .orderBy(asc(venueTables.label)),
+        db
+          .select({
+            id: bookings.id,
+            startAt: bookings.startAt,
+            endAt: bookings.endAt,
+            partySize: bookings.partySize,
+            status: bookings.status,
+            guestId: bookings.guestId,
+            guestFirstName: guests.firstName,
+            serviceName: services.name,
+            notes: bookings.notes,
+            guestTags: guests.tags,
+            guestNotesCipher: guests.notesCipher,
+            highChairs: bookings.highChairs,
+            dietaryNotesCipher: bookings.dietaryNotesCipher,
+          })
+          .from(bookings)
+          .innerJoin(services, eq(services.id, bookings.serviceId))
+          .innerJoin(guests, eq(guests.id, bookings.guestId))
+          .where(
+            and(
+              eq(bookings.venueId, venueId),
+              gte(bookings.startAt, startUtc),
+              lt(bookings.startAt, endUtc),
+            ),
           ),
-        ),
-    ]);
+        db
+          .select({
+            id: tableCombinations.id,
+            areaId: tableCombinations.areaId,
+            tableAId: tableCombinations.tableAId,
+            tableBId: tableCombinations.tableBId,
+          })
+          .from(tableCombinations)
+          .where(eq(tableCombinations.venueId, venueId)),
+      ]);
 
-    const bookingIds = bRows.map((b) => b.id);
-    const assignmentRows =
-      bookingIds.length === 0
-        ? ([] as Array<{ bookingId: string; tableId: string }>)
-        : await db
-            .select({
-              bookingId: bookingTables.bookingId,
-              tableId: bookingTables.tableId,
-            })
-            .from(bookingTables)
-            .where(inArray(bookingTables.bookingId, bookingIds));
+      const bookingIds = bRows.map((b) => b.id);
+      const assignmentRows =
+        bookingIds.length === 0
+          ? ([] as Array<{ bookingId: string; tableId: string }>)
+          : await db
+              .select({
+                bookingId: bookingTables.bookingId,
+                tableId: bookingTables.tableId,
+              })
+              .from(bookingTables)
+              .where(inArray(bookingTables.bookingId, bookingIds));
 
-    return { areaRows: a, tableRows: t, bookingsForDay: bRows, assignments: assignmentRows };
-  });
+      return {
+        areaRows: a,
+        tableRows: t,
+        bookingsForDay: bRows,
+        assignments: assignmentRows,
+        combinationRows: combos,
+      };
+    },
+  );
 
   const tableLabelById = new Map(tableRows.map((t) => [t.id, t.label]));
 
@@ -286,6 +306,8 @@ export default async function FloorPlanPage({ params }: { params: Promise<{ venu
         canEdit={canEdit}
         areas={canvasAreas}
         tables={canvasTables}
+        combinations={combinationRows}
+        maxCombineTables={maxCombineTables}
         activeByTableId={activeByTableId}
         upcomingByTableId={upcomingByTableId}
         floorStateByTableId={floorStateByTableId}
