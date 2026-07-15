@@ -57,8 +57,23 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: echo "::notice::DATABASE_URL secret not set — skipping pnpm check:rls. Wire this up before the first tenant table lands."
 
+      # npm retired the classic audit endpoint (410 since 2026-07);
+      # pnpm (≤11.13) still calls it, so a hard failure here is
+      # endpoint breakage, not a vulnerability. Tolerate exactly that
+      # error — loudly — and keep failing on real audit findings.
+      # Self-heals once pnpm ships bulk-endpoint support: the grep
+      # stops matching and the real exit code applies again.
       - name: Audit dependencies
-        run: pnpm audit --audit-level=high --prod
+        run: |
+          set +e
+          out=$(pnpm audit --audit-level=high --prod 2>&1)
+          code=$?
+          echo "$out"
+          if echo "$out" | grep -q "ERR_PNPM_AUDIT_BAD_RESPONSE"; then
+            echo "::warning::pnpm audit skipped — npm retired the classic audit endpoint and pnpm has no bulk-endpoint support yet. Dependabot alerts remain the backstop."
+            exit 0
+          fi
+          exit $code
 
   integration:
     name: integration tests
