@@ -36,6 +36,16 @@ Under Attack Mode, follow `cloudflare.md` → "Incident response: banning an IP 
 active attack." Prefer temporary, automatic rules (rate limit / Managed Challenge)
 over permanent IP bans — attackers rotate IPs and real users share them.
 
+## Known degraded modes
+
+- **Upstash (rate-limit store) outage:** login, signup, and password reset all
+  fail closed simultaneously (`lib/public/rate-limit.ts` — deliberate: no
+  unmetered credential endpoints). During a sustained Upstash outage there is
+  NO working auth path; existing sessions keep working. Treat a confirmed
+  outage as P1, mitigate at the Cloudflare edge if abuse is the concern, and
+  communicate "log in later" rather than disabling the posture ad hoc. The
+  booking widget and public availability stay up (fail-open buckets).
+
 ## Kill switches (implement these before launch)
 
 - `WIDGET_DISABLED=true` — serves maintenance page to all widget traffic.

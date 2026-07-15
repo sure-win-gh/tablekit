@@ -122,6 +122,7 @@ export type AuditAction =
   | "import.queued"
   // ai-enquiry phase
   | "enquiry.received"
+  | "enquiry.ai_parse"
   | "enquiry.rejected"
   | "enquiry.replied"
   | "enquiry.dismissed"
