@@ -40,7 +40,9 @@ export async function resetPassword(
   }
 
   const ip = ipFromHeaders(await headers());
-  const ipLimit = await rateLimit(`pwreset:confirm:ip:${ip}`, IP_ATTEMPTS, IP_WINDOW_SEC);
+  const ipLimit = await rateLimit(`pwreset:confirm:ip:${ip}`, IP_ATTEMPTS, IP_WINDOW_SEC, {
+    failOpen: false,
+  });
   if (!ipLimit.ok) return { status: "error", message: RATE_LIMITED };
 
   // Atomically consume the token (single-use). Null = invalid/expired/used.

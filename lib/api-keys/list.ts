@@ -1,7 +1,10 @@
 // List API keys for the operator dashboard.
 //
-// Run via withUser so the `api_keys_member_read` RLS policy scopes
-// the result to the caller's organisation. We never return the
+// Run via withUser so the `api_keys_owner_read` RLS policy (0055)
+// scopes the result to organisations the caller OWNS — matching the
+// requireRole("owner") gate on the page and actions. (The older
+// member-wide policy from 0029 is dropped one release later per the
+// two-release drop rule.) We never return the
 // `hash` column — there's no operational reason to expose it on the
 // list page, and keeping it server-side reduces the blast radius of
 // a future serialisation bug that leaks props into the client bundle.
