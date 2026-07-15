@@ -393,6 +393,13 @@
       "when": 1784112870000,
       "tag": "0055_api_keys_owner_read",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1784116470000,
+      "tag": "0056_api_keys_drop_member_read",
+      "breakpoints": true
     }
   ]
 }

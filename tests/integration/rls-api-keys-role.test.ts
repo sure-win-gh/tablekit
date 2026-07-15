@@ -1,18 +1,16 @@
-// Role-scoped RLS on api_keys (two-release policy swap, 0055 + drop).
+// Role-scoped RLS on api_keys (final state after the 0055 + 0056
+// two-release policy swap).
 //
-// The api_keys feature is owner-only at the app layer. Migration 0055
-// adds the owner-scoped `api_keys_owner_read` policy alongside the
-// legacy member-wide `api_keys_member_read` from 0029. Policies OR
-// together, so until the legacy policy is dropped (next release) org
-// members below owner can still read key metadata — the "legacy"
-// tests below pin that interim state on purpose and are flipped to
-// zero-row assertions in the drop PR.
+// The api_keys feature is owner-only at the app layer; with 0056 the
+// DB layer matches — only `api_keys_owner_read` remains, so managers
+// and hosts read zero rows regardless of what any future app path
+// does under withUser.
 //
 // Coverage:
 //   - owner reads own org's keys under RLS
 //   - cross-tenant isolation: owner of org B sees none of org A's keys
 //   - user_owner_organisation_ids() returns only orgs where role=owner
-//   - [legacy, until drop] manager + host can still read via 0029 policy
+//   - manager + host read ZERO api_keys rows in their own org
 
 import { sql, eq } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
@@ -156,16 +154,13 @@ describe("api_keys RLS", () => {
     expect(rows).toHaveLength(0);
   });
 
-  // Interim state: the legacy member-wide policy from 0029 still
-  // grants read to manager/host until it is dropped next release.
-  // The drop PR flips both assertions to `toHaveLength(0)`.
-  it("[legacy until member_read drop] manager can still read key metadata", async () => {
+  it("manager reads zero api_keys rows in their own org", async () => {
     const rows = await asUser(ctx.managerAId, (tx) => loadApiKeys(tx, ctx.orgAId));
-    expect(rows.length).toBeGreaterThan(0);
+    expect(rows).toHaveLength(0);
   });
 
-  it("[legacy until member_read drop] host can still read key metadata", async () => {
+  it("host reads zero api_keys rows in their own org", async () => {
     const rows = await asUser(ctx.hostAId, (tx) => loadApiKeys(tx, ctx.orgAId));
-    expect(rows.length).toBeGreaterThan(0);
+    expect(rows).toHaveLength(0);
   });
 });
