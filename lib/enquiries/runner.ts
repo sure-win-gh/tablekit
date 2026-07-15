@@ -112,6 +112,8 @@ export async function processEnquiry(enquiryId: string): Promise<ProcessResult> 
     return {
       status: "skipped",
       reason: rl.bucket === "org" ? "rate-limited-org" : "rate-limited-sender",
+      // Org-bucket rejects let the tick skip the whole org this pass.
+      ...(rl.bucket === "org" ? { organisationId: meta.organisationId } : {}),
     };
   }
 
@@ -119,8 +121,16 @@ export async function processEnquiry(enquiryId: string): Promise<ProcessResult> 
   // rate limit: a paused enquiry stays 'received' with
   // parse_attempts untouched, and resumes when the billing period
   // rolls over ("queue-paused", docs/specs/ai-usage.md).
+  // Pre-claim + read-then-act means concurrent workers can each
+  // overshoot the cap by one call — bounded and accepted.
   const budget = await checkAiBudget(meta.organisationId, new Date());
   if (!budget.ok) {
+    if (budget.reason === "no-ai-plan") {
+      // Org downgraded after the enquiry arrived. This never resumes
+      // (no budget to roll over), so park it terminally instead of
+      // re-checking it every tick forever.
+      return await markFailed(db, { id: enquiryId }, "ai unavailable on current plan");
+    }
     return {
       status: "skipped",
       reason: "budget-paused",
@@ -489,9 +499,15 @@ export async function processNextEnquiries(
   const limit = opts.limit ?? 10;
   const db = adminDb();
   const processed: ProcessResult[] = [];
-  // Orgs found over-budget during this tick. Without the exclusion,
-  // a capped org's oldest enquiry would head the queue every
-  // iteration and starve every other org for the whole tick.
+  // Two exclusion sets keep one stuck enquiry from eating the tick:
+  //   - attemptedIds: every id we processed this tick, whatever the
+  //     outcome. Skips (sender rate limit, locked, retry-pending)
+  //     leave the row 'received', so without this the same oldest row
+  //     is re-selected every iteration.
+  //   - pausedOrgIds: orgs that reported an org-wide condition
+  //     (budget exhausted, org rate limit) — no point trying their
+  //     other enquiries this pass.
+  const attemptedIds = new Set<string>();
   const pausedOrgIds = new Set<string>();
   for (let i = 0; i < limit; i++) {
     const [next] = await db
@@ -500,6 +516,7 @@ export async function processNextEnquiries(
       .where(
         and(
           eq(enquiries.status, "received"),
+          attemptedIds.size > 0 ? notInArray(enquiries.id, [...attemptedIds]) : undefined,
           pausedOrgIds.size > 0
             ? notInArray(enquiries.organisationId, [...pausedOrgIds])
             : undefined,
@@ -508,9 +525,14 @@ export async function processNextEnquiries(
       .orderBy(enquiries.receivedAt)
       .limit(1);
     if (!next) break;
+    attemptedIds.add(next.id);
     const result = await processEnquiry(next.id);
     processed.push(result);
-    if (result.status === "skipped" && result.reason === "budget-paused" && result.organisationId) {
+    if (
+      result.status === "skipped" &&
+      (result.reason === "budget-paused" || result.reason === "rate-limited-org") &&
+      result.organisationId
+    ) {
       pausedOrgIds.add(result.organisationId);
     }
   }
