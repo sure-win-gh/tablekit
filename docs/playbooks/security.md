@@ -89,8 +89,13 @@ A future change must **never** add a wildcard `Access-Control-Allow-Origin: *`. 
 - Implemented at Vercel Edge with Upstash Redis for state.
 - **Network-layer limits, bot challenges, and IP bans live at Cloudflare — see
   `cloudflare.md`.** The edge absorbs floods before they reach Vercel; the app
-  limiter (which fails open if Upstash is unconfigured) enforces the precise
-  per-account boundary.
+  limiter enforces the precise per-account boundary.
+- Degraded-mode posture (`lib/public/rate-limit.ts`): missing Upstash env in
+  production fails **closed** for every bucket (one-time Sentry alert); dev/CI
+  stay permissive. A runtime Upstash outage fails open by default so a blip
+  can't take down the booking widget, but the credential buckets (login,
+  signup, password reset) and the per-API-key bucket pass `{ failOpen: false }`
+  and fail closed.
 
 ### Headers
 - `X-Content-Type-Options: nosniff`
