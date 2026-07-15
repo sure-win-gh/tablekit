@@ -78,9 +78,23 @@ Rules:
 - "specialRequests" is a short array (≤5) of operator-relevant notes: dietary requirements, occasion, accessibility, preferred seating. Don't include the booking date / time / party size — those have their own fields.
 - Output en-GB English. Do not translate.`;
 
+// Token consumption of one call, lifted from response.usage. Null when
+// the request never completed (network error, thrown API error) — the
+// SDK gives us nothing billable to report in that case, even though
+// Bedrock may have charged for retried attempts.
+export type LlmUsage = { inputTokens: number; outputTokens: number };
+
 export type ParseResult =
-  | { ok: true; parsed: ParsedEnquiry }
-  | { ok: false; reason: "transient" | "permanent"; message: string };
+  | { ok: true; parsed: ParsedEnquiry; usage: LlmUsage | null }
+  | { ok: false; reason: "transient" | "permanent"; message: string; usage: LlmUsage | null };
+
+function usageOf(response: {
+  usage?: { input_tokens?: number; output_tokens?: number };
+}): LlmUsage | null {
+  const u = response.usage;
+  if (!u) return null;
+  return { inputTokens: u.input_tokens ?? 0, outputTokens: u.output_tokens ?? 0 };
+}
 
 export async function parseEnquiry(rawBody: string): Promise<ParseResult> {
   try {
@@ -115,14 +129,16 @@ export async function parseEnquiry(rawBody: string): Promise<ParseResult> {
       // Should not happen under structured outputs, but the parser
       // can return null if the schema is unsatisfiable for the
       // input. Treat as transient — a retry on the next cron tick
-      // may pick a different slot in the model's distribution.
+      // may pick a different slot in the model's distribution. The
+      // call still consumed tokens, so usage is reported.
       return {
         ok: false,
         reason: "transient",
         message: "structured output failed to materialise",
+        usage: usageOf(response),
       };
     }
-    return { ok: true, parsed: response.parsed_output };
+    return { ok: true, parsed: response.parsed_output, usage: usageOf(response) };
   } catch (err) {
     return classifyError(err);
   }
@@ -137,7 +153,7 @@ export async function parseEnquiry(rawBody: string): Promise<ParseResult> {
 // genuinely struggling, not a transient blip.
 function classifyError(err: unknown): ParseResult {
   if (err instanceof Anthropic.RateLimitError) {
-    return { ok: false, reason: "transient", message: "rate limited" };
+    return { ok: false, reason: "transient", message: "rate limited", usage: null };
   }
   if (err instanceof Anthropic.APIError) {
     if (err.status >= 500) {
@@ -145,18 +161,19 @@ function classifyError(err: unknown): ParseResult {
         ok: false,
         reason: "transient",
         message: `upstream ${err.status}`,
+        usage: null,
       };
     }
     // 4xx other than 429 — malformed request, auth failure, payload
     // too large. Re-running will fail identically.
-    return { ok: false, reason: "permanent", message: `client error ${err.status}` };
+    return { ok: false, reason: "permanent", message: `client error ${err.status}`, usage: null };
   }
   // Network / SSL / unknown errors — likely transient. Surface the
   // constructor name so a stuck cron is debuggable without grepping
   // Sentry. Deliberately omits the error message body — that can
   // echo input we just routed through a sanitiser-less path.
   const ctor = err instanceof Error ? err.constructor.name : typeof err;
-  return { ok: false, reason: "transient", message: `unknown error (${ctor})` };
+  return { ok: false, reason: "transient", message: `unknown error (${ctor})`, usage: null };
 }
 
 // Test seam — let unit tests inject a mock client without going
