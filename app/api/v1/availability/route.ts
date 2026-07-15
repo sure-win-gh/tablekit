@@ -15,14 +15,28 @@
 // Closes spec acceptance #2 of bookings.md.
 
 import { NextResponse, type NextRequest } from "next/server";
+import { z } from "zod";
 
+import { zIsoDate, zPartySizeParam, zUuid } from "@/lib/api/v1/validation";
 import { ipFromHeaders, rateLimit } from "@/lib/public/rate-limit";
 import { loadPublicAvailability, loadPublicVenue } from "@/lib/public/venue";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const Query = z.object({
+  venue_id: zUuid,
+  date: zIsoDate,
+  party_size: zPartySizeParam,
+});
+
+// Field-specific 400 codes are part of the public contract — preserve
+// the original first-failure precedence (venue_id, date, party_size).
+const FIELD_ERROR: ReadonlyArray<[field: string, code: string]> = [
+  ["venue_id", "invalid-venue-id"],
+  ["date", "invalid-date"],
+  ["party_size", "invalid-party-size"],
+];
 
 export async function GET(req: NextRequest): Promise<Response> {
   // Rate limit by IP. 30/min is generous for a real widget user
@@ -37,20 +51,20 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
 
   const url = new URL(req.url);
-  const venueId = url.searchParams.get("venue_id");
-  const date = url.searchParams.get("date");
-  const partySizeRaw = url.searchParams.get("party_size");
-
-  if (!venueId || !UUID_RE.test(venueId)) {
-    return NextResponse.json({ error: "invalid-venue-id" }, { status: 400 });
+  const parsed = Query.safeParse({
+    venue_id: url.searchParams.get("venue_id"),
+    date: url.searchParams.get("date"),
+    party_size: url.searchParams.get("party_size"),
+  });
+  if (!parsed.success) {
+    const failed = new Set(parsed.error.issues.map((i) => i.path[0]));
+    const [, code] = FIELD_ERROR.find(([field]) => failed.has(field)) ?? [
+      "party_size",
+      "invalid-party-size",
+    ];
+    return NextResponse.json({ error: code }, { status: 400 });
   }
-  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return NextResponse.json({ error: "invalid-date" }, { status: 400 });
-  }
-  const partySize = partySizeRaw ? Number.parseInt(partySizeRaw, 10) : NaN;
-  if (!Number.isFinite(partySize) || partySize < 1 || partySize > 20) {
-    return NextResponse.json({ error: "invalid-party-size" }, { status: 400 });
-  }
+  const { venue_id: venueId, date, party_size: partySize } = parsed.data;
 
   const venue = await loadPublicVenue(venueId);
   if (!venue) {
