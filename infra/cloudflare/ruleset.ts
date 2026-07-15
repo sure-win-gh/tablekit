@@ -144,7 +144,11 @@ export const SKIP_RULES: readonly SkipRule[] = [
   },
 ] as const;
 
-/** Zone-level toggles that are prose in the playbook but should not drift. */
+/**
+ * Zone-level toggles, recorded here for PR review. NOTE: the drift
+ * script checks rules only — these toggles are verified by eye during
+ * the quarterly review (Security → Overview / Bots / Edge Certificates).
+ */
 export const ZONE_SETTINGS = {
   botFightMode: true,
   // Paid add-ons — enabled only when the plan supports them; keep in

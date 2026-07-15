@@ -50,6 +50,9 @@ async function main(): Promise<number> {
     return 2;
   }
 
+  // NOTE: unpaginated read — fine at this zone's scale (a handful of
+  // rulesets); revisit if the list ever exceeds one page. ZONE_SETTINGS
+  // toggles are not checked here (quarterly eyeball per the playbook).
   const rulesets = await cf<CfRuleset[]>(`/zones/${zoneId}/rulesets`, token);
 
   const phases: Record<string, CfRule[]> = {};
