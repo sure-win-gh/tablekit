@@ -336,6 +336,38 @@ describe("processEnquiry — monthly AI budget (queue-paused)", () => {
     await db.delete(schema.organisations).where(eq(schema.organisations.id, capped.orgId));
   });
 
+  it("downgraded org (no AI budget): enquiry parks as failed, not paused", async () => {
+    // Org received an enquiry while on Plus, then downgraded to core.
+    const [org] = await db
+      .insert(schema.organisations)
+      .values({ name: `Enq-Down ${run}`, slug: `enq-down-${run}`, plan: "core" })
+      .returning({ id: schema.organisations.id });
+    const [venue] = await db
+      .insert(schema.venues)
+      .values({
+        organisationId: org!.id,
+        name: "Downgraded Cafe",
+        venueType: "cafe",
+        slug: `enq-down-cafe-${run}`,
+      })
+      .returning({ id: schema.venues.id });
+    const parseFn = mockParserOk(PARSED);
+    const enquiryId = await seedEnquiryFor(org!.id, venue!.id, "Table for 2");
+
+    const result = await processEnquiry(enquiryId);
+    expect(result.status).toBe("failed");
+
+    const [row] = await db
+      .select()
+      .from(schema.enquiries)
+      .where(eq(schema.enquiries.id, enquiryId));
+    expect(row?.status).toBe("failed");
+    expect(parseFn).not.toHaveBeenCalled();
+
+    // Terminal — the next tick will not re-select it.
+    await db.delete(schema.organisations).where(eq(schema.organisations.id, org!.id));
+  });
+
   it("checkAiBudget resumes on period rollover", async () => {
     const capped = await mkCappedOrg("rollover");
     const nowCheck = await checkAiBudget(capped.orgId, new Date());

@@ -34,6 +34,9 @@ export const AI_MONTHLY_BUDGET_PENCE: Record<Plan, number> = {
 
 export type AiBudgetCheck = {
   ok: boolean;
+  /** Why not-ok: a spent budget resumes next period; a plan without an
+   *  AI budget never will — callers must treat those differently. */
+  reason: "ok" | "over-budget" | "no-ai-plan";
   spentPence: number;
   budgetPence: number;
 };
@@ -48,9 +51,10 @@ export async function checkAiBudget(orgId: string, now: Date): Promise<AiBudgetC
   const plan = await getPlan(orgId);
   const budgetPence = AI_MONTHLY_BUDGET_PENCE[plan];
   if (budgetPence <= 0) {
-    // Plan without an AI budget — nothing to spend. (Shouldn't occur
-    // in practice: enquiries are Plus-gated at the webhook.)
-    return { ok: false, spentPence: 0, budgetPence };
+    // Plan without an AI budget — e.g. the org downgraded after the
+    // enquiry arrived (the webhook Plus-gates new ones). This never
+    // self-heals on period rollover, so it is NOT "over-budget".
+    return { ok: false, reason: "no-ai-plan", spentPence: 0, budgetPence };
   }
 
   const period = billingPeriod(now);
@@ -66,5 +70,6 @@ export async function checkAiBudget(orgId: string, now: Date): Promise<AiBudgetC
     inputTokens: Number(sums?.inputTokens ?? 0),
     outputTokens: Number(sums?.outputTokens ?? 0),
   });
-  return { ok: spentPence < budgetPence, spentPence, budgetPence };
+  const ok = spentPence < budgetPence;
+  return { ok, reason: ok ? "ok" : "over-budget", spentPence, budgetPence };
 }
