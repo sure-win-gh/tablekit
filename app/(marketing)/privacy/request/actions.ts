@@ -51,7 +51,9 @@ export async function submitDsarRequest(
   const hdr = await headers();
   const ip = ipFromHeaders(hdr);
   const bucket = `dsar:${ip}:${parsed.data.orgSlug}`;
-  const rl = await rateLimit(bucket, RATE_LIMIT.perHour, RATE_LIMIT.windowSec);
+  const rl = await rateLimit(bucket, RATE_LIMIT.perHour, RATE_LIMIT.windowSec, {
+    failOpen: false,
+  });
   if (!rl.ok) {
     return {
       status: "error",

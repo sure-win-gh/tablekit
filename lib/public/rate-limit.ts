@@ -44,7 +44,7 @@ let misconfigReported = false;
 // Missing env is a deterministic config state (not a blip), so the
 // posture doesn't depend on the bucket — production fails closed for
 // every caller.
-function missingConfigResult(bucket: string, limit: number): RateLimitResult {
+function missingConfigResult(bucket: string, limit: number, windowSec: number): RateLimitResult {
   if (isProduction()) {
     if (!misconfigReported) {
       misconfigReported = true;
@@ -54,7 +54,7 @@ function missingConfigResult(bucket: string, limit: number): RateLimitResult {
         { bucket },
       );
     }
-    return { ok: false, remaining: 0, retryAfterSec: 60 };
+    return { ok: false, remaining: 0, retryAfterSec: windowSec };
   }
   return { ok: true, remaining: limit };
 }
@@ -80,7 +80,7 @@ export async function rateLimit(
   const upstashUrl = process.env["UPSTASH_REDIS_REST_URL"];
   const upstashToken = process.env["UPSTASH_REDIS_REST_TOKEN"];
   if (!upstashUrl || !upstashToken) {
-    return missingConfigResult(bucket, limit);
+    return missingConfigResult(bucket, limit, windowSec);
   }
 
   const now = Date.now();
@@ -152,7 +152,7 @@ export async function peekRateLimit(
   const upstashUrl = process.env["UPSTASH_REDIS_REST_URL"];
   const upstashToken = process.env["UPSTASH_REDIS_REST_TOKEN"];
   if (!upstashUrl || !upstashToken) {
-    return missingConfigResult(bucket, limit);
+    return missingConfigResult(bucket, limit, windowSec);
   }
 
   const windowStart = Date.now() - windowSec * 1000;
