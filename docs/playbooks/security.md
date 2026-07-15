@@ -92,6 +92,15 @@ A future change must **never** add a wildcard `Access-Control-Allow-Origin: *`. 
   limiter (which fails open if Upstash is unconfigured) enforces the precise
   per-account boundary.
 
+### Third-party CDN (docs viewer)
+
+The public API reference (`/docs/api`) loads Stoplight Elements from unpkg —
+the one external script on any TableKit page. Mitigations: exact version pin +
+SRI `integrity` hashes (browser refuses a tampered/changed bundle), and a
+no-JS/CDN-down fallback linking the raw `/api/v1/openapi.json`. Residual risk:
+unpkg availability only — an outage degrades the page to the fallback link.
+Self-hosting the bundle removes even that; do it if the page ever matters more.
+
 ### Headers
 - `X-Content-Type-Options: nosniff`
 - `X-Frame-Options: DENY` on dashboard (SAMEORIGIN would still allow clickjacking the same brand)
