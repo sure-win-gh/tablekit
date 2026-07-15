@@ -45,12 +45,15 @@ export async function requestPasswordReset(
   // emails consume the buckets too, so timing/rate-limit can't be used to
   // enumerate accounts.
   const ip = ipFromHeaders(await headers());
-  const ipLimit = await rateLimit(`pwreset:ip:${ip}`, IP_ATTEMPTS, IP_WINDOW_SEC);
+  const ipLimit = await rateLimit(`pwreset:ip:${ip}`, IP_ATTEMPTS, IP_WINDOW_SEC, {
+    failOpen: false,
+  });
   if (!ipLimit.ok) return { status: "error", message: RATE_LIMITED };
   const emailLimit = await rateLimit(
     `pwreset:email:${hashForLookup(email, "email")}`,
     EMAIL_ATTEMPTS,
     EMAIL_WINDOW_SEC,
+    { failOpen: false },
   );
   if (!emailLimit.ok) return { status: "error", message: RATE_LIMITED };
 

@@ -5,9 +5,17 @@
 // implemented as a sorted set keyed by `rl:<bucket>` — one entry per
 // request with its timestamp as the score.
 //
-// If `UPSTASH_REDIS_REST_URL` isn't set we fall through permissively
-// (always ok). That's intentional for local dev + CI — otherwise
-// every integration test would need an Upstash instance.
+// Degraded-mode posture:
+//   • Missing Upstash env in PRODUCTION fails closed (blocked, one-time
+//     Sentry alert) — a misconfigured prod deploy must not silently run
+//     with no app-layer rate limiting. Dev/CI keep the permissive
+//     fallback so integration tests don't need an Upstash instance.
+//   • Runtime outage (Upstash down / timeout) fails open by default —
+//     an Upstash blip must not take down the booking widget — but
+//     security-critical buckets (login, signup, password reset, API-key
+//     auth) pass `{ failOpen: false }` to fail closed instead.
+
+import { captureMessage } from "@/lib/observability/capture";
 
 export type RateLimitResult = {
   ok: boolean;
@@ -15,16 +23,64 @@ export type RateLimitResult = {
   retryAfterSec?: number;
 };
 
+export type RateLimitOptions = {
+  /**
+   * Behaviour when Upstash is configured but unreachable at runtime
+   * (outage, timeout, non-2xx). Defaults to true (allow the request).
+   * Pass false on buckets where letting traffic through unmetered is
+   * worse than blocking legitimate users for one window — credential
+   * endpoints and API-key auth.
+   */
+  failOpen?: boolean;
+};
+
+function isProduction(): boolean {
+  return (process.env["VERCEL_ENV"] ?? process.env["NODE_ENV"]) === "production";
+}
+
+// One alert per lambda instance, not one per request.
+let misconfigReported = false;
+
+// Missing env is a deterministic config state (not a blip), so the
+// posture doesn't depend on the bucket — production fails closed for
+// every caller.
+function missingConfigResult(bucket: string, limit: number): RateLimitResult {
+  if (isProduction()) {
+    if (!misconfigReported) {
+      misconfigReported = true;
+      captureMessage(
+        "rate-limit: UPSTASH_REDIS_REST_URL/TOKEN missing in production — failing closed",
+        "error",
+        { bucket },
+      );
+    }
+    return { ok: false, remaining: 0, retryAfterSec: 60 };
+  }
+  return { ok: true, remaining: limit };
+}
+
+// Runtime outage: per-bucket posture via opts.failOpen.
+function outageResult(
+  opts: RateLimitOptions | undefined,
+  limit: number,
+  windowSec: number,
+): RateLimitResult {
+  if (opts?.failOpen === false) {
+    return { ok: false, remaining: 0, retryAfterSec: windowSec };
+  }
+  return { ok: true, remaining: limit };
+}
+
 export async function rateLimit(
   bucket: string,
   limit: number,
   windowSec: number,
+  opts?: RateLimitOptions,
 ): Promise<RateLimitResult> {
   const upstashUrl = process.env["UPSTASH_REDIS_REST_URL"];
   const upstashToken = process.env["UPSTASH_REDIS_REST_TOKEN"];
-  // Permissive fallback — no Upstash configured.
   if (!upstashUrl || !upstashToken) {
-    return { ok: true, remaining: limit };
+    return missingConfigResult(bucket, limit);
   }
 
   const now = Date.now();
@@ -52,9 +108,10 @@ export async function rateLimit(
       signal: AbortSignal.timeout(1500),
     });
     if (!res.ok) {
-      // Fail-open on Upstash outage — the UX is worse than the abuse
-      // risk for a bootstrap app.
-      return { ok: true, remaining: limit };
+      // Upstash outage — posture is per-bucket (default open: the UX
+      // cost of blocking bookings outweighs the abuse risk; credential
+      // buckets opt into closed).
+      return outageResult(opts, limit, windowSec);
     }
     const data = (await res.json()) as Array<{ result: number | string }>;
     const zcardEntry = data[2];
@@ -66,8 +123,8 @@ export async function rateLimit(
     }
     return { ok: true, remaining };
   } catch {
-    // Network / timeout → fail open.
-    return { ok: true, remaining: limit };
+    // Network / timeout → same per-bucket posture as non-2xx.
+    return outageResult(opts, limit, windowSec);
   }
 }
 
@@ -80,19 +137,22 @@ export async function rateLimit(
  * That way a member's successful logins never consume their own budget,
  * while credential-stuffing one account still trips at the limit.
  *
- * Same fail-open posture as `rateLimit`. Blocks at `count >= limit`
- * (whereas `rateLimit` uses `> limit` because it counts after adding the
- * current hit) — both allow exactly `limit` hits per window.
+ * Same degraded-mode posture as `rateLimit` (missing env fails closed
+ * in production; outage posture per-bucket via opts). Blocks at
+ * `count >= limit` (whereas `rateLimit` uses `> limit` because it
+ * counts after adding the current hit) — both allow exactly `limit`
+ * hits per window.
  */
 export async function peekRateLimit(
   bucket: string,
   limit: number,
   windowSec: number,
+  opts?: RateLimitOptions,
 ): Promise<RateLimitResult> {
   const upstashUrl = process.env["UPSTASH_REDIS_REST_URL"];
   const upstashToken = process.env["UPSTASH_REDIS_REST_TOKEN"];
   if (!upstashUrl || !upstashToken) {
-    return { ok: true, remaining: limit };
+    return missingConfigResult(bucket, limit);
   }
 
   const windowStart = Date.now() - windowSec * 1000;
@@ -113,7 +173,7 @@ export async function peekRateLimit(
       signal: AbortSignal.timeout(1500),
     });
     if (!res.ok) {
-      return { ok: true, remaining: limit };
+      return outageResult(opts, limit, windowSec);
     }
     const data = (await res.json()) as Array<{ result: number | string }>;
     const zcardEntry = data[1];
@@ -124,7 +184,7 @@ export async function peekRateLimit(
     }
     return { ok: true, remaining: Math.max(0, limit - count) };
   } catch {
-    return { ok: true, remaining: limit };
+    return outageResult(opts, limit, windowSec);
   }
 }
 
