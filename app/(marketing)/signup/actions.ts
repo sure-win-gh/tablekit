@@ -49,7 +49,9 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
   const { email, password, fullName, orgName } = parsed.data;
 
   const ip = ipFromHeaders(await headers());
-  const ipLimit = await rateLimit(`signup:ip:${ip}`, SIGNUP_ATTEMPTS, SIGNUP_WINDOW_SEC);
+  const ipLimit = await rateLimit(`signup:ip:${ip}`, SIGNUP_ATTEMPTS, SIGNUP_WINDOW_SEC, {
+    failOpen: false,
+  });
   if (!ipLimit.ok) {
     return {
       status: "error",
