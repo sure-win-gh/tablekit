@@ -25,7 +25,9 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import * as schema from "@/lib/db/schema";
-import { processEnquiry } from "@/lib/enquiries/runner";
+import { checkAiBudget } from "@/lib/billing/ai-caps";
+import { recordAiUsage } from "@/lib/billing/ai-usage";
+import { processEnquiry, processNextEnquiries } from "@/lib/enquiries/runner";
 import type { ParsedEnquiry } from "@/lib/enquiries/types";
 import { __setClientForTest } from "@/lib/llm/bedrock";
 import { type Ciphertext, decryptPii, encryptPii, type Plaintext } from "@/lib/security/crypto";
@@ -225,6 +227,163 @@ async function ledgerRow() {
     .where(eq(schema.aiUsage.organisationId, ctx.orgId));
   return rows[0];
 }
+
+describe("processEnquiry — monthly AI budget (queue-paused)", () => {
+  const PARSED: ParsedEnquiry = {
+    kind: "booking_request",
+    partySize: 3,
+    requestedDate: "2026-06-21",
+    requestedTimeWindow: "evening",
+    specialRequests: [],
+    guestFirstName: "Bud",
+    guestLastName: "Getcap",
+  };
+
+  // 10M input tokens ≈ 800p — over the 500p Plus budget.
+  async function capOrg(orgId: string, venueId: string) {
+    await recordAiUsage({
+      organisationId: orgId,
+      venueId,
+      usage: { inputTokens: 10_000_000, outputTokens: 0 },
+      now: new Date(),
+    });
+  }
+
+  async function mkCappedOrg(tag: string) {
+    const [org] = await db
+      .insert(schema.organisations)
+      .values({ name: `Enq-Cap ${tag} ${run}`, slug: `enq-cap-${tag}-${run}`, plan: "plus" })
+      .returning({ id: schema.organisations.id });
+    const [venue] = await db
+      .insert(schema.venues)
+      .values({
+        organisationId: org!.id,
+        name: "Capped Cafe",
+        venueType: "cafe",
+        slug: `enq-cap-${tag}-cafe-${run}`,
+      })
+      .returning({ id: schema.venues.id });
+    await capOrg(org!.id, venue!.id);
+    return { orgId: org!.id, venueId: venue!.id };
+  }
+
+  async function seedEnquiryFor(orgId: string, venueId: string, bodyText: string) {
+    const [from, subject, body] = await Promise.all([
+      encryptPii(orgId, "guest@example.com" as Plaintext),
+      encryptPii(orgId, "Booking enquiry" as Plaintext),
+      encryptPii(orgId, bodyText as Plaintext),
+    ]);
+    const [row] = await db
+      .insert(schema.enquiries)
+      .values({
+        organisationId: orgId,
+        venueId,
+        fromEmailHash: `h-${run}-${Math.random()}`,
+        fromEmailCipher: from,
+        subjectCipher: subject,
+        bodyCipher: body,
+      })
+      .returning({ id: schema.enquiries.id });
+    return row!.id;
+  }
+
+  it("over-budget org: enquiry stays received, no LLM call, attempts untouched", async () => {
+    const capped = await mkCappedOrg("solo");
+    const parseFn = mockParserOk(PARSED, { input_tokens: 100, output_tokens: 10 });
+    const enquiryId = await seedEnquiryFor(capped.orgId, capped.venueId, "Table for 3 please");
+
+    const result = await processEnquiry(enquiryId);
+    expect(result).toEqual({
+      status: "skipped",
+      reason: "budget-paused",
+      organisationId: capped.orgId,
+    });
+
+    const [row] = await db
+      .select()
+      .from(schema.enquiries)
+      .where(eq(schema.enquiries.id, enquiryId));
+    expect(row?.status).toBe("received");
+    expect(row?.parseAttempts).toBe(0);
+    expect(parseFn).not.toHaveBeenCalled();
+
+    await db.delete(schema.organisations).where(eq(schema.organisations.id, capped.orgId));
+  });
+
+  it("tick: a capped org's queue-head does not starve other orgs", async () => {
+    const capped = await mkCappedOrg("starve");
+    // Capped org's enquiry is OLDER, so it heads the queue.
+    const cappedEnquiryId = await seedEnquiryFor(capped.orgId, capped.venueId, "First in line");
+    const freshEnquiryId = await seedEnquiry("Table for 4, evening. Jane");
+    mockParserOk(PARSED, { input_tokens: 100, output_tokens: 10 });
+
+    const { processed } = await processNextEnquiries({ limit: 5 });
+
+    const byStatus = new Map(
+      processed.map((r) => ["enquiryId" in r ? r.enquiryId : r.reason, r.status]),
+    );
+    // The fresh org's enquiry was processed despite the capped org
+    // heading the queue.
+    expect(byStatus.get(freshEnquiryId)).toBe("draft_ready");
+
+    const [cappedRow] = await db
+      .select()
+      .from(schema.enquiries)
+      .where(eq(schema.enquiries.id, cappedEnquiryId));
+    expect(cappedRow?.status).toBe("received");
+    expect(cappedRow?.parseAttempts).toBe(0);
+
+    await db.delete(schema.organisations).where(eq(schema.organisations.id, capped.orgId));
+  });
+
+  it("downgraded org (no AI budget): enquiry parks as failed, not paused", async () => {
+    // Org received an enquiry while on Plus, then downgraded to core.
+    const [org] = await db
+      .insert(schema.organisations)
+      .values({ name: `Enq-Down ${run}`, slug: `enq-down-${run}`, plan: "core" })
+      .returning({ id: schema.organisations.id });
+    const [venue] = await db
+      .insert(schema.venues)
+      .values({
+        organisationId: org!.id,
+        name: "Downgraded Cafe",
+        venueType: "cafe",
+        slug: `enq-down-cafe-${run}`,
+      })
+      .returning({ id: schema.venues.id });
+    const parseFn = mockParserOk(PARSED);
+    const enquiryId = await seedEnquiryFor(org!.id, venue!.id, "Table for 2");
+
+    const result = await processEnquiry(enquiryId);
+    expect(result.status).toBe("failed");
+
+    const [row] = await db
+      .select()
+      .from(schema.enquiries)
+      .where(eq(schema.enquiries.id, enquiryId));
+    expect(row?.status).toBe("failed");
+    expect(parseFn).not.toHaveBeenCalled();
+
+    // Terminal — the next tick will not re-select it.
+    await db.delete(schema.organisations).where(eq(schema.organisations.id, org!.id));
+  });
+
+  it("checkAiBudget resumes on period rollover", async () => {
+    const capped = await mkCappedOrg("rollover");
+    const nowCheck = await checkAiBudget(capped.orgId, new Date());
+    expect(nowCheck.ok).toBe(false);
+    expect(nowCheck.spentPence).toBeGreaterThan(nowCheck.budgetPence);
+
+    // Next month has a fresh ledger — the same org is allowed again.
+    const nextMonth = new Date();
+    nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 2);
+    const later = await checkAiBudget(capped.orgId, nextMonth);
+    expect(later.ok).toBe(true);
+    expect(later.spentPence).toBe(0);
+
+    await db.delete(schema.organisations).where(eq(schema.organisations.id, capped.orgId));
+  });
+});
 
 describe("processEnquiry — not_a_booking_request", () => {
   it("transitions received → discarded with a generic draft", async () => {
