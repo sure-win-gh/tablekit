@@ -62,6 +62,15 @@ Delivery:
 - [ ] Idempotency key (`Idempotency-Key` header) supported on POST / PATCH.
 - [ ] All requests logged (method, path, org, status, latency). No request bodies logged.
 
+## Published documentation (2026-07 restructure)
+
+The external docs at `/docs` are a four-page shell (layout + tab nav in
+`app/(marketing)/docs/`): plain-English getting-started (`/docs`), the
+Stoplight reference (`/docs/api`), a webhooks guide (`/docs/webhooks`),
+and errors + rate limits (`/docs/errors`). Rate-limit numbers and the
+webhook contract above must stay in sync with those pages and with
+`lib/api/v1/openapi.ts`.
+
 ## Out of scope
 
 - GraphQL.
