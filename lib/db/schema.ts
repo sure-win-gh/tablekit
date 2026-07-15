@@ -1294,6 +1294,36 @@ export const messageUsage = pgTable(
   ],
 );
 
+// Monthly AI (Bedrock) usage ledger — (org, period, venue) token tally.
+// Mirrors message_usage; cost is DERIVED at read time from the price
+// map in lib/billing/ai-usage.ts (per-call cost is sub-penny, so a
+// stored pence column would round to zero). Writes via adminDb() from
+// the enquiry runner only; member SELECT under RLS for the dashboard.
+// See docs/specs/ai-usage.md.
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    // 'yyyy-mm' billing period (UTC) — reuses billingPeriod().
+    period: text("period").notNull(),
+    callCount: integer("call_count").notNull().default(0),
+    inputTokens: bigint("input_tokens", { mode: "number" }).notNull().default(0),
+    outputTokens: bigint("output_tokens", { mode: "number" }).notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("ai_usage_org_period_venue_unique").on(t.organisationId, t.period, t.venueId),
+    index("ai_usage_venue_idx").on(t.venueId),
+  ],
+);
+
 // =============================================================================
 // Billing (platform-account subscriptions + prepaid messaging credit)
 // =============================================================================
