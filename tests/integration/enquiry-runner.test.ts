@@ -101,8 +101,11 @@ async function seedEnquiry(bodyText: string): Promise<string> {
 
 // Inject a mocked Bedrock client whose `messages.parse` returns a
 // pre-canned ParsedEnquiry.
-function mockParserOk(parsed: ParsedEnquiry) {
-  const parseFn = vi.fn().mockResolvedValue({ parsed_output: parsed });
+function mockParserOk(
+  parsed: ParsedEnquiry,
+  usage?: { input_tokens: number; output_tokens: number },
+) {
+  const parseFn = vi.fn().mockResolvedValue({ parsed_output: parsed, usage });
   __setClientForTest({ messages: { parse: parseFn } } as unknown as AnthropicBedrock);
   return parseFn;
 }
@@ -156,6 +159,72 @@ describe("processEnquiry — booking_request happy path", () => {
     expect(draft).toContain("Reply to this email");
   });
 });
+
+describe("processEnquiry — token metering (ai-usage spec)", () => {
+  it("upserts the ai_usage ledger and writes an enquiry.ai_parse audit entry", async () => {
+    mockParserOk(
+      {
+        kind: "booking_request",
+        partySize: 2,
+        requestedDate: "2026-06-20",
+        requestedTimeWindow: "lunch",
+        specialRequests: [],
+        guestFirstName: "Sam",
+        guestLastName: "Metered",
+      },
+      { input_tokens: 900, output_tokens: 150 },
+    );
+    const enquiryId = await seedEnquiry("Table for 2 on the 20th, lunch. Sam");
+
+    const before = await ledgerRow();
+    const result = await processEnquiry(enquiryId);
+    expect(result.status).toBe("draft_ready");
+
+    const after = await ledgerRow();
+    expect(after).toBeDefined();
+    expect((after?.callCount ?? 0) - (before?.callCount ?? 0)).toBe(1);
+    expect((after?.inputTokens ?? 0) - (before?.inputTokens ?? 0)).toBe(900);
+    expect((after?.outputTokens ?? 0) - (before?.outputTokens ?? 0)).toBe(150);
+
+    const [auditRow] = await db
+      .select()
+      .from(schema.auditLog)
+      .where(eq(schema.auditLog.targetId, enquiryId));
+    expect(auditRow?.action).toBe("enquiry.ai_parse");
+    const meta = auditRow?.metadata as Record<string, unknown>;
+    expect(meta["inputTokens"]).toBe(900);
+    expect(meta["outputTokens"]).toBe(150);
+    expect(meta["venueId"]).toBe(ctx.venueId);
+    // No email content in the audit metadata.
+    expect(JSON.stringify(meta)).not.toContain("Sam");
+  });
+
+  it("does not meter when the client mock reports no usage", async () => {
+    mockParserOk({
+      kind: "not_a_booking_request",
+      partySize: null,
+      requestedDate: null,
+      requestedTimeWindow: null,
+      specialRequests: [],
+      guestFirstName: null,
+      guestLastName: null,
+    });
+    const enquiryId = await seedEnquiry("Unsubscribe me please");
+
+    const before = await ledgerRow();
+    await processEnquiry(enquiryId);
+    const after = await ledgerRow();
+    expect(after?.callCount ?? 0).toBe(before?.callCount ?? 0);
+  });
+});
+
+async function ledgerRow() {
+  const rows = await db
+    .select()
+    .from(schema.aiUsage)
+    .where(eq(schema.aiUsage.organisationId, ctx.orgId));
+  return rows[0];
+}
 
 describe("processEnquiry — not_a_booking_request", () => {
   it("transitions received → discarded with a generic draft", async () => {

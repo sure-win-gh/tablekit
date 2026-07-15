@@ -49,6 +49,8 @@ import { sanitiseEnquiryError } from "./sanitise-error";
 import { resolveFromAddress, sendEnquiryReply } from "./send-reply";
 import type { ParsedEnquiry, SuggestedSlot } from "./types";
 
+import { recordAiUsage } from "@/lib/billing/ai-usage";
+import { captureException } from "@/lib/observability/capture";
 import { audit } from "@/lib/server/admin/audit";
 
 // Cap on parse attempts — every retry costs Bedrock tokens.
@@ -154,6 +156,34 @@ export async function processEnquiry(enquiryId: string): Promise<ProcessResult> 
     const bodyText = await decryptPii(job.organisationId, job.bodyCipher as Ciphertext);
 
     const parseResult = await parseEnquiry(bodyText);
+
+    // Meter the Bedrock call regardless of parse outcome — a
+    // schema-miss still consumed tokens. Best-effort: a metering
+    // failure must never fail the enquiry itself.
+    if (parseResult.usage) {
+      try {
+        await recordAiUsage({
+          organisationId: job.organisationId,
+          venueId: job.venueId,
+          usage: parseResult.usage,
+          now: new Date(),
+        });
+        await audit.log({
+          organisationId: job.organisationId,
+          action: "enquiry.ai_parse",
+          targetType: "enquiry",
+          targetId: job.id,
+          metadata: {
+            venueId: job.venueId,
+            inputTokens: parseResult.usage.inputTokens,
+            outputTokens: parseResult.usage.outputTokens,
+          },
+        });
+      } catch (err) {
+        captureException(err, { where: "enquiry-runner.recordAiUsage" });
+      }
+    }
+
     if (!parseResult.ok) {
       return await markParseOutcome(db, job, parseResult);
     }
