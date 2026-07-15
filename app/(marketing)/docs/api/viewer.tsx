@@ -27,6 +27,7 @@ declare module "react" {
           router?: "hash" | "memory" | "history";
           layout?: "sidebar" | "stacked";
           tryItCredentialsPolicy?: "omit" | "include" | "same-origin";
+          children?: React.ReactNode;
         },
         HTMLElement
       >;
@@ -34,25 +35,53 @@ declare module "react" {
   }
 }
 
+// Exact-version pin + SRI. A floating @8 tag meant unpkg could serve
+// us a new (or tampered) bundle at any time; with the integrity
+// attribute the browser refuses anything that doesn't hash-match the
+// build we reviewed. Bumping the version REQUIRES recomputing both
+// hashes:
+//   curl -sL https://unpkg.com/@stoplight/elements@<v>/<file> \
+//     | openssl dgst -sha384 -binary | openssl base64 -A
+const ELEMENTS_VERSION = "8.5.2";
+const SCRIPT_SRI = "sha384-Wy+FsmLS9ZgiQK/ODulQPSA9zg+xHduMLnVEy+vZeGqwi1FKQ8/dKmsE38c0ovx/";
+const STYLES_SRI = "sha384-oYu9Au1JU1Sd5Za5LYSepn+Sofm8uvVdUCxLWbJYesNAS72Y7G/gQ0pjiB6wyf1Z";
+
 export function ApiDocsViewer() {
   return (
     <>
-      {/* Stoplight Elements assets — loaded once, registers the
-          custom element globally. Pinned to a major version so a
-          breaking release upstream doesn't silently change our
-          docs page. */}
-      <link rel="stylesheet" href="https://unpkg.com/@stoplight/elements@8/styles.min.css" />
+      <link
+        rel="stylesheet"
+        href={`https://unpkg.com/@stoplight/elements@${ELEMENTS_VERSION}/styles.min.css`}
+        integrity={STYLES_SRI}
+        crossOrigin="anonymous"
+      />
       <Script
-        src="https://unpkg.com/@stoplight/elements@8/web-components.min.js"
+        src={`https://unpkg.com/@stoplight/elements@${ELEMENTS_VERSION}/web-components.min.js`}
+        integrity={SCRIPT_SRI}
+        crossOrigin="anonymous"
         strategy="afterInteractive"
       />
       <main className="flex min-h-screen flex-col">
+        {/* Until (or unless) the CDN bundle registers the custom
+            element, the fallback paragraph inside it is what renders —
+            unknown elements display their children. So a CDN outage,
+            an SRI mismatch, or JS disabled all degrade to a working
+            link to the raw spec instead of a blank page. */}
         <elements-api
           apiDescriptionUrl="/api/v1/openapi.json"
           router="hash"
           layout="sidebar"
           tryItCredentialsPolicy="omit"
-        />
+        >
+          <p className="text-ash p-6 text-sm">
+            The interactive reference didn&apos;t load (it needs JavaScript and our documentation
+            CDN). The full machine-readable spec is at{" "}
+            <a href="/api/v1/openapi.json" className="text-ink underline underline-offset-2">
+              /api/v1/openapi.json
+            </a>
+            .
+          </p>
+        </elements-api>
       </main>
     </>
   );
