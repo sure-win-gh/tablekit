@@ -12,6 +12,7 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { GET as GetList } from "@/app/api/v1/guests/route";
+import { GET as GetOne } from "@/app/api/v1/guests/[id]/route";
 import { issueApiKey } from "@/lib/api-keys/issue";
 import * as schema from "@/lib/db/schema";
 import { encryptPii, type Plaintext } from "@/lib/security/crypto";
@@ -113,6 +114,16 @@ describe("GET /api/v1/guests — auth + cross-org scoping", () => {
     const ids = body.data.map((r) => r.id);
     expect(ids).toContain(ctx.guestAId);
     expect(ids).not.toContain(ctx.guestBId);
+  });
+
+  it("400s on a non-UUID guest id", async () => {
+    const res = await GetOne(
+      new Request("http://localhost:3000/api/v1/guests/not-a-uuid", {
+        method: "GET",
+        headers: { authorization: `Bearer ${ctx.keyA}` },
+      }) as never,
+    );
+    expect(res.status).toBe(400);
   });
 
   it("key in org B sees org B's guest, never org A's", async () => {
