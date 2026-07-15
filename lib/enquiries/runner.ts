@@ -33,7 +33,7 @@
 
 import "server-only";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, notInArray, sql } from "drizzle-orm";
 
 import { enquiries, venues as venuesTable } from "@/lib/db/schema";
 import { loadPublicAvailability, loadPublicVenue } from "@/lib/public/venue";
@@ -49,6 +49,7 @@ import { sanitiseEnquiryError } from "./sanitise-error";
 import { resolveFromAddress, sendEnquiryReply } from "./send-reply";
 import type { ParsedEnquiry, SuggestedSlot } from "./types";
 
+import { checkAiBudget } from "@/lib/billing/ai-caps";
 import { recordAiUsage } from "@/lib/billing/ai-usage";
 import { captureException } from "@/lib/observability/capture";
 import { audit } from "@/lib/server/admin/audit";
@@ -75,7 +76,11 @@ export type ProcessResult =
         | "terminal"
         | "retry-pending"
         | "rate-limited-org"
-        | "rate-limited-sender";
+        | "rate-limited-sender"
+        | "budget-paused";
+      // Set for budget-paused so the tick can skip the org's queue
+      // without starving other orgs.
+      organisationId?: string;
     };
 
 export async function processEnquiry(enquiryId: string): Promise<ProcessResult> {
@@ -107,6 +112,19 @@ export async function processEnquiry(enquiryId: string): Promise<ProcessResult> 
     return {
       status: "skipped",
       reason: rl.bucket === "org" ? "rate-limited-org" : "rate-limited-sender",
+    };
+  }
+
+  // Monthly AI budget — also pre-claim, for the same reason as the
+  // rate limit: a paused enquiry stays 'received' with
+  // parse_attempts untouched, and resumes when the billing period
+  // rolls over ("queue-paused", docs/specs/ai-usage.md).
+  const budget = await checkAiBudget(meta.organisationId, new Date());
+  if (!budget.ok) {
+    return {
+      status: "skipped",
+      reason: "budget-paused",
+      organisationId: meta.organisationId,
     };
   }
 
@@ -471,15 +489,30 @@ export async function processNextEnquiries(
   const limit = opts.limit ?? 10;
   const db = adminDb();
   const processed: ProcessResult[] = [];
+  // Orgs found over-budget during this tick. Without the exclusion,
+  // a capped org's oldest enquiry would head the queue every
+  // iteration and starve every other org for the whole tick.
+  const pausedOrgIds = new Set<string>();
   for (let i = 0; i < limit; i++) {
     const [next] = await db
       .select({ id: enquiries.id })
       .from(enquiries)
-      .where(eq(enquiries.status, "received"))
+      .where(
+        and(
+          eq(enquiries.status, "received"),
+          pausedOrgIds.size > 0
+            ? notInArray(enquiries.organisationId, [...pausedOrgIds])
+            : undefined,
+        ),
+      )
       .orderBy(enquiries.receivedAt)
       .limit(1);
     if (!next) break;
-    processed.push(await processEnquiry(next.id));
+    const result = await processEnquiry(next.id);
+    processed.push(result);
+    if (result.status === "skipped" && result.reason === "budget-paused" && result.organisationId) {
+      pausedOrgIds.add(result.organisationId);
+    }
   }
   return { processed };
 }
