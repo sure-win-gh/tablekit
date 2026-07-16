@@ -11,6 +11,7 @@ import {
   isBillingEntity,
   isRegion,
   regionForCountry,
+  resolveSignupRegion,
 } from "@/lib/regions/mapping";
 
 const ENV_KEYS = ["DATABASE_URL", "DATABASE_URL_EU", "DATABASE_URL_US", "REGION_US_ENABLED"];
@@ -113,6 +114,40 @@ describe("databaseUrlFor()", () => {
   it("us resolves only from DATABASE_URL_US", () => {
     process.env["DATABASE_URL_US"] = "postgresql://us-project";
     expect(databaseUrlFor("us")).toBe("postgresql://us-project");
+  });
+});
+
+describe("resolveSignupRegion() — the US launch-gate clamp (Phase 3)", () => {
+  it("assigns US region + entity when the US gate is open", () => {
+    expect(resolveSignupRegion("US", true)).toEqual({ region: "us", entity: "us" });
+  });
+
+  it("CLAMPS a US selection back to EU/UK when the gate is closed", () => {
+    // Server-side fail-closed: a stale/tampered post must never create a
+    // US-region org while regionEnabled("us") is false.
+    expect(resolveSignupRegion("US", false)).toEqual({
+      region: DEFAULT_REGION,
+      entity: DEFAULT_BILLING_ENTITY,
+    });
+  });
+
+  it("leaves non-US countries on EU/UK regardless of the gate", () => {
+    for (const usEnabled of [true, false]) {
+      for (const code of ["GB", "IE", "DE", "ZZ", "", "??"]) {
+        expect(resolveSignupRegion(code, usEnabled)).toEqual({
+          region: DEFAULT_REGION,
+          entity: DEFAULT_BILLING_ENTITY,
+        });
+      }
+    }
+  });
+
+  it("normalises case/whitespace like regionForCountry", () => {
+    expect(resolveSignupRegion("  us ", true)).toEqual({ region: "us", entity: "us" });
+    expect(resolveSignupRegion("  us ", false)).toEqual({
+      region: DEFAULT_REGION,
+      entity: DEFAULT_BILLING_ENTITY,
+    });
   });
 });
 

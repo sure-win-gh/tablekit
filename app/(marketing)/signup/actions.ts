@@ -2,7 +2,6 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { z } from "zod";
 
 import { makeOrgSlug } from "@/lib/auth/slug";
 import { setActiveOrg } from "@/lib/auth/active-org";
@@ -10,20 +9,21 @@ import { supabaseServer } from "@/lib/db/supabase-server";
 import { memberships, organisations } from "@/lib/db/schema";
 import { captureMessage } from "@/lib/observability/capture";
 import { ipFromHeaders, rateLimit } from "@/lib/public/rate-limit";
+import { regionEnabled } from "@/lib/regions/config";
+import {
+  DEFAULT_SIGNUP_COUNTRY,
+  regionForCountry,
+  resolveSignupRegion,
+} from "@/lib/regions/mapping";
 import { adminDb } from "@/lib/server/admin/db";
 import { audit } from "@/lib/server/admin/audit";
+
+import { parseSignupForm } from "./parse";
 
 // Stop mass account creation from a single source: 5 signups per IP
 // per 15 minutes (matches the auth-surface limit in security.md).
 const SIGNUP_ATTEMPTS = 5;
 const SIGNUP_WINDOW_SEC = 15 * 60;
-
-const SignupSchema = z.object({
-  email: z.string().email().max(320),
-  password: z.string().min(12).max(128),
-  fullName: z.string().min(1).max(120),
-  orgName: z.string().min(1).max(120),
-});
 
 export type SignupState =
   | { status: "idle" }
@@ -31,22 +31,31 @@ export type SignupState =
   | { status: "needs_confirm"; email: string };
 
 export async function signUp(_prev: SignupState, formData: FormData): Promise<SignupState> {
-  const parsed = SignupSchema.safeParse({
-    email: formData.get("email"),
-    password: formData.get("password"),
-    fullName: formData.get("full_name"),
-    orgName: formData.get("org_name"),
-  });
+  const parsed = parseSignupForm(formData);
 
-  if (!parsed.success) {
+  if (!parsed.ok) {
     return {
       status: "error",
       message: "Please correct the highlighted fields.",
-      fieldErrors: parsed.error.flatten().fieldErrors,
+      fieldErrors: parsed.fieldErrors,
     };
   }
 
   const { email, password, fullName, orgName } = parsed.data;
+  const country = parsed.data.country ?? DEFAULT_SIGNUP_COUNTRY;
+
+  // Country → {region, entity}, clamped by the US launch gate. The form
+  // hides the US option until regionEnabled("us"); this is the server-side
+  // enforcement so a stale/tampered post can never create a US-region org
+  // while the gate is closed (fail closed to EU/UK).
+  const usEnabled = regionEnabled("us");
+  const { region, entity } = resolveSignupRegion(country, usEnabled);
+  if (regionForCountry(country).region === "us" && !usEnabled) {
+    captureMessage(
+      "signup: US region requested while US is not enabled — clamped to eu/uk",
+      "warning",
+    );
+  }
 
   const ip = ipFromHeaders(await headers());
   const ipLimit = await rateLimit(`signup:ip:${ip}`, SIGNUP_ATTEMPTS, SIGNUP_WINDOW_SEC, {
@@ -84,18 +93,21 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
 
   const userId = authData.user.id;
 
-  // Create the org + owner membership. adminDb() bypasses RLS because
-  // the user has no membership yet — they can't see their own org
-  // until this insert lands.
+  // Create the org + owner membership in the org's own regional database.
+  // adminDb(region) bypasses RLS because the user has no membership yet —
+  // they can't see their own org until this insert lands. `region` is
+  // clamped to 'eu' whenever US is disabled, so this resolves to the EU
+  // pool today; once REGION_US_ENABLED flips, a US signup lands in the US
+  // project with no change here (D5 — resolve the region before writing).
   //
-  // The trigger on auth.users → public.users fires first, so by the
-  // time we hit public.memberships the user row exists for its FK.
+  // The trigger on auth.users → public.users fires first, so by the time
+  // we hit public.memberships the user row exists for its FK.
   const orgSlug = makeOrgSlug(orgName);
-  const db = adminDb();
+  const db = adminDb(region);
   const orgId = await db.transaction(async (tx) => {
     const [org] = await tx
       .insert(organisations)
-      .values({ name: orgName, slug: orgSlug })
+      .values({ name: orgName, slug: orgSlug, region, billingEntity: entity })
       .returning({ id: organisations.id });
 
     if (!org) {
@@ -111,6 +123,11 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
     return org.id;
   });
 
+  // TODO(phase-4, multi-region): audit.log writes via the default (EU) pool.
+  // Correct today (region is always 'eu' while US is dark), but once a US org
+  // is created in the US pool this FK-references a row that lives in another
+  // database → violation AFTER the org txn commits. Route audit to the org's
+  // region, or designate audit_log as EU control-plane data. See ROADMAP.md §2.
   await audit.log({
     organisationId: orgId,
     actorUserId: userId,

@@ -2,14 +2,25 @@
 
 import { useActionState } from "react";
 
-import { Button, Field, Input } from "@/components/ui";
+import { Button, Field, Input, Select } from "@/components/ui";
+import { SIGNUP_COUNTRIES } from "@/lib/regions/mapping";
 
 import { signUp, type SignupState } from "./actions";
 
 const initial: SignupState = { status: "idle" };
 
-export function SignupForm() {
+type SignupFormProps = {
+  /** Include the US option — true only once regionEnabled("us") (Phase 4). */
+  usEnabled: boolean;
+  /** Geo pre-selected country code; the user can always change it (D1). */
+  defaultCountry: string;
+};
+
+export function SignupForm({ usEnabled, defaultCountry }: SignupFormProps) {
   const [state, formAction, pending] = useActionState(signUp, initial);
+
+  // Hide the US option until US bring-up; the server clamps it regardless.
+  const countries = SIGNUP_COUNTRIES.filter((c) => usEnabled || c.code !== "US");
 
   if (state.status === "needs_confirm") {
     return (
@@ -56,6 +67,24 @@ export function SignupForm() {
           required
           invalid={Boolean(fieldErrors?.["email"]?.[0])}
         />
+      </Field>
+      <Field
+        label="Where is your business based?"
+        htmlFor="su-country"
+        error={fieldErrors?.["country"]?.[0]}
+      >
+        <Select
+          id="su-country"
+          name="country"
+          defaultValue={defaultCountry}
+          invalid={Boolean(fieldErrors?.["country"]?.[0])}
+        >
+          {countries.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.label}
+            </option>
+          ))}
+        </Select>
       </Field>
       <Field
         label="Password"
