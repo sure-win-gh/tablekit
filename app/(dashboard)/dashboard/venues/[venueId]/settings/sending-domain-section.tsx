@@ -41,8 +41,9 @@ export function SendingDomainSection({
       </legend>
       <p className="text-ash text-xs">
         By default, replies go from TableKit&apos;s shared domain (Gmail shows &quot;via
-        tablekitapp.com&quot; below the venue name). Add a domain you own to send from your venue&apos;s
-        own address — add the DNS records Resend issues, click verify, and you&apos;re set.
+        tablekitapp.com&quot; below the venue name). Add a domain you own to send from your
+        venue&apos;s own address — add the DNS records Resend issues, click verify, and you&apos;re
+        set.
       </p>
 
       {row ? (
@@ -172,7 +173,7 @@ function StatusBadge({ status }: { status: SendingDomainRow["status"] }) {
         : "bg-amber-50 text-amber-800";
   return (
     <span
-      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase ${tone}`}
+      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${tone}`}
     >
       {label}
     </span>
@@ -202,8 +203,8 @@ function DnsTable({ records }: { records: SendingDomainRow["records"] }) {
           {records.map((r, i) => (
             <tr key={i} className="border-t border-gray-100">
               <td className="px-2 py-1.5 font-mono">{r.type}</td>
-              <td className="px-2 py-1.5 font-mono break-all">{r.name}</td>
-              <td className="px-2 py-1.5 font-mono break-all">{r.value}</td>
+              <td className="break-all px-2 py-1.5 font-mono">{r.name}</td>
+              <td className="break-all px-2 py-1.5 font-mono">{r.value}</td>
             </tr>
           ))}
         </tbody>
