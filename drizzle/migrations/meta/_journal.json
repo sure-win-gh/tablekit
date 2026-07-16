@@ -409,17 +409,17 @@
       "breakpoints": true
     },
     {
-      "idx": 56,
+      "idx": 58,
       "version": "7",
-      "when": 1784053305515,
-      "tag": "0056_easy_king_bedlam",
+      "when": 1784120002000,
+      "tag": "0058_easy_king_bedlam",
       "breakpoints": true
     },
     {
-      "idx": 57,
+      "idx": 59,
       "version": "7",
-      "when": 1784121249000,
-      "tag": "0057_special_events",
+      "when": 1784120003000,
+      "tag": "0059_special_events",
       "breakpoints": true
     }
   ]
