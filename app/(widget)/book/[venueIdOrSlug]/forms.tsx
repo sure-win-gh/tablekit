@@ -239,6 +239,8 @@ function errorMessage(code: string): string {
       return "Someone else just took that time — please pick another.";
     case "no-availability":
       return "That time is no longer available.";
+    case "venue-closed":
+      return "This date is being held for a special event — check the venue's events for tickets.";
     case "venue-not-found":
       return "We can't find this venue any more.";
     case "invalid-input":

@@ -122,11 +122,14 @@ export function DateStep({
   monthAvailability,
   minMonth,
   maxMonth,
+  venueKey,
 }: {
   party: number;
   monthAvailability: MonthAvailability;
   minMonth: string;
   maxMonth: string;
+  // Venue id-or-slug for building /events/<venue>/<event> deep-links.
+  venueKey: string;
 }) {
   const { linkProps, pending } = useWizardNav();
   return (
@@ -134,6 +137,8 @@ export function DateStep({
       <MonthCalendar
         month={monthAvailability.month}
         days={monthAvailability.days}
+        events={monthAvailability.events}
+        eventHref={(slug) => `/events/${venueKey}/${slug}`}
         minMonth={minMonth}
         maxMonth={maxMonth}
         dayLink={(ymd) => linkProps({ party, date: ymd, month: ymd.slice(0, 7) })}
@@ -146,6 +151,8 @@ export function DateStep({
 function MonthCalendar({
   month,
   days,
+  events,
+  eventHref,
   minMonth,
   maxMonth,
   dayLink,
@@ -153,6 +160,8 @@ function MonthCalendar({
 }: {
   month: string;
   days: MonthAvailability["days"];
+  events: MonthAvailability["events"];
+  eventHref: (slug: string) => string;
   minMonth: string;
   maxMonth: string;
   dayLink: (ymd: string) => LinkProps;
@@ -218,6 +227,24 @@ function MonthCalendar({
                 {dayNum}
               </a>
             );
+          }
+          if (status === "event") {
+            const ev = events[ymd];
+            if (ev) {
+              return (
+                <a
+                  key={ymd}
+                  href={eventHref(ev.slug)}
+                  aria-label={`${dayNum}, ${ev.name} — special event`}
+                  className={cn(
+                    cellBase,
+                    "border-coral/40 text-coral-deep bg-coral/5 hover:border-coral border",
+                  )}
+                >
+                  {dayNum}
+                </a>
+              );
+            }
           }
           const word = status === "full" ? "fully booked" : status;
           return (

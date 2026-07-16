@@ -1376,6 +1376,8 @@ function createErrorMessage(r: { reason: string; message?: string | undefined })
       return "Someone else just took that slot — try another time or table.";
     case "no-availability":
       return "That slot is no longer available.";
+    case "venue-closed":
+      return "That date is closed to standard bookings for a special event.";
     case "venue-not-found":
       return "Venue not found.";
     case "guest-invalid":

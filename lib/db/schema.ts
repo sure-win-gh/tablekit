@@ -749,6 +749,62 @@ export const bookingEvents = pgTable(
 );
 
 // =============================================================================
+// Special events (ticketed event days + date blocking) — Phase 1: the
+// event model + closure primitive. Ticketing tables land in Phase 2.
+// See docs/specs/special-events.md.
+// =============================================================================
+
+export const eventStatus = pgEnum("event_status", ["draft", "published", "cancelled"]);
+
+export const specialEvents = pgTable(
+  "special_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    // Public URL segment under /events. Unique per venue.
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    // Event window, venue-local wall time stored as UTC (per bookings.md).
+    // A whole-day event is written as a full local-day [starts_at, ends_at)
+    // window at create time, so the availability loaders treat the stored
+    // window as authoritative and need no timezone maths.
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    status: eventStatus("status").notNull().default("draft"),
+    // When true (+ published), the event blocks standard table bookings over
+    // its window. A row with zero ticket types + this flag is a pure venue
+    // closure (holiday, private hire).
+    blocksStandardBookings: boolean("blocks_standard_bookings").notNull().default(true),
+    // How the operator declared the block; the concrete window above is what
+    // the loaders read. 'whole_day' is resolved to a full-day window on write.
+    blockScope: text("block_scope").notNull().default("window"),
+    // Link-out mode (Phase 1): operator-supplied external ticketing URL
+    // (Eventbrite / DesignMyNight / their own). Native ticketing (Phase 2)
+    // supersedes this. https only, validated at the write boundary.
+    externalTicketUrl: text("external_ticket_url"),
+    // Hero image in the public `venue-photos` Supabase bucket (booking-page.md).
+    heroPhotoPath: text("hero_photo_path"),
+    currency: char("currency", { length: 3 }).notNull().default("GBP"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("special_events_venue_slug_unique").on(t.venueId, t.slug),
+    // Overlap scan for the closure loaders: venue + window range.
+    index("special_events_venue_window_idx").on(t.venueId, t.startsAt, t.endsAt),
+    index("special_events_org_idx").on(t.organisationId),
+    check("special_events_block_scope_check", sql`${t.blockScope} in ('window', 'whole_day')`),
+    check("special_events_window_check", sql`${t.endsAt} > ${t.startsAt}`),
+  ],
+);
+
+// =============================================================================
 // Reviews (reputation management — Phase 1: internal capture)
 // =============================================================================
 //

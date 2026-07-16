@@ -430,3 +430,77 @@ describe("findSlots — operator join graph", () => {
     expect(withEmpty).toEqual(legacy);
   });
 });
+
+// Special-event closures (docs/specs/special-events.md). A closure window
+// blocks any standard slot whose [startAt, endAt) overlaps it. Dates use
+// the same BST day so the UTC offset is +1.
+describe("findSlots — special-event closures", () => {
+  // Café 08:00–17:00, 45-min turn. A slot at wall "HH:MM" spans
+  // [HH:MM, HH:MM+45m) venue-local (UTC+1 on 2026-05-10).
+  const base = {
+    timezone: TZ,
+    date: DATE,
+    partySize: 2,
+    services: [cafeService],
+    tables: [t("T1", "A", 1, 2)],
+    occupied: [],
+  };
+
+  // Helper: venue-local wall time on DATE as a UTC Date (BST → -1h).
+  const utc = (hhmm: string) => new Date(`${DATE}T${hhmm}:00+01:00`);
+
+  it("omitted closures is byte-identical to before the feature", () => {
+    const withoutKey = findSlots({ ...base });
+    const withEmpty = findSlots({ ...base, closures: [] });
+    expect(withEmpty).toEqual(withoutKey);
+    expect(withEmpty.length).toBe(34);
+  });
+
+  it("a whole-day closure removes every slot", () => {
+    const slots = findSlots({
+      ...base,
+      closures: [{ startAt: utc("00:00"), endAt: utc("23:59") }],
+    });
+    expect(slots).toEqual([]);
+  });
+
+  it("a lunchtime window only removes overlapping slots", () => {
+    // Closure 12:00–14:00. A 45-min slot overlaps iff it starts in
+    // (11:15, 14:00): first blocked start is 11:30, last blocked is 13:45.
+    const slots = findSlots({
+      ...base,
+      closures: [{ startAt: utc("12:00"), endAt: utc("14:00") }],
+    });
+    const starts = slots.map((s) => s.wallStart);
+    expect(starts).toContain("11:15"); // ends 12:00 exactly — half-open, allowed
+    expect(starts).not.toContain("11:30"); // ends 12:15 — overlaps
+    expect(starts).not.toContain("13:45"); // starts inside the window
+    expect(starts).toContain("14:00"); // starts exactly at close — allowed
+  });
+
+  it("half-open: a closure touching a slot's edge does not block it", () => {
+    // Closure exactly over the 09:00 slot window [09:00, 09:45).
+    const slots = findSlots({
+      ...base,
+      closures: [{ startAt: utc("09:00"), endAt: utc("09:45") }],
+    });
+    const starts = slots.map((s) => s.wallStart);
+    expect(starts).not.toContain("09:00"); // identical window — overlaps
+    expect(starts).toContain("08:15"); // ends 09:00 — touches, allowed
+    expect(starts).toContain("09:45"); // starts 09:45 — touches, allowed
+  });
+
+  it("multiple closures each remove their own window", () => {
+    const slots = findSlots({
+      ...base,
+      closures: [
+        { startAt: utc("08:00"), endAt: utc("09:00") },
+        { startAt: utc("15:00"), endAt: utc("17:00") },
+      ],
+    });
+    const starts = slots.map((s) => s.wallStart);
+    expect(starts).not.toContain("08:00");
+    expect(starts).not.toContain("15:00");
+    expect(starts).toContain("12:00"); // untouched midday slot survives
+  });
+});

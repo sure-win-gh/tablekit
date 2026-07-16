@@ -59,6 +59,7 @@ export async function BookingWizard({
         monthAvailability={monthAvailability}
         minMonth={currentMonth}
         maxMonth={maxMonth}
+        venueKey={basePath.split("/").filter(Boolean).pop() ?? venue.id}
       />
     );
   } else {

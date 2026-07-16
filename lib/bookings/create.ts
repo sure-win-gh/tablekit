@@ -19,7 +19,7 @@
 
 import "server-only";
 
-import { and, eq, gte, lt, sql } from "drizzle-orm";
+import { and, eq, gt, gte, lt, sql } from "drizzle-orm";
 
 import { upsertGuest } from "@/lib/guests/upsert";
 import { type UpsertGuestRawInput } from "@/lib/guests/schema";
@@ -29,6 +29,7 @@ import {
   bookings,
   payments,
   services,
+  specialEvents,
   venueTables,
   venues,
 } from "@/lib/db/schema";
@@ -42,9 +43,9 @@ import { adminDb } from "@/lib/server/admin/db";
 import { stripeEnabled } from "@/lib/stripe/client";
 import { getAccount } from "@/lib/stripe/connect";
 
-import { findSlots, type TableOption } from "./availability";
+import { findSlots, type ClosureWindow, type TableOption } from "./availability";
 import { loadVenueCombining } from "./combinable";
-import { venueLocalDayRange } from "./time";
+import { venueLocalDayRange, zonedWallToUtc } from "./time";
 
 export type BookingSource = "host" | "widget" | "rwg" | "api";
 
@@ -100,6 +101,10 @@ export type CreateBookingResult =
   | { ok: false; reason: "guest-invalid"; issues: string[] }
   | { ok: false; reason: "slot-taken" }
   | { ok: false; reason: "no-availability" }
+  // The venue is closed to standard bookings at this time because a
+  // published special event blocks the date (docs/specs/special-events.md).
+  // Defence in depth — the slot shouldn't have been offered.
+  | { ok: false; reason: "venue-closed" }
   | { ok: false; reason: "venue-not-found" }
   | { ok: false; reason: "deposit-failed"; bookingId: string };
 
@@ -179,20 +184,37 @@ export async function createBooking(
     .where(eq(venueTables.venueId, venue.id));
 
   const { startUtc, endUtc } = venueLocalDayRange(input.date, venue.timezone);
-  const occupied = await db
-    .select({
-      tableId: bookingTables.tableId,
-      startAt: bookingTables.startAt,
-      endAt: bookingTables.endAt,
-    })
-    .from(bookingTables)
-    .where(
-      and(
-        eq(bookingTables.venueId, venue.id),
-        gte(bookingTables.startAt, startUtc),
-        lt(bookingTables.startAt, endUtc),
+  const [occupied, closures] = await Promise.all([
+    db
+      .select({
+        tableId: bookingTables.tableId,
+        startAt: bookingTables.startAt,
+        endAt: bookingTables.endAt,
+      })
+      .from(bookingTables)
+      .where(
+        and(
+          eq(bookingTables.venueId, venue.id),
+          gte(bookingTables.startAt, startUtc),
+          lt(bookingTables.startAt, endUtc),
+        ),
       ),
-    );
+    // Special-event closures blocking standard bookings this day. Inlined
+    // (rather than reusing lib/public/venue.ts) to keep the booking path's
+    // dependency surface tight. See docs/specs/special-events.md.
+    db
+      .select({ startAt: specialEvents.startsAt, endAt: specialEvents.endsAt })
+      .from(specialEvents)
+      .where(
+        and(
+          eq(specialEvents.venueId, venue.id),
+          eq(specialEvents.status, "published"),
+          eq(specialEvents.blocksStandardBookings, true),
+          lt(specialEvents.startsAt, endUtc),
+          gt(specialEvents.endsAt, startUtc),
+        ),
+      ) as Promise<ClosureWindow[]>,
+  ]);
 
   // 3. Run availability. Must have at least one matching slot. Same
   // combinable input as the public availability path, or a valid
@@ -212,12 +234,22 @@ export async function createBooking(
     occupied,
     combinable,
     maxCombineTables,
+    closures,
   });
 
   const slot = slots.find(
     (s) => s.serviceId === input.serviceId && s.wallStart === input.wallStart,
   );
-  if (!slot) return { ok: false, reason: "no-availability" };
+  if (!slot) {
+    // Distinguish "the date is sold as a ticketed event" from ordinary
+    // no-availability, so the API can 409 with the right reason and the
+    // widget can point the guest at the event page.
+    const reqStart = zonedWallToUtc(input.date, input.wallStart, venue.timezone).getTime();
+    const closed = closures.some(
+      (c) => c.startAt.getTime() <= reqStart && c.endAt.getTime() > reqStart,
+    );
+    return { ok: false, reason: closed ? "venue-closed" : "no-availability" };
+  }
 
   // Pick the option. If the caller supplied a preferred table set,
   // match it against the offered options (same membership, any order)

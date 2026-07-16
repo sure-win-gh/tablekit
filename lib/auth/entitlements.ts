@@ -19,7 +19,8 @@ export type Feature =
   | "apiKeys"
   | "deposits"
   | "messaging"
-  | "widgetTheming";
+  | "widgetTheming"
+  | "events";
 
 export type FeatureMeta = {
   // Human label used in the paywall heading + plans page.
@@ -75,6 +76,11 @@ export const FEATURES: Record<Feature, FeatureMeta> = {
     label: "Branded booking widget",
     minPlan: "plus",
     blurb: "Put your logo and brand colour on the booking page, embed and payment screen.",
+  },
+  events: {
+    label: "Special events",
+    minPlan: "plus",
+    blurb: "Block out dates and sell prepaid tickets for premium event days, deposits and all.",
   },
 };
 

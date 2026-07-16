@@ -252,6 +252,7 @@ export type CreateFromTimelineState =
         | "invalid-input"
         | "slot-taken"
         | "no-availability"
+        | "venue-closed"
         | "venue-not-found"
         | "guest-invalid"
         | "deposit-failed";
