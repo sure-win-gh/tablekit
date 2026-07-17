@@ -1,6 +1,6 @@
 "use server";
 
-import { and, count, eq, gt, lt, notInArray } from "drizzle-orm";
+import { and, count, eq, gt, inArray, lt, notInArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -8,7 +8,7 @@ import { slugify } from "@/lib/auth/slug";
 import { requirePlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { venueLocalDayRange, zonedWallToUtc } from "@/lib/bookings/time";
-import { bookings, specialEvents, venues } from "@/lib/db/schema";
+import { areas, bookings, specialEventAreas, specialEvents, venues } from "@/lib/db/schema";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 
@@ -36,6 +36,9 @@ async function countCollidingBookings(
   venueId: string,
   startsAt: Date,
   endsAt: Date,
+  // Area-scoped events only collide with bookings in their areas
+  // (spec §Area-scoped events). null/empty = whole venue.
+  areaIds?: string[] | null,
 ): Promise<number> {
   const [row] = await adminDb()
     .select({ n: count() })
@@ -46,6 +49,7 @@ async function countCollidingBookings(
         notInArray(bookings.status, ["cancelled", "no_show"]),
         lt(bookings.startAt, endsAt),
         gt(bookings.endAt, startsAt),
+        ...(areaIds && areaIds.length > 0 ? [inArray(bookings.areaId, areaIds)] : []),
       ),
     );
   return row?.n ?? 0;
@@ -85,6 +89,9 @@ const CreateBody = z
       .regex(/^\d{2}:\d{2}$/)
       .optional(),
     publish: z.boolean().default(false),
+    // Floor-plan areas the event blocks. Empty = whole venue (the default;
+    // spec §Area-scoped events).
+    areaIds: z.array(z.uuid()).max(50).default([]),
     externalTicketUrl: z
       .string()
       .trim()
@@ -111,6 +118,7 @@ export async function createSpecialEvent(
     startTime: formData.get("start_time") || undefined,
     endTime: formData.get("end_time") || undefined,
     publish: formData.get("publish") === "on",
+    areaIds: formData.getAll("area_ids").map(String),
     externalTicketUrl: formData.get("external_ticket_url") || undefined,
   });
   if (!parsed.success) {
@@ -159,10 +167,40 @@ export async function createSpecialEvent(
   if (parsed.data.description) values.description = parsed.data.description;
   if (parsed.data.externalTicketUrl) values.externalTicketUrl = parsed.data.externalTicketUrl;
 
-  const [inserted] = await adminDb()
-    .insert(specialEvents)
-    .values(values)
-    .returning({ id: specialEvents.id });
+  // Area scope: every posted id must be an area of THIS venue — a crafted
+  // id from another venue/org must fail, not silently scope the event.
+  const scopedAreaIds = [...new Set(parsed.data.areaIds)];
+  if (scopedAreaIds.length > 0) {
+    const venueAreas = await adminDb()
+      .select({ id: areas.id })
+      .from(areas)
+      .where(and(eq(areas.venueId, parsed.data.venueId), inArray(areas.id, scopedAreaIds)));
+    if (venueAreas.length !== scopedAreaIds.length) {
+      return {
+        status: "error",
+        message: "One of the selected areas doesn't belong to this venue.",
+      };
+    }
+  }
+
+  const db = adminDb();
+  const inserted = await db.transaction(async (tx) => {
+    const [event] = await tx
+      .insert(specialEvents)
+      .values(values)
+      .returning({ id: specialEvents.id });
+    if (!event) throw new Error("createSpecialEvent: insert returned no row");
+    if (scopedAreaIds.length > 0) {
+      await tx.insert(specialEventAreas).values(
+        scopedAreaIds.map((areaId) => ({
+          eventId: event.id,
+          areaId,
+          organisationId: orgId,
+        })),
+      );
+    }
+    return event;
+  });
 
   if (inserted) {
     await audit.log({
@@ -175,6 +213,7 @@ export async function createSpecialEvent(
         venueId: parsed.data.venueId,
         status: values.status,
         scope: parsed.data.scope,
+        areaIds: scopedAreaIds,
       },
     });
   }
@@ -183,7 +222,9 @@ export async function createSpecialEvent(
   // exist so the operator can move/cancel them (never auto-cancelled).
   const warning =
     values.status === "published"
-      ? collisionWarning(await countCollidingBookings(parsed.data.venueId, startsAt, endsAt))
+      ? collisionWarning(
+          await countCollidingBookings(parsed.data.venueId, startsAt, endsAt, scopedAreaIds),
+        )
       : undefined;
 
   revalidatePath(`/dashboard/venues/${parsed.data.venueId}/events`);
@@ -237,11 +278,23 @@ export async function setSpecialEventStatus(
     });
   }
 
-  // Same collision notice as create, when a publish closes the date.
-  const warning =
-    parsed.data.status === "published" && row
-      ? collisionWarning(await countCollidingBookings(row.venueId, row.startsAt, row.endsAt))
-      : undefined;
+  // Same collision notice as create, when a publish closes the date —
+  // scoped to the event's areas when it has any.
+  let warning: string | undefined;
+  if (parsed.data.status === "published" && row) {
+    const scope = await adminDb()
+      .select({ areaId: specialEventAreas.areaId })
+      .from(specialEventAreas)
+      .where(eq(specialEventAreas.eventId, parsed.data.eventId));
+    warning = collisionWarning(
+      await countCollidingBookings(
+        row.venueId,
+        row.startsAt,
+        row.endsAt,
+        scope.map((s) => s.areaId),
+      ),
+    );
+  }
 
   revalidatePath(`/dashboard/venues/${parsed.data.venueId}/events`);
   return warning ? { status: "saved", warning } : { status: "saved" };
@@ -266,10 +319,28 @@ export async function deleteSpecialEvent(
   const { orgId, userId } = await requireRole("manager");
   await requirePlan(orgId, "plus");
 
-  const deleted = await adminDb()
-    .delete(specialEvents)
-    .where(and(eq(specialEvents.id, parsed.data.eventId), eq(specialEvents.organisationId, orgId)))
-    .returning({ id: specialEvents.id });
+  let deleted: { id: string }[];
+  try {
+    deleted = await adminDb()
+      .delete(specialEvents)
+      .where(
+        and(eq(specialEvents.id, parsed.data.eventId), eq(specialEvents.organisationId, orgId)),
+      )
+      .returning({ id: specialEvents.id });
+  } catch (err) {
+    // 23503 foreign_key_violation — the event has ticket sales (bookings /
+    // order items reference it). Such an event is cancelled + refunded, not
+    // deleted (Phase 3). Draft/unsold events delete fine.
+    const code = (err as { code?: unknown }).code;
+    const causeCode = (err as { cause?: { code?: unknown } }).cause?.code;
+    if (code === "23503" || causeCode === "23503") {
+      return {
+        status: "error",
+        message: "This event has ticket sales — cancel it instead of deleting.",
+      };
+    }
+    throw err;
+  }
 
   if (deleted.length > 0) {
     await audit.log({

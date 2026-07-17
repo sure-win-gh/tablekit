@@ -1,11 +1,11 @@
-import { desc, eq } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 
 import { LockedFeature } from "@/components/billing/locked-feature";
 import { isLocked } from "@/lib/auth/entitlements";
 import { getPlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { withUser } from "@/lib/db/client";
-import { specialEvents, venues } from "@/lib/db/schema";
+import { areas, specialEventAreas, specialEvents, venues } from "@/lib/db/schema";
 
 import { EventRow, NewEventForm } from "./forms";
 
@@ -21,12 +21,18 @@ export default async function EventsPage({ params }: { params: Promise<{ venueId
   }
   const { venueId } = await params;
 
-  const { events, timezone } = await withUser(async (db) => {
+  const { events, timezone, areaOptions, scopeByEvent } = await withUser(async (db) => {
     const [venue] = await db
       .select({ timezone: venues.timezone })
       .from(venues)
       .where(eq(venues.id, venueId))
       .limit(1);
+
+    const venueAreas = await db
+      .select({ id: areas.id, name: areas.name })
+      .from(areas)
+      .where(eq(areas.venueId, venueId))
+      .orderBy(asc(areas.sort), asc(areas.name));
 
     const rows = await db
       .select({
@@ -43,7 +49,35 @@ export default async function EventsPage({ params }: { params: Promise<{ venueId
       .where(eq(specialEvents.venueId, venueId))
       .orderBy(desc(specialEvents.startsAt));
 
-    return { events: rows, timezone: venue?.timezone ?? "Europe/London" };
+    // Area scope per event (empty = whole venue), joined to names for the
+    // "Terrace only" label.
+    const scope = new Map<string, string[]>();
+    if (rows.length > 0) {
+      const junction = await db
+        .select({ eventId: specialEventAreas.eventId, areaId: specialEventAreas.areaId })
+        .from(specialEventAreas)
+        .where(
+          inArray(
+            specialEventAreas.eventId,
+            rows.map((r) => r.id),
+          ),
+        );
+      const nameById = new Map(venueAreas.map((a) => [a.id, a.name]));
+      for (const j of junction) {
+        const name = nameById.get(j.areaId);
+        if (!name) continue;
+        const list = scope.get(j.eventId) ?? [];
+        list.push(name);
+        scope.set(j.eventId, list);
+      }
+    }
+
+    return {
+      events: rows,
+      timezone: venue?.timezone ?? "Europe/London",
+      areaOptions: venueAreas,
+      scopeByEvent: scope,
+    };
   });
 
   const dateFmt = new Intl.DateTimeFormat("en-GB", {
@@ -59,18 +93,22 @@ export default async function EventsPage({ params }: { params: Promise<{ venueId
     timeZone: timezone,
   });
 
-  const rows = events.map((e) => ({
-    id: e.id,
-    name: e.name,
-    slug: e.slug,
-    status: e.status,
-    externalTicketUrl: e.externalTicketUrl,
-    dateLabel: dateFmt.format(e.startsAt),
-    timeLabel:
-      e.blockScope === "whole_day"
-        ? "All day"
-        : `${timeFmt.format(e.startsAt)}–${timeFmt.format(e.endsAt)}`,
-  }));
+  const rows = events.map((e) => {
+    const scopeNames = scopeByEvent.get(e.id) ?? [];
+    return {
+      id: e.id,
+      name: e.name,
+      slug: e.slug,
+      status: e.status,
+      externalTicketUrl: e.externalTicketUrl,
+      dateLabel: dateFmt.format(e.startsAt),
+      timeLabel:
+        e.blockScope === "whole_day"
+          ? "All day"
+          : `${timeFmt.format(e.startsAt)}–${timeFmt.format(e.endsAt)}`,
+      scopeLabel: scopeNames.length > 0 ? `${scopeNames.join(" + ")} only` : null,
+    };
+  });
 
   return (
     <section className="flex max-w-3xl flex-col gap-6">
@@ -94,7 +132,7 @@ export default async function EventsPage({ params }: { params: Promise<{ venueId
         </div>
       )}
 
-      <NewEventForm venueId={venueId} startOpen={rows.length === 0} />
+      <NewEventForm venueId={venueId} startOpen={rows.length === 0} areaOptions={areaOptions} />
     </section>
   );
 }

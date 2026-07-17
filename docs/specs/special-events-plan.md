@@ -102,9 +102,15 @@ phase.
 Re-read `docs/playbooks/payments.md` before starting. Reuses the deposits rails
 (`payments-deposits.md`) almost verbatim.
 
-- [ ] `event_ticket_types` + `event_order_items` tables + RLS + schema + migration.
-- [ ] Extend the `payments.kind` check with `'event_ticket'`; add `'event'` to
-      `BookingSource` + the `bookings.source` values.
+- [x] `event_ticket_types` + `event_order_items` tables + RLS (member-read) +
+      `schema.ts` + migration `0060_native_ticketing`. `bookings` gains
+      `event_id`, `service_id`/`area_id` relaxed to nullable, and a
+      `bookings_event_or_service_check` (event ⊕ standard) added `NOT VALID`
+      then `VALIDATE`d to avoid a long lock. **On disk (main), ESLint clean.**
+      **Run `pnpm db:migrate` to apply 0060.**
+- [~] `payments.kind` check extended to include `'event_ticket'` (in 0060).
+      Still TODO in Tranche B: add `'event'` to `BookingSource` + the
+      `bookings.source` values (code, `lib/bookings/create.ts`).
 - [ ] Purchase endpoint: resolve event (published, not past) → compute
       `amount_minor = Σ q × price_minor` → **atomic capacity reservation**
       (conditional `quantity_sold` UPDATE per line) **inside** the existing
@@ -116,27 +122,93 @@ Re-read `docs/playbooks/payments.md` before starting. Reuses the deposits rails
       the event-ticket branch: increment nothing on success — reservation
       already happened; just confirm + send). Register per the handler-registry
       pattern in `lib/stripe/webhook.ts`.
-- [ ] **Reservation release** on the sad paths via the existing deposit
-      abandonment janitor: a `requested` event booking with no successful
-      payment after the grace window is cancelled **and** its tickets returned
-      (`quantity_sold = quantity_sold − q`, floored at 0). Extend the janitor;
-      test against a fake clock; idempotent (second sweep releases nothing twice).
-- [ ] Public ticket-picker island → Stripe Elements (the existing Payment
-      Element) → success; degrade to link-out / "unavailable" when
-      `paymentsDisabled()` / `!stripeEnabled()`.
+- [x] **Reservation release** — `sweepAbandonedEventBookings` in
+      `lib/payments/janitor.ts`: cancels stuck `requested` event bookings after
+      the 15-min TTL and releases `quantity_sold` (floored at 0). The
+      requested→cancelled flip is the idempotency gate so a retry can't
+      double-release. Wired into the cron + inline on the purchase route.
+      **Done, ESLint clean.**
+- [x] Public ticket-picker + checkout (`events/[venueSlug]/[eventSlug]/
+      checkout.tsx`): qty steppers per tier (capped at remaining/max-per-order)
+      + guest form + hCaptcha → `POST /api/v1/events/purchase` → reuses the
+      Connect-aware Stripe **Payment Element** (`loadStripe(pk, {stripeAccount})`
+      + `confirmPayment` with 3DS) → success screen. Event page renders the
+      checkout when tiers exist, else the external link-out, else "contact the
+      venue". `loadPublicEventTicketTypes` added. **Done, ESLint clean.**
 - [ ] Confirmation email/SMS: event-ticket template variant via `messaging.md`
       + `message-customisation.md` (merge tags: event name, date/time, ticket
       breakdown, address).
-- [ ] Dashboard per-event **attendee list** from `bookings where event_id`
-      (reuse the bookings list components + `GuestBadges`).
+- [x] Dashboard per-event page (`events/[eventId]`): **ticket-types CRUD**
+      (create/delete tiers with sold/remaining, price entered in £ → pence;
+      delete FK-guarded against sold tiers) + **attendee list** from
+      `bookings where event_id` (first_name is plaintext, no decrypt) + sold
+      count. Events-list rows link here. **Done, ESLint clean.**
 - [ ] Refund: works from the existing booking-detail refund action; refund
       modal gets a "return tickets to inventory" checkbox (default off).
-- [ ] **Oversell test**: N concurrent purchases vs capacity M<N ⇒ exactly M
-      succeed, `quantity_sold = quantity_total`, never negative. This is the one
-      genuinely novel invariant — test it hard.
+- [x] **Oversell test** — `tests/integration/event-oversell.test.ts`: 25
+      concurrent buyers vs capacity 5 ⇒ exactly 5 win, `quantity_sold` lands on
+      the cap, never over/negative. Exercises the reservation SQL directly (no
+      Stripe). Run with `pnpm test:integration`. **Done, ESLint clean.**
 - [ ] No-raw-card CI grep extended to the new purchase route; 3DS-forced unit
       assertion; `payments`/`booking` rows never written outside a handler/
       server action (existing CI greps extended).
+
+## Phase 2.5 — area-scoped events (PRE-LAUNCH, spec §Area-scoped events)
+
+An event blocks specific floor-plan areas instead of the whole venue. Whole-
+venue stays the default (junction empty = whole venue — zero backfill).
+Decisions live in the spec; this is the build order.
+
+### 2.5a Backend core — DONE
+- [x] Schema + migration `0062_event_area_scope`: `special_event_areas`
+      junction (PK `(event_id, area_id)`, `organisation_id` denormalised,
+      `event_id` FK cascade, `area_id` FK **NO ACTION**) + RLS member-read.
+      **Run `pnpm db:migrate` to apply 0062.**
+- [x] `lib/bookings/availability.ts`: `ClosureWindow.areaIds` +
+      `overlappingClosures` partition in `findSlots` — whole-venue overlap
+      drops the slot (unchanged); area-scoped overlap strips those areas'
+      tables from the free set. Memo cache keys on free-table ids, so it
+      stays correct with no extra work.
+- [x] Unit tests (4 new; suite 32/32 green): scoped closure leaves other
+      areas bookable; all-areas ≡ whole-venue; `null`/`[]` ≡ whole venue;
+      same-area combos die with their scoped area + return outside the window.
+- [x] New shared `lib/bookings/closures.ts#loadEventClosures` (joins
+      `special_event_areas`, aggregates `areaIds`, empty → null, carries
+      slug/name for calendar deep-links) — replaces the three duplicated
+      inline queries in `venue.ts` (×2) and `create.ts`.
+- [x] `create.ts`: `venue-closed` only for a **whole-venue** closure covering
+      the requested instant (`isWholeVenue`); area-scoped miss stays
+      `no-availability`.
+
+### 2.5b Calendar + surfaces
+- [x] Month loader: day = `"event"` only for whole-venue events; scoped-event
+      days classify open/full from remaining tables (findSlots strips scoped
+      areas itself); `events` map populated for any blocking-event day
+      (whole-venue preferred when both cover a day).
+- [x] `MonthCalendar`: scoped-event days render as normal bookable cells; slim
+      coral **event banner** under the grid ("🎟 {name} · {date} · tickets →")
+      deduped by slug, linking to `/events/<venueKey>/<slug>`. **Done.**
+- [x] Dashboard event form: `area_ids` checkbox chips (rendered only when the
+      venue has ≥2 areas; unticked = whole venue); create action validates the
+      ids belong to the venue and writes event + junction in one transaction.
+      Event row + detail page show "Terrace only". **Done.**
+- [x] `countCollidingBookings` takes `areaIds` and filters
+      `bookings.area_id` when scoped; both publish paths pass the scope.
+      **Done.**
+- [x] Ticket-type form: "The blocked areas seat ~N covers — a guide, not a
+      limit" hint under Capacity (detail page computes from `venueTables`).
+      **Done.**
+- [x] Public event page: "· Terrace" scope after the time line
+      (`loadPublicEventAreaNames`). **Done.**
+
+### 2.5c Gate
+- [x] Integration: `rls-special-events.test.ts` extended — junction
+      cross-tenant read isolation + authenticated-insert denial. Floor-plan
+      `deleteArea` catches 23503 with a clear operator message. (Run
+      `pnpm test:integration` to execute.)
+- [~] Regression: unit suite 32/32 green (whole-venue closures pinned
+      byte-identical). **Ben:** `pnpm typecheck && pnpm lint && pnpm test` +
+      `pnpm test:integration` + `pnpm db:migrate` (0062) before merge.
 
 ## Phase 3 — deferred (see spec)
 
