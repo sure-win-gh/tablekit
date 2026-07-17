@@ -69,6 +69,7 @@ export default async function PublicBookingPage({
     if (sp.party) qs.set("party", sp.party);
     if (sp.date) qs.set("date", sp.date);
     if (sp.month) qs.set("month", sp.month);
+    if (sp.area) qs.set("area", sp.area);
     if (sp.serviceId) qs.set("serviceId", sp.serviceId);
     if (sp.wallStart) qs.set("wallStart", sp.wallStart);
     const tail = qs.toString() ? `?${qs.toString()}` : "";

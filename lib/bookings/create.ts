@@ -24,6 +24,7 @@ import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { upsertGuest } from "@/lib/guests/upsert";
 import { type UpsertGuestRawInput } from "@/lib/guests/schema";
 import {
+  areas,
   bookingEvents,
   bookingTables,
   bookings,
@@ -42,6 +43,7 @@ import { adminDb } from "@/lib/server/admin/db";
 import { stripeEnabled } from "@/lib/stripe/client";
 import { getAccount } from "@/lib/stripe/connect";
 
+import { areaAvailabilityClosures } from "./area-availability";
 import { findSlots, type TableOption } from "./availability";
 import { isWholeVenue, loadEventClosures } from "./closures";
 import { loadVenueCombining } from "./combinable";
@@ -67,6 +69,10 @@ export type CreateBookingInput = {
   // slot-taken so the host re-picks. When omitted, the engine first-
   // -fits like before.
   preferredTableIds?: string[];
+  // Guest area preference (widget) — a guarantee, not a hint: the booking
+  // is assigned from this area's options or fails with no-availability.
+  // docs/specs/area-preferences.md.
+  preferredAreaId?: string;
 };
 
 export type DepositResponse =
@@ -186,7 +192,7 @@ export async function createBooking(
     .where(eq(venueTables.venueId, venue.id));
 
   const { startUtc, endUtc } = venueLocalDayRange(input.date, venue.timezone);
-  const [occupied, closures] = await Promise.all([
+  const [occupied, closures, areaRows] = await Promise.all([
     db
       .select({
         tableId: bookingTables.tableId,
@@ -204,6 +210,15 @@ export async function createBooking(
     // Special-event closures blocking standard bookings this day (shared
     // loader — carries per-event area scope). See docs/specs/special-events.md.
     loadEventClosures(db, venue.id, startUtc, endUtc),
+    db
+      .select({ id: areas.id, bookable: areas.bookable, closedMonths: areas.closedMonths })
+      .from(areas)
+      .where(eq(areas.venueId, venue.id)),
+  ]);
+  // Operator area availability (weather switch + seasonal months) — same
+  // closure mechanism, appended for findSlots only.
+  const areaClosures = areaAvailabilityClosures(areaRows, [
+    { ymd: input.date, startUtc, endUtc },
   ]);
 
   // 3. Run availability. Must have at least one matching slot. Same
@@ -224,7 +239,7 @@ export async function createBooking(
     occupied,
     combinable,
     maxCombineTables,
-    closures,
+    closures: [...closures, ...areaClosures],
   });
 
   const slot = slots.find(
@@ -248,17 +263,25 @@ export async function createBooking(
   // — the slot may have multiple valid options and we honour the
   // one the host actually picked in the UI. Otherwise first-fit
   // (smallest-sufficient).
+  // Guest area preference — a guarantee: assign only from the requested
+  // area's options, or fail rather than silently seat them elsewhere.
+  let candidateOptions = slot.options;
+  if (input.preferredAreaId) {
+    candidateOptions = candidateOptions.filter((o) => o.areaId === input.preferredAreaId);
+    if (candidateOptions.length === 0) return { ok: false, reason: "no-availability" };
+  }
+
   let option: TableOption | undefined;
   if (input.preferredTableIds && input.preferredTableIds.length > 0) {
     const wanted = [...input.preferredTableIds].sort().join(",");
-    option = slot.options.find((o) => [...o.tableIds].sort().join(",") === wanted);
+    option = candidateOptions.find((o) => [...o.tableIds].sort().join(",") === wanted);
     // Preferred set no longer matches an offered option — concurrent
     // booker grabbed one of the tables, or the input is bogus. Treat
     // as slot-taken so the host re-picks rather than silently
     // re-assigning to a different table set.
     if (!option) return { ok: false, reason: "slot-taken" };
   } else {
-    option = slot.options[0];
+    option = candidateOptions[0];
   }
   if (!option) return { ok: false, reason: "no-availability" };
 

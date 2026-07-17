@@ -17,6 +17,8 @@ import { and, eq } from "drizzle-orm";
 
 import {
   bookings,
+  eventOrderItems,
+  eventTicketTypes,
   guests,
   messageTemplates,
   reviews,
@@ -69,6 +71,7 @@ export async function loadMessageContext(input: LoadContextInput): Promise<LoadC
       cancelledReason: bookings.cancelledReason,
       serviceName: services.name,
       eventName: specialEvents.name,
+      eventId: bookings.eventId,
       venueId: venues.id,
       venueName: venues.name,
       venueLocale: venues.locale,
@@ -173,6 +176,27 @@ export async function loadMessageContext(input: LoadContextInput): Promise<LoadC
     reviewUrl: reviewUrl(input.appUrl, { bookingId: row.bookingId }),
     branding: parseBranding(row.venueSettings),
   };
+
+  // Event-ticket bookings: attach the per-tier breakdown so the
+  // confirmation reads like a ticket receipt (names + snapshotted prices
+  // from event_order_items — later tier edits never rewrite history).
+  if (row.eventId) {
+    const items = await db
+      .select({
+        name: eventTicketTypes.name,
+        quantity: eventOrderItems.quantity,
+        unitPriceMinor: eventOrderItems.unitPriceMinor,
+      })
+      .from(eventOrderItems)
+      .innerJoin(eventTicketTypes, eq(eventTicketTypes.id, eventOrderItems.ticketTypeId))
+      .where(eq(eventOrderItems.bookingId, row.bookingId));
+    if (items.length > 0) {
+      ctx.eventTickets = {
+        lines: items,
+        totalMinor: items.reduce((n, i) => n + i.quantity * i.unitPriceMinor, 0),
+      };
+    }
+  }
 
   // Per-template extra loads. Kept in load-context (rather than the
   // template render step) so the whole context is final by the time

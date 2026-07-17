@@ -28,6 +28,9 @@ const Query = z.object({
   venue_id: zUuid,
   date: zIsoDate,
   party_size: zPartySizeParam,
+  // Optional guest area preference — filters slots to this area
+  // (docs/specs/area-preferences.md).
+  area_id: zUuid.optional(),
 });
 
 // Field-specific 400 codes are part of the public contract — preserve
@@ -55,6 +58,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     venue_id: url.searchParams.get("venue_id"),
     date: url.searchParams.get("date"),
     party_size: url.searchParams.get("party_size"),
+    area_id: url.searchParams.get("area_id") ?? undefined,
   });
   if (!parsed.success) {
     const failed = new Set(parsed.error.issues.map((i) => i.path[0]));
@@ -64,14 +68,18 @@ export async function GET(req: NextRequest): Promise<Response> {
     ];
     return NextResponse.json({ error: code }, { status: 400 });
   }
-  const { venue_id: venueId, date, party_size: partySize } = parsed.data;
+  const { venue_id: venueId, date, party_size: partySize, area_id: areaId } = parsed.data;
 
   const venue = await loadPublicVenue(venueId);
   if (!venue) {
     return NextResponse.json({ error: "venue-not-found" }, { status: 404 });
   }
 
-  const availability = await loadPublicAvailability(venue, { date, partySize });
+  const availability = await loadPublicAvailability(venue, {
+    date,
+    partySize,
+    ...(areaId ? { areaId } : {}),
+  });
 
   return NextResponse.json(
     {
@@ -85,7 +93,10 @@ export async function GET(req: NextRequest): Promise<Response> {
         wall_start: s.wallStart,
         start_at: s.startAt.toISOString(),
         end_at: s.endAt.toISOString(),
+        area_ids: s.areaIds,
       })),
+      // Areas with ≥1 slot today — lets clients render an area picker.
+      areas: availability.areas.map((a) => ({ id: a.id, name: a.name })),
     },
     {
       // Slots change as bookings come in; cache for 30s at the edge

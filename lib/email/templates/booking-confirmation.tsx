@@ -4,18 +4,47 @@ import type { MessageBookingContext, RenderedEmail } from "@/lib/messaging/conte
 
 import { EmailLayout, P } from "./_layout";
 
+function gbp(minor: number): string {
+  const pounds = (minor / 100).toFixed(2).replace(/\.00$/, "");
+  return `£${pounds}`;
+}
+
 function BookingConfirmationEmail({ ctx }: { ctx: MessageBookingContext }) {
+  const tickets = ctx.eventTickets;
   return (
     <EmailLayout
-      preview={`Booking confirmed for ${ctx.startAtLocal}`}
+      preview={
+        tickets
+          ? `Tickets confirmed — ${ctx.serviceName}, ${ctx.startAtLocal}`
+          : `Booking confirmed for ${ctx.startAtLocal}`
+      }
       unsubscribeUrl={ctx.unsubscribeUrl}
       venueName={ctx.venueName}
       branding={ctx.branding}
     >
       <P>Hi {ctx.guestFirstName},</P>
-      <P>
-        Your table at {ctx.venueName} is confirmed for {ctx.startAtLocal}, party of {ctx.partySize}.
-      </P>
+      {tickets ? (
+        <>
+          <P>
+            You&rsquo;re booked in for <strong>{ctx.serviceName}</strong> at {ctx.venueName} —{" "}
+            {ctx.startAtLocal}.
+          </P>
+          <P>
+            {tickets.lines.map((line) => (
+              <span key={line.name}>
+                {line.quantity}× {line.name} — {gbp(line.unitPriceMinor * line.quantity)}
+                <br />
+              </span>
+            ))}
+            <strong>Total paid: {gbp(tickets.totalMinor)}</strong>
+          </P>
+        </>
+      ) : (
+        <P>
+          Your table at {ctx.venueName} is confirmed for {ctx.startAtLocal}, party of{" "}
+          {ctx.partySize}.
+        </P>
+      )}
       <P>
         Reference: <strong>{ctx.reference}</strong>
       </P>

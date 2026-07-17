@@ -11,6 +11,8 @@ export type WizardParams = {
   party?: number | undefined;
   date?: string | undefined; // YYYY-MM-DD
   month?: string | undefined; // YYYY-MM (date-step calendar browsing only)
+  // Optional area preference (time step onwards) — docs/specs/area-preferences.md.
+  area?: string | undefined;
   serviceId?: string | undefined;
   wallStart?: string | undefined; // HH:MM
 };
@@ -19,12 +21,14 @@ export type RawSearchParams = {
   party?: string;
   date?: string;
   month?: string;
+  area?: string;
   serviceId?: string;
   wallStart?: string;
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function validParty(raw: string | undefined): number | undefined {
   if (raw == null || raw === "") return undefined;
@@ -69,6 +73,7 @@ export function deriveStep(sp: RawSearchParams): { step: WizardStep; params: Wiz
   const party = validParty(sp.party);
   const date = validDate(sp.date);
   const month = validMonth(sp.month);
+  const area = sp.area && UUID_RE.test(sp.area) ? sp.area : undefined;
   const serviceId = sp.serviceId || undefined;
   const wallStart = sp.wallStart || undefined;
   const hasSlot = Boolean(serviceId && wallStart);
@@ -85,6 +90,9 @@ export function deriveStep(sp: RawSearchParams): { step: WizardStep; params: Wiz
   // date is non-null once step is time/details (else it'd be the date step);
   // likewise serviceId/wallStart at details (hasSlot was true).
   if (step === "time" || step === "details") params.date = date!;
+  // Area preference is a time-step modifier — dropped by clear-forward when
+  // the guest edits back past the time step, like month is for date.
+  if ((step === "time" || step === "details") && area) params.area = area;
   if (step === "details") {
     params.serviceId = serviceId!;
     params.wallStart = wallStart!;
@@ -99,6 +107,7 @@ export function buildStepUrl(params: WizardParams): string {
   if (params.party != null) qs.set("party", String(params.party));
   if (params.date) qs.set("date", params.date);
   if (params.month) qs.set("month", params.month);
+  if (params.area) qs.set("area", params.area);
   if (params.serviceId) qs.set("serviceId", params.serviceId);
   if (params.wallStart) qs.set("wallStart", params.wallStart);
   return qs.toString();

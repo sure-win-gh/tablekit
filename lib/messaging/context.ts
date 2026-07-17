@@ -38,6 +38,13 @@ export type MessageBookingContext = {
   // operatorReplyText but lives in reviews.recovery_message_cipher.
   // Populated only for the `review.recovery_offer` template.
   recoveryMessageText?: string | null;
+  // Event-ticket purchases (source='event'): per-tier breakdown + total,
+  // rendered in the confirmation email. Absent for standard bookings.
+  // docs/specs/special-events.md Phase 2 polish.
+  eventTickets?: {
+    lines: { name: string; quantity: number; unitPriceMinor: number }[];
+    totalMinor: number;
+  };
   // Per-venue branding (Phase 2). Loaded from venues.settings.branding;
   // undefined falls back to the shipped neutral layout. Applies to email
   // only — SMS/WhatsApp stay plain. Explicit `| undefined` so it can be

@@ -13,7 +13,7 @@
 
 import "server-only";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import Stripe from "stripe";
 
 import { bookings, payments, stripeAccounts } from "@/lib/db/schema";
@@ -26,6 +26,10 @@ export type RefundBookingInput = {
   actorUserId: string;
   bookingId: string;
   reason: string;
+  // Event-ticket refunds only: put the refunded tickets back on sale by
+  // decrementing quantity_sold. Default OFF — a refund isn't always a
+  // resale (docs/specs/special-events.md). Ignored for deposits.
+  returnTicketsToInventory?: boolean;
 };
 
 export type RefundBookingResult =
@@ -60,12 +64,13 @@ export async function refundBooking(input: RefundBookingInput): Promise<RefundBo
     .limit(1);
   if (!account) return { ok: false, reason: "no-connect-account" };
 
-  // Find the deposit payment to refund. A booking can have multiple
-  // payments rows over its lifetime (deposit, refund, etc.), but only
-  // one succeeded deposit.
+  // Find the payment to refund — a succeeded deposit (standard bookings)
+  // or event-ticket charge (event bookings). A booking has at most one of
+  // either; the bookings_event_or_service_check makes the kinds disjoint.
   const [deposit] = await db
     .select({
       id: payments.id,
+      kind: payments.kind,
       stripeIntentId: payments.stripeIntentId,
       amountMinor: payments.amountMinor,
       currency: payments.currency,
@@ -74,7 +79,7 @@ export async function refundBooking(input: RefundBookingInput): Promise<RefundBo
     .where(
       and(
         eq(payments.bookingId, input.bookingId),
-        eq(payments.kind, "deposit"),
+        inArray(payments.kind, ["deposit", "event_ticket"]),
         eq(payments.status, "succeeded"),
       ),
     )
@@ -121,6 +126,26 @@ export async function refundBooking(input: RefundBookingInput): Promise<RefundBo
       .set({ stripeIntentId: refund.id, status: refund.status ?? "pending" })
       .where(eq(payments.id, placeholder.id));
 
+    // Return refunded tickets to inventory when the operator asked. Runs
+    // only after Stripe accepted the refund — Stripe's own "already
+    // refunded" rejection on a duplicate attempt is the idempotency gate,
+    // so the release can never run twice for one purchase.
+    let ticketsReturned = false;
+    if (deposit.kind === "event_ticket" && input.returnTicketsToInventory) {
+      await db.execute(sql`
+        update event_ticket_types t
+        set quantity_sold = greatest(0, t.quantity_sold - oi.qty)
+        from (
+          select ticket_type_id, sum(quantity)::int as qty
+          from event_order_items
+          where booking_id = ${input.bookingId}
+          group by ticket_type_id
+        ) oi
+        where t.id = oi.ticket_type_id
+      `);
+      ticketsReturned = true;
+    }
+
     await audit.log({
       organisationId: input.organisationId,
       actorUserId: input.actorUserId,
@@ -132,6 +157,8 @@ export async function refundBooking(input: RefundBookingInput): Promise<RefundBo
         bookingId: input.bookingId,
         amountMinor: deposit.amountMinor,
         reason: input.reason,
+        kind: deposit.kind,
+        ticketsReturned,
       },
     });
 

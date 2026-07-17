@@ -8,6 +8,7 @@ import {
   deleteTable,
   seatWalkIn,
   updateArea,
+  updateAreaAvailability,
   updateTable,
 } from "./actions";
 import type { ActionState } from "./types";
@@ -146,6 +147,87 @@ export function AreaHeader({ areaId, name }: { areaId: string; name: string }) {
       />
       <FormMessage state={updateState.status === "error" ? updateState : deleteState} />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Area availability (docs/specs/area-preferences.md) — the weather kill
+// switch + seasonal closed months. One row per area; save posts the whole
+// availability state for that area.
+// ---------------------------------------------------------------------------
+
+const MONTH_LABELS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+export function AreaAvailabilityRow({
+  area,
+}: {
+  area: { id: string; name: string; bookable: boolean; closedMonths: number[] };
+}) {
+  const [state, action, pending] = useActionState(updateAreaAvailability, idle);
+  const closed = new Set(area.closedMonths);
+
+  return (
+    <form action={action} className="flex flex-col gap-2 px-4 py-3">
+      <input type="hidden" name="area_id" value={area.id} />
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-ink min-w-0 flex-1 truncate text-sm font-semibold">{area.name}</span>
+        <label className="flex cursor-pointer items-center gap-1.5 text-xs">
+          <input
+            type="checkbox"
+            name="bookable"
+            defaultChecked={area.bookable}
+            className="peer sr-only"
+          />
+          <span className="rounded-pill hidden border border-emerald-300 bg-emerald-50 px-3 py-1 font-semibold text-emerald-700 select-none peer-checked:inline-flex">
+            Taking bookings
+          </span>
+          <span className="rounded-pill border-rose/40 text-rose bg-rose/5 inline-flex border px-3 py-1 font-semibold select-none peer-checked:hidden">
+            Closed — not taking bookings
+          </span>
+        </label>
+        <button
+          type="submit"
+          disabled={pending}
+          className="text-ash hover:text-ink text-xs font-semibold disabled:opacity-50"
+        >
+          {pending ? "Saving…" : "Save"}
+        </button>
+      </div>
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="text-ash pr-1 text-[11px]">Closed in:</span>
+        {MONTH_LABELS.map((label, i) => (
+          <label key={label} className="cursor-pointer">
+            <input
+              type="checkbox"
+              name="closed_months"
+              value={i + 1}
+              defaultChecked={closed.has(i + 1)}
+              className="peer sr-only"
+            />
+            <span className="rounded-tag text-ash peer-checked:bg-ink hover:text-ink inline-flex px-1.5 py-0.5 text-[11px] font-semibold select-none peer-checked:text-white">
+              {label}
+            </span>
+          </label>
+        ))}
+      </div>
+      {state.status === "saved" ? (
+        <p className="text-[11px] text-emerald-600">Saved — applies to new bookings only.</p>
+      ) : null}
+      <FormMessage state={state} />
+    </form>
   );
 }
 

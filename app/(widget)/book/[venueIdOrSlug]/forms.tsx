@@ -49,6 +49,7 @@ export function BookingForm({
   wallStart,
   partySize,
   captchaSitekey,
+  preferredAreaId,
 }: {
   venueId: string;
   serviceId: string;
@@ -56,6 +57,9 @@ export function BookingForm({
   wallStart: string;
   partySize: number;
   captchaSitekey: string | null;
+  // Guest area preference — threaded from the ?area wizard param; a
+  // guarantee server-side (docs/specs/area-preferences.md).
+  preferredAreaId?: string | null;
 }) {
   const [state, setState] = useState<SubmitState>({ status: "idle" });
   const [captchaToken, setCaptchaToken] = useState<string>("");
@@ -72,6 +76,7 @@ export function BookingForm({
       wallStart,
       partySize,
       notes: (form.get("notes") as string) || undefined,
+      preferredAreaId: preferredAreaId || undefined,
       captchaToken: captchaToken || undefined,
       guest: {
         firstName: form.get("firstName"),

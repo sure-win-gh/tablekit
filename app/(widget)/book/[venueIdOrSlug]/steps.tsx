@@ -307,13 +307,20 @@ export function TimeStep({
   party,
   date,
   slots,
+  areas,
+  selectedAreaId,
 }: {
   party: number;
   date: string;
   slots: SlotLite[];
+  // Areas with ≥1 slot today — chips render only when there's a real choice.
+  areas: { id: string; name: string }[];
+  selectedAreaId: string | null;
 }) {
   const { linkProps, pending } = useWizardNav();
   const month = date.slice(0, 7);
+  const showAreaChips = areas.length >= 2;
+  const areaParam = selectedAreaId ?? undefined;
   const byService = new Map<string, SlotLite[]>();
   for (const s of slots) {
     const list = byService.get(s.serviceName) ?? [];
@@ -322,10 +329,42 @@ export function TimeStep({
   }
   return (
     <StepShell pending={pending} title="What time?">
+      {showAreaChips ? (
+        <div className="flex flex-wrap items-center gap-1.5 pb-1" aria-label="Seating area">
+          <a
+            {...linkProps({ party, date, month })}
+            aria-current={selectedAreaId == null ? "true" : undefined}
+            className={cn(
+              "rounded-pill border px-3 py-1 text-xs font-semibold transition motion-reduce:transition-none",
+              selectedAreaId == null
+                ? "border-ink bg-ink text-white"
+                : "border-hairline text-ash hover:border-ink bg-white",
+            )}
+          >
+            Any area
+          </a>
+          {areas.map((a) => (
+            <a
+              key={a.id}
+              {...linkProps({ party, date, month, area: a.id })}
+              aria-current={selectedAreaId === a.id ? "true" : undefined}
+              className={cn(
+                "rounded-pill border px-3 py-1 text-xs font-semibold transition motion-reduce:transition-none",
+                selectedAreaId === a.id
+                  ? "border-ink bg-ink text-white"
+                  : "border-hairline text-ash hover:border-ink bg-white",
+              )}
+            >
+              {a.name}
+            </a>
+          ))}
+        </div>
+      ) : null}
       {slots.length === 0 ? (
         <p className="rounded-card border-hairline text-ash border border-dashed p-4 text-sm">
-          Sorry, nothing available that day for {party} {party === 1 ? "guest" : "guests"}. Pick
-          another day or change the party size.
+          Sorry, nothing available that day for {party} {party === 1 ? "guest" : "guests"}
+          {selectedAreaId ? " in that area" : ""}. Pick another day
+          {selectedAreaId ? ", another area," : ""} or change the party size.
         </p>
       ) : (
         <div className="flex flex-col gap-3">
@@ -340,6 +379,7 @@ export function TimeStep({
                       party,
                       date,
                       month,
+                      area: areaParam,
                       serviceId: s.serviceId,
                       wallStart: s.wallStart,
                     })}

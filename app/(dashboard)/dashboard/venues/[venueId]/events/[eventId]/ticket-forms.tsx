@@ -1,7 +1,10 @@
 "use client";
 
 import { Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
+
+import { refundBookingAction } from "@/app/(dashboard)/dashboard/venues/[venueId]/bookings/actions";
 
 import { createTicketType, deleteTicketType } from "./ticket-actions";
 import type { ActionState } from "../types";
@@ -226,6 +229,106 @@ export function TicketTypeRow({
         <p role="alert" className="text-[11px] text-amber-800">
           {state.message}
         </p>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Attendee row — event bookings live here, not on the bookings list (its
+// services inner-join excludes them by design), so the refund entry point
+// for tickets is this list. Two-step: Refund → reason + optional
+// return-to-inventory → confirm. Reuses the shared refundBookingAction
+// (which routes event_ticket payments through lib/payments/refunds).
+// ---------------------------------------------------------------------------
+
+export function AttendeeRow({
+  venueId,
+  bookingId,
+  firstName,
+  partySize,
+  statusLabel,
+  refundable,
+}: {
+  venueId: string;
+  bookingId: string;
+  firstName: string;
+  partySize: number;
+  statusLabel: string;
+  refundable: boolean;
+}) {
+  const router = useRouter();
+  const [state, action, pending] = useActionState(refundBookingAction, { status: "idle" as const });
+  const [open, setOpen] = useState(false);
+
+  // Refresh the page data once the refund lands so the sold counts (and,
+  // if tickets were returned, remaining capacity) update in place.
+  useEffect(() => {
+    if (state.status === "done") router.refresh();
+  }, [state.status, router]);
+
+  return (
+    <div className="flex flex-col gap-2 px-4 py-3 text-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-ink min-w-0 flex-1 truncate font-medium">{firstName}</span>
+        <span className="text-ash tabular-nums">
+          {partySize} ticket{partySize === 1 ? "" : "s"}
+        </span>
+        <span className="text-ash text-xs">{statusLabel}</span>
+        {refundable && state.status !== "done" ? (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="text-ash hover:text-rose text-xs font-semibold transition"
+          >
+            {open ? "Cancel" : "Refund"}
+          </button>
+        ) : null}
+        {state.status === "done" ? (
+          <span className="text-xs font-semibold text-emerald-600">Refunded</span>
+        ) : null}
+      </div>
+      {open && state.status !== "done" ? (
+        <form
+          action={action}
+          className="rounded-card border-rose/30 bg-rose/5 flex flex-col gap-2 border p-3"
+        >
+          <input type="hidden" name="venueId" value={venueId} />
+          <input type="hidden" name="bookingId" value={bookingId} />
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-ink font-medium">Refund reason</span>
+            <input
+              name="reason"
+              required
+              minLength={3}
+              maxLength={200}
+              placeholder="e.g. guest can no longer attend"
+              className="border-hairline text-ink rounded-input border bg-white px-3 py-2 text-sm"
+            />
+            <span className="text-ash text-[11px]">Recorded in the audit log.</span>
+          </label>
+          <label className="flex items-start gap-2 text-xs">
+            <input type="checkbox" name="returnTickets" className="mt-0.5" />
+            <span className="text-charcoal">
+              <span className="text-ink font-semibold">Return tickets to inventory</span> — puts
+              these {partySize} ticket{partySize === 1 ? "" : "s"} back on sale.
+            </span>
+          </label>
+          {state.status === "error" ? (
+            <p role="alert" className="text-rose text-xs">
+              {state.message}
+            </p>
+          ) : null}
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={pending}
+              className="rounded-input border-rose/40 text-rose bg-rose/5 hover:bg-rose/10 border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50"
+            >
+              {pending ? "Refunding…" : "Confirm full refund"}
+            </button>
+          </div>
+        </form>
       ) : null}
     </div>
   );

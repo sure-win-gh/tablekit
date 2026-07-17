@@ -63,10 +63,13 @@ export async function BookingWizard({
       />
     );
   } else {
-    // time or details — both need the day's slots.
+    // time or details — both need the day's slots. An `area` param filters
+    // slots to that area (docs/specs/area-preferences.md); the unfiltered
+    // area list still comes back for the chips.
     const availability = await loadPublicAvailability(venue, {
       date: params.date!,
       partySize: params.party!,
+      ...(params.area ? { areaId: params.area } : {}),
     });
     const slots = availability.slots.map((s) => ({
       serviceId: s.serviceId,
@@ -86,12 +89,21 @@ export async function BookingWizard({
           wallStart={picked.wallStart}
           partySize={params.party!}
           captchaSitekey={captchaSitekey}
+          preferredAreaId={params.area ?? null}
         />
       );
     } else {
       // time step, or details whose slot vanished → re-pick.
       effectiveStep = "time";
-      body = <TimeStep party={params.party!} date={params.date!} slots={slots} />;
+      body = (
+        <TimeStep
+          party={params.party!}
+          date={params.date!}
+          slots={slots}
+          areas={availability.areas}
+          selectedAreaId={params.area ?? null}
+        />
+      );
     }
   }
 

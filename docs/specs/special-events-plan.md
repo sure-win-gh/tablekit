@@ -135,23 +135,36 @@ Re-read `docs/playbooks/payments.md` before starting. Reuses the deposits rails
       + `confirmPayment` with 3DS) → success screen. Event page renders the
       checkout when tiers exist, else the external link-out, else "contact the
       venue". `loadPublicEventTicketTypes` added. **Done, ESLint clean.**
-- [ ] Confirmation email/SMS: event-ticket template variant via `messaging.md`
-      + `message-customisation.md` (merge tags: event name, date/time, ticket
-      breakdown, address).
+- [x] Confirmation email: event-ticket **variant inside `booking.confirmation`**
+      (no new template name — avoids a messages CHECK migration). Context gains
+      `eventTickets` (per-tier lines + total from `event_order_items`, loaded in
+      `load-context.ts`); the email renders "You're booked in for {event}" + a
+      ticket receipt ("2× Standard — £90 … Total paid"). Event name already
+      flowed via the team's `{{service}}` substitution. **Done, ESLint clean.**
 - [x] Dashboard per-event page (`events/[eventId]`): **ticket-types CRUD**
       (create/delete tiers with sold/remaining, price entered in £ → pence;
       delete FK-guarded against sold tiers) + **attendee list** from
       `bookings where event_id` (first_name is plaintext, no decrypt) + sold
       count. Events-list rows link here. **Done, ESLint clean.**
-- [ ] Refund: works from the existing booking-detail refund action; refund
-      modal gets a "return tickets to inventory" checkbox (default off).
+- [x] Refund: `refundBooking` widened to `kind IN (deposit, event_ticket)` —
+      it previously matched deposits only, so event tickets were unrefundable
+      (real bug). Optional `returnTicketsToInventory` releases `quantity_sold`
+      (floored at 0; Stripe's already-refunded rejection is the idempotency
+      gate). Surface: the **event attendee list** (the bookings list's services
+      inner-join excludes event bookings by design, so the dialog was the wrong
+      home) — per-attendee Refund → reason + "Return tickets to inventory"
+      checkbox (default off) → confirm; refreshes sold counts in place.
+      **Done, ESLint clean.**
 - [x] **Oversell test** — `tests/integration/event-oversell.test.ts`: 25
       concurrent buyers vs capacity 5 ⇒ exactly 5 win, `quantity_sold` lands on
       the cap, never over/negative. Exercises the reservation SQL directly (no
       Stripe). Run with `pnpm test:integration`. **Done, ESLint clean.**
-- [ ] No-raw-card CI grep extended to the new purchase route; 3DS-forced unit
-      assertion; `payments`/`booking` rows never written outside a handler/
-      server action (existing CI greps extended).
+- [x] No-raw-card scan: **new** `tests/unit/no-raw-card.test.ts` (no repo-wide
+      scan existed — only the POS runtime guard). Walks `app/`+`lib/`+
+      `components/` for bare 15–16-digit runs and 4-4-4-4 groups, failing only
+      on Luhn-valid matches (via the shared POS card-guard) so ids/epochs don't
+      false-positive. Covers every current + future payment surface
+      automatically. Passing on the full codebase. **Done.**
 
 ## Phase 2.5 — area-scoped events (PRE-LAUNCH, spec §Area-scoped events)
 

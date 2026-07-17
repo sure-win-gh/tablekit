@@ -174,6 +174,9 @@ const RefundForm = z.object({
   venueId: z.uuid(),
   bookingId: z.uuid(),
   reason: z.string().min(3, "Reason must be at least 3 characters").max(200),
+  // Event bookings only: put refunded tickets back on sale. Off by
+  // default — a refund isn't always a resale (special-events.md).
+  returnTickets: z.boolean().default(false),
 });
 
 export type RefundActionState =
@@ -191,6 +194,7 @@ export async function refundBookingAction(
     venueId: formData.get("venueId"),
     bookingId: formData.get("bookingId"),
     reason: formData.get("reason"),
+    returnTickets: formData.get("returnTickets") === "on",
   });
   if (!parsed.success) {
     return {
@@ -204,6 +208,7 @@ export async function refundBookingAction(
     actorUserId: userId,
     bookingId: parsed.data.bookingId,
     reason: parsed.data.reason,
+    returnTicketsToInventory: parsed.data.returnTickets,
   });
   if (!r.ok) {
     const message = {

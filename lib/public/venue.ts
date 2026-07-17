@@ -10,6 +10,7 @@ import "server-only";
 import { and, asc, desc, eq, gte, isNotNull, isNull, lt, sql } from "drizzle-orm";
 
 import {
+  areas,
   bookingTables,
   guests,
   organisations,
@@ -27,6 +28,7 @@ import {
   type Slot,
   type TableSpec,
 } from "@/lib/bookings/availability";
+import { areaAvailabilityClosures } from "@/lib/bookings/area-availability";
 import { isWholeVenue, loadEventClosures } from "@/lib/bookings/closures";
 import { loadVenueCombining } from "@/lib/bookings/combinable";
 import { todayInZone, venueLocalDayRange } from "@/lib/bookings/time";
@@ -122,16 +124,22 @@ export type PublicAvailability = {
     wallStart: string;
     startAt: Date;
     endAt: Date;
+    // Areas with at least one free table option at this slot — drives the
+    // widget's area chips (docs/specs/area-preferences.md).
+    areaIds: string[];
   }>;
+  // Areas with ≥1 slot today (post area-availability), for the chips.
+  // Rendered only when ≥2 — with one area, preference is meaningless.
+  areas: Array<{ id: string; name: string }>;
 };
 
 export async function loadPublicAvailability(
   venue: PublicVenue,
-  input: { date: string; partySize: number },
+  input: { date: string; partySize: number; areaId?: string },
 ): Promise<PublicAvailability> {
   const db = adminDb();
 
-  const [serviceRows, tableRows] = await Promise.all([
+  const [serviceRows, tableRows, areaRows] = await Promise.all([
     db
       .select({
         id: services.id,
@@ -150,9 +158,24 @@ export async function loadPublicAvailability(
       })
       .from(venueTables)
       .where(eq(venueTables.venueId, venue.id)),
+    db
+      .select({
+        id: areas.id,
+        name: areas.name,
+        bookable: areas.bookable,
+        closedMonths: areas.closedMonths,
+      })
+      .from(areas)
+      .where(eq(areas.venueId, venue.id))
+      .orderBy(asc(areas.sort), asc(areas.name)),
   ]);
 
   const { startUtc, endUtc } = venueLocalDayRange(input.date, venue.timezone);
+  // Operator area availability (seasonal months + weather kill switch)
+  // compiles into the same area-scoped closures the events use.
+  const areaClosures = areaAvailabilityClosures(areaRows, [
+    { ymd: input.date, startUtc, endUtc },
+  ]);
   const [occupied, closures] = await Promise.all([
     db
       .select({
@@ -189,17 +212,30 @@ export async function loadPublicAvailability(
     occupied,
     combinable,
     maxCombineTables,
-    closures,
+    closures: [...closures, ...areaClosures],
   });
 
+  // Chip list: areas that actually have a slot today (pre-preference).
+  const availableAreaIds = new Set(slots.flatMap((s) => s.options.map((o) => o.areaId)));
+
+  // Guest area preference filter: keep only slots with an option in the
+  // requested area — the preference is a guarantee, not a hint.
+  const visible = input.areaId
+    ? slots.filter((s) => s.options.some((o) => o.areaId === input.areaId))
+    : slots;
+
   return {
-    slots: slots.map((s) => ({
+    slots: visible.map((s) => ({
       serviceId: s.serviceId,
       serviceName: s.serviceName,
       wallStart: s.wallStart,
       startAt: s.startAt,
       endAt: s.endAt,
+      areaIds: [...new Set(s.options.map((o) => o.areaId))],
     })),
+    areas: areaRows
+      .filter((a) => availableAreaIds.has(a.id))
+      .map((a) => ({ id: a.id, name: a.name })),
   };
 }
 
@@ -235,7 +271,7 @@ export async function loadPublicMonthAvailability(
   const firstYmd = `${input.month}-01`;
   const lastYmd = `${input.month}-${String(dim).padStart(2, "0")}`;
 
-  const [serviceRows, tableRows] = await Promise.all([
+  const [serviceRows, tableRows, areaRows] = await Promise.all([
     db
       .select({
         id: services.id,
@@ -254,6 +290,14 @@ export async function loadPublicMonthAvailability(
       })
       .from(venueTables)
       .where(eq(venueTables.venueId, venue.id)),
+    db
+      .select({
+        id: areas.id,
+        bookable: areas.bookable,
+        closedMonths: areas.closedMonths,
+      })
+      .from(areas)
+      .where(eq(areas.venueId, venue.id)),
   ]);
 
   const { startUtc } = venueLocalDayRange(firstYmd, venue.timezone);
@@ -290,6 +334,18 @@ export async function loadPublicMonthAvailability(
   const today = todayInZone(venue.timezone);
   const { combinable, maxCombineTables } = await loadVenueCombining(db, venue.id);
 
+  // Venue-local day bounds for every day of the month — shared by the
+  // area-availability compiler and the per-day event check below.
+  const localDays = Array.from({ length: dim }, (_, i) => {
+    const ymd = `${input.month}-${String(i + 1).padStart(2, "0")}`;
+    const range = venueLocalDayRange(ymd, venue.timezone);
+    return { ymd, startUtc: range.startUtc, endUtc: range.endUtc };
+  });
+  // Operator area availability → closures for findSlots ONLY. Never fed to
+  // the `events` map — an unavailable area is not an event.
+  const areaClosures = areaAvailabilityClosures(areaRows, localDays);
+  const allClosures = [...closures, ...areaClosures];
+
   const days: Record<string, DayAvailability> = {};
   const events: Record<string, { slug: string; name: string }> = {};
   for (let d = 1; d <= dim; d++) {
@@ -303,7 +359,7 @@ export async function loadPublicMonthAvailability(
     // An AREA-SCOPED event still lands in `events` (the calendar shows a
     // banner) but the day classifies normally from the remaining tables
     // (findSlots strips the scoped areas' tables itself).
-    const { startUtc: dayStart, endUtc: dayEnd } = venueLocalDayRange(ymd, venue.timezone);
+    const { startUtc: dayStart, endUtc: dayEnd } = localDays[d - 1]!;
     const covering = closures.filter(
       (c) => c.startAt.getTime() < dayEnd.getTime() && c.endAt.getTime() > dayStart.getTime(),
     );
@@ -331,7 +387,7 @@ export async function loadPublicMonthAvailability(
       occupied,
       combinable,
       maxCombineTables,
-      closures,
+      closures: allClosures,
     });
     days[ymd] = slots.length > 0 ? "open" : "full";
   }

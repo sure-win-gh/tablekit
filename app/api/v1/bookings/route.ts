@@ -37,6 +37,9 @@ const Body = z.object({
   wallStart: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
   partySize: z.number().int().min(1).max(20),
   notes: z.string().max(500).optional(),
+  // Guest area preference — a guarantee: the booking is assigned in this
+  // area or fails no-availability (docs/specs/area-preferences.md).
+  preferredAreaId: z.string().uuid().optional(),
   captchaToken: z.string().optional(),
   guest: upsertGuestInput,
 });
@@ -140,6 +143,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     guest: parsed.data.guest,
     source: "widget",
     ...(parsed.data.notes ? { notes: parsed.data.notes } : {}),
+    ...(parsed.data.preferredAreaId ? { preferredAreaId: parsed.data.preferredAreaId } : {}),
   });
 
   if (!r.ok) {
@@ -308,6 +312,7 @@ const authedPost = withApiAuth(async ({ req, orgId, keyId }) => {
       guest: parsed.data.guest,
       source: "api",
       ...(parsed.data.notes ? { notes: parsed.data.notes } : {}),
+      ...(parsed.data.preferredAreaId ? { preferredAreaId: parsed.data.preferredAreaId } : {}),
     });
 
     if (!r.ok) {

@@ -24,6 +24,7 @@ import {
 } from "@/lib/db/schema";
 import { parseTableCombining } from "@/lib/venues/table-combining";
 
+import { AreaAvailabilityRow } from "./forms";
 import { FloorPlanCanvas, type CanvasArea, type CanvasTable } from "./canvas";
 import type { ActiveBookingDetail } from "./side-panel";
 
@@ -58,7 +59,13 @@ export default async function FloorPlanPage({ params }: { params: Promise<{ venu
     async (db) => {
       const [a, t, bRows, combos] = await Promise.all([
         db
-          .select({ id: areas.id, name: areas.name, sort: areas.sort })
+          .select({
+            id: areas.id,
+            name: areas.name,
+            sort: areas.sort,
+            bookable: areas.bookable,
+            closedMonths: areas.closedMonths,
+          })
           .from(areas)
           .where(eq(areas.venueId, venueId))
           .orderBy(asc(areas.sort), asc(areas.createdAt)),
@@ -312,6 +319,24 @@ export default async function FloorPlanPage({ params }: { params: Promise<{ venu
         upcomingByTableId={upcomingByTableId}
         floorStateByTableId={floorStateByTableId}
       />
+
+      {canEdit && areaRows.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <div>
+            <h3 className="text-ink text-sm font-bold tracking-tight">Area availability</h3>
+            <p className="text-ash text-xs">
+              Close an area to new bookings — for the season or just for today&rsquo;s weather.
+              Existing bookings stay put; guests simply can&rsquo;t book those tables until you
+              reopen.
+            </p>
+          </div>
+          <div className="border-hairline rounded-card divide-hairline divide-y overflow-hidden border bg-white">
+            {areaRows.map((a) => (
+              <AreaAvailabilityRow key={a.id} area={a} />
+            ))}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

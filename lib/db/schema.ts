@@ -367,9 +367,23 @@ export const areas = pgTable(
       .references(() => venues.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     sort: integer("sort").notNull().default(0),
+    // Ad-hoc availability kill switch — off = closed to NEW standard
+    // bookings until the operator reopens it (weather). Existing bookings
+    // are never auto-cancelled. docs/specs/area-preferences.md.
+    bookable: boolean("bookable").notNull().default(true),
+    // Seasonal closure, venue-local months 1–12 ("winter" = {11,12,1,2,3}).
+    // Compiled into ClosureWindows by lib/bookings/area-availability.ts.
+    closedMonths: integer("closed_months").array().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("areas_venue_idx").on(t.venueId), index("areas_org_idx").on(t.organisationId)],
+  (t) => [
+    index("areas_venue_idx").on(t.venueId),
+    index("areas_org_idx").on(t.organisationId),
+    check(
+      "areas_closed_months_check",
+      sql`${t.closedMonths} <@ array[1,2,3,4,5,6,7,8,9,10,11,12]`,
+    ),
+  ],
 );
 
 // `tables` exported under a non-ambiguous alias for callers — `tables`

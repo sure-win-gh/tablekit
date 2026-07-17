@@ -12,13 +12,14 @@ import {
   bookings,
   eventTicketTypes,
   guests,
+  payments,
   specialEventAreas,
   specialEvents,
   venues,
   venueTables,
 } from "@/lib/db/schema";
 
-import { NewTicketTypeForm, TicketTypeRow } from "./ticket-forms";
+import { AttendeeRow, NewTicketTypeForm, TicketTypeRow } from "./ticket-forms";
 
 export const metadata = {
   title: "Event · TableKit",
@@ -118,18 +119,42 @@ export default async function EventDetailPage({
       .where(and(eq(bookings.eventId, eventId), ne(bookings.status, "cancelled")))
       .orderBy(desc(bookings.createdAt));
 
+    // Refundable = a succeeded event-ticket payment. Drives the per-row
+    // Refund control (the bookings list excludes event bookings, so this
+    // attendee list is the refund surface for tickets).
+    const refundableIds =
+      attendees.length === 0
+        ? []
+        : (
+            await db
+              .select({ bookingId: payments.bookingId })
+              .from(payments)
+              .where(
+                and(
+                  inArray(
+                    payments.bookingId,
+                    attendees.map((a) => a.id),
+                  ),
+                  eq(payments.kind, "event_ticket"),
+                  eq(payments.status, "succeeded"),
+                ),
+              )
+          ).map((p) => p.bookingId);
+
     return {
       event,
       timezone: venue?.timezone ?? "Europe/London",
       types,
       attendees,
+      refundableIds,
       scopeNames: scopeRows.map((s) => s.name),
       coversHint,
     };
   });
 
   if (!data) notFound();
-  const { event, timezone, types, attendees, scopeNames, coversHint } = data;
+  const { event, timezone, types, attendees, refundableIds, scopeNames, coversHint } = data;
+  const refundable = new Set(refundableIds);
 
   const dateLabel = new Intl.DateTimeFormat("en-GB", {
     weekday: "long",
@@ -210,13 +235,15 @@ export default async function EventDetailPage({
         ) : (
           <div className="border-hairline rounded-card divide-hairline divide-y overflow-hidden border bg-white">
             {attendees.map((a) => (
-              <div key={a.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
-                <span className="text-ink min-w-0 flex-1 truncate font-medium">{a.firstName}</span>
-                <span className="text-ash tabular-nums">
-                  {a.partySize} ticket{a.partySize === 1 ? "" : "s"}
-                </span>
-                <span className="text-ash text-xs">{STATUS_LABEL[a.status] ?? a.status}</span>
-              </div>
+              <AttendeeRow
+                key={a.id}
+                venueId={venueId}
+                bookingId={a.id}
+                firstName={a.firstName}
+                partySize={a.partySize}
+                statusLabel={STATUS_LABEL[a.status] ?? a.status}
+                refundable={refundable.has(a.id)}
+              />
             ))}
           </div>
         )}

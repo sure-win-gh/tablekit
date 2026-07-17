@@ -115,6 +115,41 @@ export async function updateArea(_prev: ActionState, formData: FormData): Promis
   return { status: "saved" };
 }
 
+const AreaAvailabilitySchema = z.object({
+  areaId: z.uuid(),
+  bookable: z.boolean(),
+  closedMonths: z
+    .array(z.coerce.number().int())
+    .max(12)
+    .refine((arr) => arr.every((m) => m >= 1 && m <= 12), { message: "Months must be 1–12" }),
+});
+
+// Area availability (docs/specs/area-preferences.md): the weather kill
+// switch + seasonal closed months. Blocks NEW standard bookings only —
+// existing bookings in the area are never auto-cancelled.
+export async function updateAreaAvailability(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = AreaAvailabilitySchema.safeParse({
+    areaId: formData.get("area_id"),
+    bookable: formData.get("bookable") === "on",
+    closedMonths: formData.getAll("closed_months").map(String),
+  });
+  if (!parsed.success) return { status: "error", message: "Bad request." };
+
+  const { orgId } = await requireRole("manager");
+  const { venueId } = await assertAreaInOrg(parsed.data.areaId, orgId);
+
+  await adminDb()
+    .update(areas)
+    .set({ bookable: parsed.data.bookable, closedMonths: parsed.data.closedMonths })
+    .where(and(eq(areas.id, parsed.data.areaId), eq(areas.organisationId, orgId)));
+
+  revalidatePath(`/dashboard/venues/${venueId}/floor-plan`);
+  return { status: "saved" };
+}
+
 const AreaDeleteSchema = z.object({ areaId: z.uuid() });
 
 export async function deleteArea(_prev: ActionState, formData: FormData): Promise<ActionState> {
