@@ -1,18 +1,29 @@
 import { desc, eq } from "drizzle-orm";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { LockedFeature } from "@/components/billing/locked-feature";
 import { isLocked } from "@/lib/auth/entitlements";
+import { hasPlan } from "@/lib/auth/plan-level";
 import { getPlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { getBalance } from "@/lib/billing/credit";
+import { getEmailAllowanceState, isEmailOverageEnforced } from "@/lib/billing/email-allowance";
+import { parseBodyDoc } from "@/lib/campaigns/blocks";
+import {
+  MARKETING_EMAIL,
+  emailCampaignCostPence,
+  emailChargeableCount,
+} from "@/lib/billing/marketing-email";
+import { CHANNEL_COST_PENCE } from "@/lib/billing/usage";
 import { estimateAudience } from "@/lib/campaigns/recipients";
 import { MARKETING_TAG_NAMES } from "@/lib/campaigns/render";
 import { withUser } from "@/lib/db/client";
-import { campaigns, venues } from "@/lib/db/schema";
+import { campaigns, campaignTemplates, venues } from "@/lib/db/schema";
 import { SEGMENTS, SEGMENT_LABEL } from "@/lib/guests/segments";
+import { parseBranding } from "@/lib/messaging/venue-settings";
 
-import { CampaignComposer } from "./campaign-composer";
+import { ChannelTabs } from "./channel-tabs";
 
 export const metadata = { title: "Campaigns · TableKit" };
 
@@ -27,19 +38,57 @@ export default async function CampaignsPage({ params }: { params: Promise<{ venu
 
   const venue = await withUser(async (db) => {
     const rows = await db
-      .select({ id: venues.id, name: venues.name })
+      .select({ id: venues.id, name: venues.name, settings: venues.settings })
       .from(venues)
       .where(eq(venues.id, venueId))
       .limit(1);
     return rows[0];
   });
   if (!venue) notFound();
+  const brandColour = parseBranding(venue.settings)?.brandColour ?? null;
 
-  // Initial consent-filtered estimate for the default (email, all). The
-  // composer refetches per (channel, segment) on change.
-  const initialEstimate = await estimateAudience(orgId, venueId, "email", { segment: "all" });
+  // Initial consent-filtered estimate for the default (email, all), with
+  // the plan's allowance applied. The composer refetches per
+  // (channel, segment) on change.
+  const audience = await estimateAudience(orgId, venueId, "email", { segment: "all" });
+  const allowanceState = await getEmailAllowanceState(orgId, plan, new Date());
+  const initialEstimate = {
+    count: audience.count,
+    costPence: emailCampaignCostPence(
+      audience.count,
+      allowanceState.remaining,
+      MARKETING_EMAIL.overagePencePer1000[plan],
+    ),
+    emailBilling: {
+      ...allowanceState,
+      chargeable: emailChargeableCount(audience.count, allowanceState.remaining),
+      enforced: isEmailOverageEnforced(),
+    },
+  };
   const initialBalancePence = await withUser((db) => getBalance(db, orgId));
   const segments = SEGMENTS.map((key) => ({ key, label: SEGMENT_LABEL[key] }));
+  const plusUnlocked = hasPlan(plan, "plus");
+
+  // Saved templates for the builder's picker — RLS scopes to the org; the
+  // stored doc is re-validated on read (jsonb is untrusted) and invalid
+  // rows are dropped rather than breaking the page.
+  const savedTemplates = (
+    await withUser((db) =>
+      db
+        .select({
+          id: campaignTemplates.id,
+          name: campaignTemplates.name,
+          subject: campaignTemplates.subject,
+          bodyDoc: campaignTemplates.bodyDoc,
+        })
+        .from(campaignTemplates)
+        .orderBy(campaignTemplates.name)
+        .limit(30),
+    )
+  ).flatMap((t) => {
+    const parsed = parseBodyDoc(t.bodyDoc);
+    return parsed.ok ? [{ id: t.id, name: t.name, subject: t.subject, doc: parsed.doc }] : [];
+  });
 
   const list = await withUser(async (db) =>
     db
@@ -59,55 +108,46 @@ export default async function CampaignsPage({ params }: { params: Promise<{ venu
 
   return (
     <section className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-ink text-2xl font-bold tracking-tight">Campaigns</h1>
-        <p className="text-ash mt-1 text-sm">
-          Promote events and offers to guests who opted in. {venue.name}.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-ink text-2xl font-bold tracking-tight">Campaigns</h1>
+          <p className="text-ash mt-1 text-sm">
+            Promote events and offers to guests who opted in. {venue.name}.
+          </p>
+        </div>
+        <Link
+          href={`/dashboard/venues/${venue.id}/campaigns/reports`}
+          className="border-hairline text-ink hover:bg-cloud inline-flex items-center rounded-md border bg-white px-3 py-2 text-sm font-medium"
+        >
+          Marketing overview
+        </Link>
       </div>
 
-      <CampaignComposer
+      <ChannelTabs
         venueId={venue.id}
+        brandColour={brandColour}
+        plan={plan}
         segments={segments}
+        canSegment={plusUnlocked}
+        plusUnlocked={plusUnlocked}
         initialEstimate={initialEstimate}
         initialBalancePence={initialBalancePence}
         mergeTags={[...MARKETING_TAG_NAMES]}
+        channelCostPence={CHANNEL_COST_PENCE}
+        emailAllowanceRemaining={allowanceState.remaining}
+        savedTemplates={savedTemplates}
+        recent={list.map((c) => {
+          const counts = (c.counts ?? {}) as Record<string, number>;
+          return {
+            id: c.id,
+            name: c.name,
+            channel: c.channel,
+            status: c.status,
+            sent: counts["sent"] ?? 0,
+            opened: counts["opened"] ?? 0,
+          };
+        })}
       />
-
-      <div>
-        <h2 className="text-ink mb-3 text-base font-semibold">Recent campaigns</h2>
-        {list.length === 0 ? (
-          <p className="text-ash text-sm">No campaigns yet.</p>
-        ) : (
-          <div className="border-hairline rounded-card overflow-hidden border bg-white">
-            <table className="w-full text-sm">
-              <thead className="bg-cloud text-ash text-left text-xs font-semibold tracking-wider uppercase">
-                <tr>
-                  <th className="px-4 py-2.5">Name</th>
-                  <th className="px-4 py-2.5">Channel</th>
-                  <th className="px-4 py-2.5">Status</th>
-                  <th className="px-4 py-2.5">Sent</th>
-                  <th className="px-4 py-2.5">Opened</th>
-                </tr>
-              </thead>
-              <tbody className="divide-hairline divide-y">
-                {list.map((c) => {
-                  const counts = (c.counts ?? {}) as Record<string, number>;
-                  return (
-                    <tr key={c.id}>
-                      <td className="text-ink px-4 py-3 font-medium">{c.name}</td>
-                      <td className="text-charcoal px-4 py-3">{c.channel}</td>
-                      <td className="text-charcoal px-4 py-3">{c.status}</td>
-                      <td className="text-charcoal px-4 py-3">{counts["sent"] ?? 0}</td>
-                      <td className="text-charcoal px-4 py-3">{counts["opened"] ?? 0}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </section>
   );
 }

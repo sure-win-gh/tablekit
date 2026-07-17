@@ -4,6 +4,8 @@ import Link from "next/link";
 
 import { hasPlan, toPlan } from "@/lib/auth/plan-level";
 import { requireRole } from "@/lib/auth/require-role";
+import { getEmailAllowanceState } from "@/lib/billing/email-allowance";
+import { MARKETING_EMAIL, monthBoundsUtc } from "@/lib/billing/marketing-email";
 import { billingSubscriptions, organisations } from "@/lib/db/schema";
 import { withUser } from "@/lib/db/client";
 import { stripeEnabled } from "@/lib/stripe/client";
@@ -50,11 +52,19 @@ export default async function BillingPage({
   const isSubscribed = sub !== null && SUBSCRIBED.has(sub.status);
   const isPastDue = sub?.status === "past_due";
   const stripeOff = !stripeEnabled();
-  const isPlus = hasPlan(toPlan(plan), "plus");
-  // Credit only funds marketing (Plus). Show the section to Plus orgs, or to
-  // anyone still holding a balance (e.g. after a downgrade) so it's not
-  // stranded invisibly — but only offer top-ups on Plus.
-  const showCredit = !stripeOff && (isPlus || creditPence > 0);
+  const isCore = hasPlan(toPlan(plan), "core");
+  // Credit funds marketing broadcasts — SMS/WhatsApp (Plus) and email
+  // overage beyond the monthly allowance (Core+). Show the section to any
+  // paid org, or to anyone still holding a balance (e.g. after a
+  // downgrade) so it's not stranded invisibly — but only offer top-ups on
+  // paid plans.
+  const showCredit = !stripeOff && (isCore || creditPence > 0);
+
+  // Marketing-email allowance meter (docs/specs/email-broadcast-billing.md).
+  const now = new Date();
+  const emailAllowance = isCore ? await getEmailAllowanceState(orgId, plan, now) : null;
+  const emailRate = MARKETING_EMAIL.overagePencePer1000[toPlan(plan)];
+  const allowanceResets = monthBoundsUtc(now).end;
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-8 py-6">
@@ -179,13 +189,41 @@ export default async function BillingPage({
           </section>
         )}
 
+        {emailAllowance ? (
+          <section className="rounded-card border-hairline flex h-full flex-col gap-2 border bg-white p-5">
+            <h2 className="text-ink text-sm font-semibold tracking-tight">
+              Marketing email allowance
+            </h2>
+            <div className="flex items-baseline gap-2">
+              <p className="text-ink text-lg font-semibold">
+                {emailAllowance.used.toLocaleString("en-GB")} /{" "}
+                {emailAllowance.allowance.toLocaleString("en-GB")}
+              </p>
+              <p className="text-ash text-sm">sent this month</p>
+            </div>
+            <div className="bg-cloud h-2 w-full overflow-hidden rounded-full" aria-hidden>
+              <div
+                className="bg-coral h-full rounded-full"
+                style={{
+                  width: `${Math.min(100, emailAllowance.allowance === 0 ? 100 : Math.round((emailAllowance.used / emailAllowance.allowance) * 100))}%`,
+                }}
+              />
+            </div>
+            <p className="text-ash text-xs">
+              Resets on {fmtDate(allowanceResets)}. Beyond the allowance, marketing emails cost £
+              {(emailRate / 100).toFixed(2)} per 1,000 + VAT from your messaging credit.
+              Transactional booking emails are always free and never counted.
+            </p>
+          </section>
+        ) : null}
+
         {showCredit ? (
           <section className="rounded-card border-hairline flex h-full flex-col gap-2 border bg-white p-5">
             <h2 className="text-ink text-sm font-semibold tracking-tight">Messaging credit</h2>
             <p className="text-ash text-sm">
-              Prepaid balance for marketing SMS/WhatsApp, charged at cost. A campaign won&apos;t
-              send unless your balance covers it — transactional booking messages are never
-              affected.
+              Prepaid balance for marketing broadcasts — SMS/WhatsApp at cost, and email beyond your
+              monthly allowance. A campaign won&apos;t send unless your balance covers it —
+              transactional booking messages are never affected.
             </p>
             <div className="flex items-center justify-between">
               <div>
@@ -193,7 +231,7 @@ export default async function BillingPage({
                 <p className="text-ash text-sm">available credit</p>
               </div>
             </div>
-            {isPlus ? (
+            {isCore ? (
               <div className="mt-1 flex flex-wrap gap-2">
                 {TOPUP_AMOUNTS_PENCE.map((amt) => (
                   <form key={amt} action={startTopup.bind(null, amt)}>
@@ -209,7 +247,8 @@ export default async function BillingPage({
               </div>
             ) : (
               <p className="text-ash text-xs">
-                Messaging credit funds marketing campaigns — a Plus-tier feature. Upgrade to top up.
+                Messaging credit funds marketing campaigns — available on Core and Plus. Upgrade to
+                top up.
               </p>
             )}
           </section>

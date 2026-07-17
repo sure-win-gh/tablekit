@@ -9,9 +9,12 @@ import "server-only";
 
 import { eq, sql } from "drizzle-orm";
 
+import { toPlan } from "@/lib/auth/plan-level";
 import { estimateCostPence } from "@/lib/billing/usage";
 import { InsufficientCreditError, reserveForCampaign } from "@/lib/billing/credit";
-import { campaigns, campaignSends } from "@/lib/db/schema";
+import { getEmailAllowanceState, isEmailOverageEnforced } from "@/lib/billing/email-allowance";
+import { MARKETING_EMAIL, emailCampaignCostPence } from "@/lib/billing/marketing-email";
+import { campaigns, campaignSends, organisations } from "@/lib/db/schema";
 import { isSegment } from "@/lib/guests/segments";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
@@ -53,10 +56,13 @@ export async function enqueueCampaign(
   });
 
   // Prepaid gate: reserve the estimated cost up front before any send is
-  // queued, so marketing can never exceed paid-for credit. Email is free
-  // (estimate 0 → no-op). Reservation is keyed on the campaign id, so a
-  // retried enqueue doesn't double-charge; reconcileCampaign refunds the
-  // unsent remainder once the campaign drains.
+  // queued, so marketing can never exceed paid-for credit. SMS/WhatsApp
+  // are costed per message; email is costed on the overage beyond the
+  // plan's monthly allowance (docs/specs/email-broadcast-billing.md) —
+  // and stays free while EMAIL_OVERAGE_ENFORCED is off (display-only
+  // rollout). Reservation is keyed on the campaign id, so a retried
+  // enqueue doesn't double-charge; reconcileCampaign refunds the unsent
+  // remainder once the campaign drains.
   //
   // Narrow leak window: the reserve commits in its own tx before the
   // fan-out below. If the process dies between them the campaign stays
@@ -64,7 +70,36 @@ export async function enqueueCampaign(
   // sits debited. The campaign-id-keyed reserve means re-sending that same
   // campaign reuses it (no double charge); an abandoned draft's reserve is
   // recovered by a manual 'adjustment' ledger entry. Acceptable for v1.
-  const estimatePence = estimateCostPence(channel, guestIds.length);
+  let estimatePence: number;
+  if (channel === "email") {
+    if (isEmailOverageEnforced()) {
+      const [org] = await db
+        .select({ plan: organisations.plan })
+        .from(organisations)
+        .where(eq(organisations.id, campaign.organisationId))
+        .limit(1);
+      const plan = toPlan(org?.plan ?? "free");
+      const state = await getEmailAllowanceState(campaign.organisationId, plan, opts.now);
+      const rate = MARKETING_EMAIL.overagePencePer1000[plan];
+      estimatePence = emailCampaignCostPence(guestIds.length, state.remaining, rate);
+      // Snapshot the allowance + rate BEFORE reserving, so reconcile costs
+      // the actual sends against the exact same base (the costing
+      // invariant in lib/billing/marketing-email.ts). Written even for a
+      // zero estimate — a re-enqueue overwrites with fresh values, which
+      // is fine while the campaign has never reserved.
+      await db
+        .update(campaigns)
+        .set({
+          allowanceRemainingAtReserve: state.remaining,
+          overagePencePer1000AtReserve: rate,
+        })
+        .where(eq(campaigns.id, campaign.id));
+    } else {
+      estimatePence = 0;
+    }
+  } else {
+    estimatePence = estimateCostPence(channel, guestIds.length);
+  }
   try {
     await reserveForCampaign(campaign.organisationId, campaign.id, estimatePence);
   } catch (err) {

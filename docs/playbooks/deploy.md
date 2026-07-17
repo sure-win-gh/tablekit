@@ -9,8 +9,8 @@
 |------------|------------------------------|----------|-----------|
 | Local      | http://localhost:3000        | any      | local docker Postgres |
 | Preview    | Vercel preview per PR        | PR branch| shared preview Supabase |
-| Staging    | staging.tablekit.uk          | `main`   | staging Supabase (EU-central) |
-| Production | app.tablekit.uk / book.tablekit.uk | tag `v*` | prod Supabase (EU-west, London) |
+| Staging    | staging.tablekitapp.com          | `main`   | staging Supabase (EU-central) |
+| Production | my.tablekitapp.com / book.tablekitapp.com | tag `v*` | prod Supabase (EU-west, London) |
 
 ## Release flow
 
@@ -69,7 +69,7 @@ per-request, so any cache layer holding the HTML means shared/stale nonces (enfo
 then block the page). Keep the dashboard uncached everywhere.
 
 **A — Cloudflare (prerequisites, before flipping):**
-1. **Bypass cache for `app.tablekit.uk`** — Caching → Cache Rules (Cloudflare doesn't cache
+1. **Bypass cache for `my.tablekitapp.com`** — Caching → Cache Rules (Cloudflare doesn't cache
    HTML by default, but make it explicit). Verify a `/dashboard` response shows
    `cf-cache-status: DYNAMIC`, not `HIT`.
 2. **Skip WAF/rate-limit for `/api/csp-report` and `/monitoring`** — so soak reports + the
@@ -80,7 +80,7 @@ then block the page). Keep the dashboard uncached everywhere.
    `documentPath` starts with `/dashboard` or `/admin`. Goal: none (or only benign ones you
    accept). Each carries `directive` + `blockedHost`.
 2. **Staging first.** Set env var `CSP_DASHBOARD_ENFORCE=true` on the environment serving
-   `staging.tablekit.uk`, then **redeploy** (env changes need a new build).
+   `staging.tablekitapp.com`, then **redeploy** (env changes need a new build).
 3. **Smoke** (DevTools console open, watch for `Refused to…`): dashboard home, a settings +
    billing page, `/admin`, and the POS guest-spend panel (Supabase Realtime) once it's routed.
 4. **Production.** Set `CSP_DASHBOARD_ENFORCE=true` on Production, redeploy, re-smoke.
@@ -92,11 +92,11 @@ Report-Only.
 
 ## Domains
 
-- Primary: `tablekit.uk` (marketing site).
-- Dashboard: `app.tablekit.uk`.
-- Widget: `book.tablekit.uk` (and customer subpaths like `book.tablekit.uk/<venue-slug>`).
-- API: `api.tablekit.uk` (public API — Plus tier).
-- Status: `status.tablekit.uk` (hosted externally, e.g. Better Stack).
+- Primary: `tablekitapp.com` (marketing site).
+- Dashboard: `my.tablekitapp.com`.
+- Widget: `book.tablekitapp.com` (and customer subpaths like `book.tablekitapp.com/<venue-slug>`).
+- API: `api.tablekitapp.com` (public API — Plus tier).
+- Status: `status.tablekitapp.com` (hosted externally, e.g. Better Stack).
 
 TLS via Cloudflare in front of Vercel (orange-cloud proxy). DNSSEC on.
 
@@ -141,5 +141,5 @@ Before flipping from "private beta" to "public beta":
 - [ ] Encryption master key wrapped in Supabase Vault; rotation tested.
 - [ ] Cookie banner / privacy notice on widget and dashboard.
 - [ ] `/.well-known/security.txt` published.
-- [ ] Domain email (SPF, DKIM, DMARC) configured for `@tablekit.uk`.
+- [ ] Domain email (SPF, DKIM, DMARC) configured for `@tablekitapp.com`.
 - [ ] **POS guest-hash backfill (migration 0050):** after the deploy that applies `0050_curious_havok.sql`, run `DATABASE_URL="<prod>" pnpm db:backfill-phone-hash --dry-run` then without `--dry-run` to populate `guests.phone_hash` for pre-0050 guests, so POS phone-hash matching works for existing guests. Idempotent + resumable; the script prints the target DB host (no credentials) so you can confirm prod-not-dev before writing. Do this before connecting the first venue's till. (New guests get the hash automatically via `upsertGuest`; email-hash + booking matching already work without it.)

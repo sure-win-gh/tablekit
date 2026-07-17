@@ -12,7 +12,7 @@
 ## Detection sources
 
 - Sentry alerts (5xx spike, new error type, unhandled rejection).
-- Uptime monitor (Better Stack or similar) for `/api/health`, `book.tablekit.uk`, `app.tablekit.uk`.
+- Uptime monitor (Better Stack or similar) for `/api/health`, `book.tablekitapp.com`, `my.tablekitapp.com`.
 - Stripe Radar alerts.
 - Direct email from a venue (support inbox).
 - Anomaly dashboards (auth failures, webhook signature failures).
@@ -22,7 +22,7 @@
 1. **Declare.** Post in `#incidents` (Slack/Discord, even as solo — future you will want the log). Timestamp everything.
 2. **Assess scope.** How many orgs affected? Is data exposed? Is money moving incorrectly? Is it still happening?
 3. **Stop the bleed.** If there's a live data exposure: take the affected surface offline. For the widget: flip a kill-switch env var that serves a maintenance page. For the dashboard: Vercel rollback to the previous deployment. This is more important than fixing the root cause in the moment.
-4. **Communicate.** Status page updated (`status.tablekit.uk`). Affected venues emailed within 1 hour for anything guest-visible.
+4. **Communicate.** Status page updated (`status.tablekitapp.com`). Affected venues emailed within 1 hour for anything guest-visible.
 5. **Preserve evidence.** Do not delete logs, don't run destructive cleanups, don't "clear" a table to reset. Screenshot Sentry, save webhook bodies, note PR/commit hashes.
 6. **Fix.** Once the bleed is stopped, root-cause and fix. Claude Code can be asked to help — use `/plan` before `/ship`.
 7. **Verify.** Confirm the fix holds on staging and on a single venue in prod before full rollout.

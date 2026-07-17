@@ -9,7 +9,7 @@
 //
 // v1 sends from the platform `RESEND_FROM_EMAIL`. The spec calls for
 // a venue-verified sending domain so replies don't show "via
-// tablekit.uk" — that's substantially more infrastructure (per-venue
+// tablekitapp.com" — that's substantially more infrastructure (per-venue
 // DKIM/SPF/DMARC, verification flow, fallback handling) and is
 // tracked separately. Until then, `Reply-To` keeps the conversation
 // pointing at the right inbox.
@@ -103,7 +103,7 @@ function sanitiseSendError(err: unknown): string {
 // Resolve the `From:` address to use when replying on behalf of a
 // venue. If the venue has a verified sending domain registered
 // (migration 0036) the reply goes from `<venue-slug>@<verified-domain>`
-// — dropping the "via tablekit.uk" Gmail suffix the platform default
+// — dropping the "via tablekitapp.com" Gmail suffix the platform default
 // would otherwise produce.
 //
 // Fall back to the platform `fromEmail()` whenever:

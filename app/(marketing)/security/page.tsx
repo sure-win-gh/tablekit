@@ -56,10 +56,10 @@ export default function SecurityPage() {
         <p>
           We welcome reports from the security community. Please email{" "}
           <Link
-            href="mailto:security@tablekit.uk"
+            href="mailto:security@tablekitapp.com"
             className="text-ink hover:text-coral font-semibold underline underline-offset-4"
           >
-            security@tablekit.uk
+            security@tablekitapp.com
           </Link>{" "}
           with a clear description and reproduction steps. PGP key and machine-readable contact data
           are at{" "}
@@ -77,10 +77,10 @@ export default function SecurityPage() {
         <h2 className="text-ink text-lg font-bold tracking-tight">Scope</h2>
         <ul className="ml-5 list-disc space-y-1.5">
           <li>
-            <span className="font-mono text-xs">tablekit.uk</span>,{" "}
-            <span className="font-mono text-xs">app.tablekit.uk</span>,{" "}
-            <span className="font-mono text-xs">book.tablekit.uk</span>,{" "}
-            <span className="font-mono text-xs">api.tablekit.uk</span>.
+            <span className="font-mono text-xs">tablekitapp.com</span>,{" "}
+            <span className="font-mono text-xs">my.tablekitapp.com</span>,{" "}
+            <span className="font-mono text-xs">book.tablekitapp.com</span>,{" "}
+            <span className="font-mono text-xs">api.tablekitapp.com</span>.
           </li>
           <li>The booking widget when embedded on third-party sites.</li>
         </ul>

@@ -8,7 +8,7 @@
  *
  * Snippet:
  *   <script
- *     src="https://book.tablekit.uk/widget.js"
+ *     src="https://book.tablekitapp.com/widget.js"
  *     data-venue-id="<uuid>"
  *     async
  *   ></script>

@@ -12,6 +12,7 @@
 // GET  /api/v1/bookings — Plus-tier REST list endpoint. Bearer auth.
 //   Filters: venue_id, from, to, status. Cursor pagination.
 
+import { and, eq } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
@@ -21,6 +22,7 @@ import { decodeCursor, parseLimit } from "@/lib/api/v1/cursor";
 import { withIdempotency } from "@/lib/api/v1/idempotency";
 import { errorResponse } from "@/lib/api/v1/responses";
 import { createBooking } from "@/lib/bookings/create";
+import { campaigns } from "@/lib/db/schema";
 import { bookingsReadOnly, widgetDisabled } from "@/lib/feature-flags";
 import { upsertGuestInput } from "@/lib/guests/schema";
 import { sweepAbandonedDeposits } from "@/lib/payments/janitor";
@@ -38,8 +40,31 @@ const Body = z.object({
   partySize: z.number().int().min(1).max(20),
   notes: z.string().max(500).optional(),
   captchaToken: z.string().optional(),
+  // Marketing attribution (?tk_c= carried through the widget wizard).
+  // Untrusted: verified against the venue below before it's stamped.
+  campaignId: z.string().uuid().optional(),
   guest: upsertGuestInput,
 });
+
+// Returns the campaign id iff it belongs to (venue, org); null otherwise.
+async function verifyCampaignForVenue(
+  campaignId: string,
+  venueId: string,
+  organisationId: string,
+): Promise<string | null> {
+  const [row] = await adminDb()
+    .select({ id: campaigns.id })
+    .from(campaigns)
+    .where(
+      and(
+        eq(campaigns.id, campaignId),
+        eq(campaigns.venueId, venueId),
+        eq(campaigns.organisationId, organisationId),
+      ),
+    )
+    .limit(1);
+  return row?.id ?? null;
+}
 
 export async function POST(req: NextRequest): Promise<Response> {
   // Branch first — authed REST request goes through a completely
@@ -130,6 +155,14 @@ export async function POST(req: NextRequest): Promise<Response> {
     });
   }
 
+  // 4c. Campaign attribution — only accepted when the campaign actually
+  //     belongs to this venue (a crafted tk_c naming another org's or
+  //     venue's campaign is silently dropped, never an error: attribution
+  //     must not block a booking).
+  const campaignId = parsed.data.campaignId
+    ? await verifyCampaignForVenue(parsed.data.campaignId, parsed.data.venueId, organisationId)
+    : null;
+
   // 5. Hand off to the same domain function the host flow uses.
   const r = await createBooking(organisationId, null, {
     venueId: parsed.data.venueId,
@@ -139,6 +172,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     partySize: parsed.data.partySize,
     guest: parsed.data.guest,
     source: "widget",
+    ...(campaignId ? { campaignId } : {}),
     ...(parsed.data.notes ? { notes: parsed.data.notes } : {}),
   });
 

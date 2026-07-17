@@ -60,6 +60,10 @@ export type CreateBookingInput = {
   guest: UpsertGuestRawInput;
   notes?: string;
   source: BookingSource;
+  // Marketing campaign attribution — the API route verifies the campaign
+  // belongs to (venue, org) BEFORE passing it here; this function trusts
+  // it and stamps attribution_kind='link'. marketing-suite.md Phase B.
+  campaignId?: string;
   // Optional explicit table set the caller wants (e.g. host clicked
   // "T4 + T5" in the slot picker). When supplied, must match one of
   // the slot's offered options exactly — same set, ignoring order.
@@ -294,6 +298,9 @@ export async function createBooking(
           source: input.source,
           notes: input.notes ?? null,
           bookedByUserId: actorUserId,
+          ...(input.campaignId
+            ? { campaignId: input.campaignId, attributionKind: "link" as const }
+            : {}),
         })
         .returning({ id: bookings.id });
       if (!inserted) throw new Error("createBooking: insert returned no row");

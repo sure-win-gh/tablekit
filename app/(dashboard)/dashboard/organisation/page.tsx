@@ -171,7 +171,7 @@ export default async function OrganisationPage() {
             <h2 className="text-ink text-sm font-semibold tracking-tight">API access</h2>
             <p className="text-ash text-sm">
               Issue Bearer tokens for the public REST API at{" "}
-              <span className="font-mono">api.tablekit.uk/v1</span>. Owner-only.
+              <span className="font-mono">api.tablekitapp.com/v1</span>. Owner-only.
             </p>
             <div className="flex flex-wrap gap-2">
               <Link

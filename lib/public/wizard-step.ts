@@ -13,6 +13,11 @@ export type WizardParams = {
   month?: string | undefined; // YYYY-MM (date-step calendar browsing only)
   serviceId?: string | undefined;
   wallStart?: string | undefined; // HH:MM
+  // Marketing campaign attribution (?tk_c=<campaignId>, appended to
+  // booking links in campaign emails). Carried through every step by the
+  // shared URL contract — no cookies/storage — and stamped on the created
+  // booking (server re-validates org/venue). marketing-suite.md Phase B.
+  campaign?: string | undefined;
 };
 
 export type RawSearchParams = {
@@ -21,10 +26,16 @@ export type RawSearchParams = {
   month?: string;
   serviceId?: string;
   wallStart?: string;
+  tk_c?: string;
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function validCampaign(raw: string | undefined): string | undefined {
+  return raw && UUID_RE.test(raw) ? raw.toLowerCase() : undefined;
+}
 
 export function validParty(raw: string | undefined): number | undefined {
   if (raw == null || raw === "") return undefined;
@@ -80,6 +91,8 @@ export function deriveStep(sp: RawSearchParams): { step: WizardStep; params: Wiz
   else step = "details";
 
   const params: WizardParams = {};
+  const campaign = validCampaign(sp.tk_c);
+  if (campaign) params.campaign = campaign; // step-independent — never dropped
   if (party != null) params.party = party;
   if (step === "date" && month) params.month = month;
   // date is non-null once step is time/details (else it'd be the date step);
@@ -101,5 +114,6 @@ export function buildStepUrl(params: WizardParams): string {
   if (params.month) qs.set("month", params.month);
   if (params.serviceId) qs.set("serviceId", params.serviceId);
   if (params.wallStart) qs.set("wallStart", params.wallStart);
+  if (params.campaign) qs.set("tk_c", params.campaign);
   return qs.toString();
 }

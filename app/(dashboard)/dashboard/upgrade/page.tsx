@@ -10,7 +10,7 @@ export const metadata = { title: "Upgrade · TableKit" };
 
 // Contact-to-upgrade for now — real Stripe subscription billing is a
 // later feature (see docs/specs/plan-gating-paywall.md).
-const UPGRADE_EMAIL = "hello@tablekit.uk";
+const UPGRADE_EMAIL = "hello@tablekitapp.com";
 
 const PLANS: Array<{ plan: Plan; price: string; tagline: string; features: string[] }> = [
   {

@@ -67,7 +67,7 @@ export default async function ApiKeysPage() {
         </h1>
         <p className="text-ash mt-1 text-sm">
           Bearer tokens for the public REST API at{" "}
-          <span className="font-mono">api.tablekit.uk/v1</span>. Each key is scoped to this
+          <span className="font-mono">api.tablekitapp.com/v1</span>. Each key is scoped to this
           organisation. We store only the hash — copy the plaintext when it&apos;s shown. See the{" "}
           <Link href="/docs/api" className="underline" target="_blank">
             API reference

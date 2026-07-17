@@ -93,7 +93,7 @@ the guarantees the rest of the stack assumes (`security.md` §Transport, `gdpr.m
 
 | Setting | Where | Value | Why |
 |---------|-------|-------|-----|
-| Proxy status | DNS → records | **Proxied (orange cloud)** for `tablekit.uk`, `app.`, `book.`, `api.` | This is what puts Cloudflare in the path; DNS-only (grey) records bypass every rule below. Mail/SPF/DKIM/DMARC records stay DNS-only. |
+| Proxy status | DNS → records | **Proxied (orange cloud)** for `tablekitapp.com`, `app.`, `book.`, `api.` | This is what puts Cloudflare in the path; DNS-only (grey) records bypass every rule below. Mail/SPF/DKIM/DMARC records stay DNS-only. |
 | SSL/TLS mode | SSL/TLS → Overview | **Full (strict)** | Validates the Vercel origin cert end-to-end. "Flexible"/"Full" (non-strict) would allow an unverified origin leg — never use them. |
 | Always Use HTTPS | SSL/TLS → Edge Certificates | **On** | Redirects http→https at the edge. |
 | Minimum TLS Version | SSL/TLS → Edge Certificates | **1.3** | Matches `security.md` "TLS 1.3 minimum". |
@@ -111,7 +111,7 @@ config change can't accidentally cache authenticated HTML:
 
 - **Never cache** `app.` (dashboard/admin), `api.`, and all `/api/*` paths — they're
   per-user/per-org and per-request (the dashboard CSP is nonce'd, so caching the HTML
-  would serve a stale nonce). Add a Cache Rule: **Bypass cache** for `app.tablekit.uk`
+  would serve a stale nonce). Add a Cache Rule: **Bypass cache** for `my.tablekitapp.com`
   and any `/api/*`.
 - **Cacheable:** static assets (`/_next/static/*`, fonts, images) — long-TTL,
   immutable. The public widget/booking HTML is SSR and may be edge-cached by path;

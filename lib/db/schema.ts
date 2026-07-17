@@ -682,12 +682,26 @@ export const bookings = pgTable(
     bookedByUserId: uuid("booked_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    // Marketing attribution (docs/specs/marketing-suite.md Phase B).
+    // 'link' = deterministic ?tk_c= param carried through the widget;
+    // 'click_window' = nightly fallback (guest clicked the campaign ≤7
+    // days before booking). Campaign deletion detaches, never cascades.
+    campaignId: uuid("campaign_id").references(() => campaigns.id, { onDelete: "set null" }),
+    attributionKind: text("attribution_kind"),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     cancelledReason: text("cancelled_reason"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check(
+      "bookings_attribution_kind_check",
+      sql`${t.attributionKind} is null or ${t.attributionKind} in ('link', 'click_window')`,
+    ),
+    // Campaign report page: bookings/covers attributed to one campaign.
+    index("bookings_campaign_idx")
+      .on(t.campaignId)
+      .where(sql`${t.campaignId} is not null`),
     index("bookings_venue_start_idx").on(t.venueId, t.startAt),
     index("bookings_org_idx").on(t.organisationId),
     index("bookings_guest_idx").on(t.guestId),
@@ -1405,6 +1419,15 @@ export const campaigns = pgTable(
     segment: text("segment").notNull().default("all"),
     subjectOverride: text("subject_override"),
     body: text("body").notNull(),
+    // Block-document email body ({v:1, blocks:[...]}, zod-validated at the
+    // boundary — lib/campaigns/blocks.ts). Null = legacy plain-text
+    // campaign (body renders as paragraphs). When set, `body` holds the
+    // plain-text projection. Email channel only.
+    bodyDoc: jsonb("body_doc"),
+    // Custom-HTML email body (docs/specs/custom-email-html.md). Stored
+    // ONLY post-sanitise (lib/campaigns/html-import.ts) and re-sanitised
+    // at send. Mutually exclusive with body_doc; email channel only.
+    htmlBody: text("html_body"),
     scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     // Rolling tallies {queued,sent,delivered,failed,opened,clicked} kept
@@ -1415,6 +1438,15 @@ export const campaigns = pgTable(
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    // Email-overage snapshots, captured at reserve time so reconcile
+    // refunds against the SAME allowance + rate the reserve used (the
+    // costing invariant in lib/billing/marketing-email.ts) — a plan change
+    // mid-campaign must not reprice it. Null for SMS/WhatsApp campaigns
+    // and for email campaigns launched before overage billing / while the
+    // EMAIL_OVERAGE_ENFORCED flag is off. See
+    // docs/specs/email-broadcast-billing.md.
+    allowanceRemainingAtReserve: integer("allowance_remaining_at_reserve"),
+    overagePencePer1000AtReserve: integer("overage_pence_per_1000_at_reserve"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1468,6 +1500,69 @@ export const campaignSends = pgTable(
     index("campaign_sends_worker_idx")
       .on(t.nextAttemptAt)
       .where(sql`${t.status} in ('queued','sending')`),
+    // Serves the monthly marketing-email allowance count
+    // (lib/billing/email-allowance.ts): sends in a period per org.
+    index("campaign_sends_org_email_sent_idx")
+      .on(t.organisationId, t.sentAt)
+      .where(sql`${t.channel} = 'email' and ${t.sentAt} is not null`),
+  ],
+);
+
+// Saved email designs (marketing-suite: templates). Org-scoped like the
+// billing tables — organisation_id is the natural top-level key (no venue
+// parent, no enforce trigger). RLS grants members SELECT; all writes go
+// through org-guarded server actions via adminDb. body_doc holds a
+// validated CampaignBodyDoc (re-validated on read — jsonb is untrusted).
+export const campaignTemplates = pgTable(
+  "campaign_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    subject: text("subject"),
+    bodyDoc: jsonb("body_doc").notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("campaign_templates_org_idx").on(t.organisationId)],
+);
+
+// Per-URL click tracking for the per-campaign report (marketing-suite
+// Phase C "link-level clicks"). One row per (send, url) — the unique
+// index makes a repeat click on the same link idempotent, so the report
+// counts UNIQUE clickers per URL, not raw click volume. organisation_id
+// is populated by enforce_campaign_link_clicks_org_id from the parent
+// campaign. Behavioural data keyed to a guest via campaign_send_id: the
+// FK cascades, so both DSAR erasure (deletes the guest's sends) and the
+// 24-month retention sweep remove these rows automatically — no separate
+// scrub path. Writes are adminDb-only from the Resend webhook; RLS grants
+// members SELECT. We store only the URL — never the IP / user-agent that
+// Resend includes in the click payload.
+export const campaignLinkClicks = pgTable(
+  "campaign_link_clicks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    campaignSendId: uuid("campaign_send_id")
+      .notNull()
+      .references(() => campaignSends.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    firstClickedAt: timestamp("first_clicked_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("campaign_link_clicks_send_url_unique").on(t.campaignSendId, t.url),
+    index("campaign_link_clicks_campaign_idx").on(t.campaignId),
+    index("campaign_link_clicks_org_idx").on(t.organisationId),
   ],
 );
 
@@ -1825,7 +1920,7 @@ export const importJobs = pgTable(
 // AI enquiries (Plus tier)
 // =============================================================================
 //
-// One row per inbound email at `<venue-slug>@enquiries.tablekit.uk`.
+// One row per inbound email at `<venue-slug>@enquiries.tablekitapp.com`.
 // Lifecycle: received → parsing → draft_ready → replied | failed
 // (`discarded` is the operator's "this isn't an enquiry" escape hatch).
 //
@@ -1908,7 +2003,7 @@ export const enquiries = pgTable(
 // Operators can add a domain they own (e.g. `mail.jane-cafe.co.uk`)
 // and prove ownership via DKIM/SPF DNS records; once verified, enquiry
 // replies go out from that domain instead of the platform default —
-// dropping the "via tablekit.uk" suffix Gmail otherwise appends.
+// dropping the "via tablekitapp.com" suffix Gmail otherwise appends.
 //
 // Source of truth for verification status is Resend's Domains API.
 // We mirror enough into this row to render status server-side without
@@ -1996,7 +2091,7 @@ export const inboundWebhookEvents = pgTable("inbound_webhook_events", {
 // API keys (Plus tier)
 // =============================================================================
 //
-// Bearer tokens for the public REST API at api.tablekit.uk/v1.
+// Bearer tokens for the public REST API at api.tablekitapp.com/v1.
 // Format: `sk_live_<base64url(24 random bytes)>` — 32 chars after the
 // prefix, ~192 bits of entropy. The plaintext key is shown to the
 // operator exactly once at issuance and never persisted; we store

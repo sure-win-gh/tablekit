@@ -38,7 +38,7 @@ Three forks, my recommendation marked:
 | Phase | What ships |
 |---|---|
 | **`bookings` (this plan)** | `bookings` + `booking_events` schema, denormalised `organisation_id` + triggers, RLS, the pure `availability.ts` engine with 100% unit coverage, state machine helper, **host-side** manual create + read + state-transition actions, a "today's bookings" dashboard page per venue, integration tests (cross-tenant + state machine), e2e smoke. |
-| `widget` (next in MVP order) | Public `/api/v1/bookings` POST endpoint, anonymous guest upsert, rate limiting via Upstash, the actual guest-facing booking UI at `book.tablekit.uk`. |
+| `widget` (next in MVP order) | Public `/api/v1/bookings` POST endpoint, anonymous guest upsert, rate limiting via Upstash, the actual guest-facing booking UI at `book.tablekitapp.com`. |
 | `payments` | Deposit capture (Stripe Elements + PaymentIntent), `deposit_intent_id` wired, no-show capture cron, refund flow. |
 | `messaging` | Transactional emails/SMS on confirm / cancel / reminder; guest-cancel tokenized link; Resend + Twilio. |
 | `bookings-availability-v2` (maybe) | Materialised availability cache if real-time slot search proves too slow. Probably never needed for MVP scale. |

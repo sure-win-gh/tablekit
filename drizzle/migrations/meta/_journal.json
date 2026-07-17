@@ -449,6 +449,48 @@
       "when": 1784206684000,
       "tag": "0063_bookings_source_event",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1784300001000,
+      "tag": "0064_email_broadcast_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1784300002000,
+      "tag": "0065_campaign_body_doc",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1784300003000,
+      "tag": "0066_booking_campaign_attribution",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1784300004000,
+      "tag": "0067_campaign_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1784300005000,
+      "tag": "0068_campaign_html_body",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1784300006000,
+      "tag": "0069_famous_flatman",
+      "breakpoints": true
     }
   ]
 }

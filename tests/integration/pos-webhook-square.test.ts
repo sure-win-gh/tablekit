@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 // Configure the verifier before the module-under-test reads env at call time.
 process.env["SQUARE_WEBHOOK_SIGNATURE_KEY"] = "sq-test-signature-key";
-process.env["SQUARE_WEBHOOK_URL"] = "https://api.tablekit.uk/api/webhooks/pos/square";
+process.env["SQUARE_WEBHOOK_URL"] = "https://api.tablekitapp.com/api/webhooks/pos/square";
 
 import * as schema from "@/lib/db/schema";
 import { upsertPosConnection } from "@/lib/pos/connection";

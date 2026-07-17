@@ -1,7 +1,7 @@
 # TableKit security contact — RFC 9116
-# https://tablekit.uk/security
-Contact: mailto:security@tablekit.uk
+# https://tablekitapp.com/security
+Contact: mailto:security@tablekitapp.com
 Expires: 2027-04-26T00:00:00.000Z
 Preferred-Languages: en
-Canonical: https://tablekit.uk/.well-known/security.txt
-Policy: https://tablekit.uk/security
+Canonical: https://tablekitapp.com/.well-known/security.txt
+Policy: https://tablekitapp.com/security

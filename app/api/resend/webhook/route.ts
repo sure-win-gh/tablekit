@@ -18,16 +18,34 @@ import {
   ResendWebhookSignatureError,
   verifyResendWebhook,
 } from "@/lib/email/webhook-verify";
-import { bookings, campaignSends, campaigns, guests, messages } from "@/lib/db/schema";
+import {
+  bookings,
+  campaignLinkClicks,
+  campaignSends,
+  campaigns,
+  guests,
+  messages,
+} from "@/lib/db/schema";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+// Clicked-link URLs are truncated to this length before insert — keeps
+// them under Postgres's ~2704-byte btree-index limit so a pathological
+// URL can't throw and wedge the webhook into an infinite Resend retry.
+const MAX_TRACKED_URL_LEN = 2048;
+
 type ResendEvent = {
   type: string;
-  data?: { email_id?: string; bounce?: { type?: string } };
+  data?: {
+    email_id?: string;
+    bounce?: { type?: string };
+    // email.clicked carries the clicked link (plus ip/user-agent we
+    // deliberately never store). Resend nests it under `click.link`.
+    click?: { link?: string };
+  };
 };
 
 export async function POST(req: NextRequest) {
@@ -189,7 +207,33 @@ async function handleCampaignEvent(event: ResendEvent, providerId: string) {
         .set({ clickedAt: sql`now()` })
         .where(sql`${campaignSends.id} = ${cs.id} and ${campaignSends.clickedAt} is null`)
         .returning({ id: campaignSends.id });
+      // The `clicked` tally counts unique clickers (first click per send),
+      // so it only bumps on the first-click transition above.
       if (r.length > 0) await bump("clicked");
+      // Per-URL link tracking (marketing-suite Phase C) is independent of
+      // the first-click guard: record every distinct link this send
+      // clicked. The unique (send, url) index dedupes repeat clicks on the
+      // same link, so the report counts unique clickers per URL. Only the
+      // URL is stored — never the ip/user-agent Resend also sends.
+      const link = event.data?.click?.link;
+      if (link) {
+        // Cap the URL before it hits the unique btree index: Postgres
+        // rejects index entries past ~2704 bytes, and an unguarded throw
+        // here would 500 the webhook and make Resend retry the event
+        // forever. 2048 is the conventional URL ceiling; longer links are
+        // truncated for tracking (report display only).
+        await db
+          .insert(campaignLinkClicks)
+          .values({
+            organisationId: cs.organisationId, // defence-in-depth; the enforce trigger overwrites it
+            campaignId: cs.campaignId,
+            campaignSendId: cs.id,
+            url: link.slice(0, MAX_TRACKED_URL_LEN),
+          })
+          .onConflictDoNothing({
+            target: [campaignLinkClicks.campaignSendId, campaignLinkClicks.url],
+          });
+      }
       break;
     }
     case "email.bounced":

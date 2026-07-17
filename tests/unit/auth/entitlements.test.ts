@@ -16,17 +16,14 @@ describe("FEATURES map", () => {
     }
   });
 
-  it("matches the commercial ladder: Core for deposits/messaging, Plus for the rest", () => {
+  it("matches the commercial ladder: Core for deposits/messaging/campaigns, Plus for the rest", () => {
     expect(FEATURES.deposits.minPlan).toBe("core");
     expect(FEATURES.messaging.minPlan).toBe("core");
-    for (const f of [
-      "enquiries",
-      "insights",
-      "serviceSummary",
-      "crm",
-      "campaigns",
-      "apiKeys",
-    ] as const) {
+    // Campaigns unlock at Core (email broadcasts with an allowance); the
+    // SMS/WhatsApp channels + audience segments are gated Plus inside the
+    // feature, not on this map. See docs/specs/email-broadcast-billing.md.
+    expect(FEATURES.campaigns.minPlan).toBe("core");
+    for (const f of ["enquiries", "insights", "serviceSummary", "crm", "apiKeys"] as const) {
       expect(FEATURES[f].minPlan).toBe("plus");
     }
   });

@@ -109,17 +109,17 @@ export default function PrivacyPage() {
         <p>
           For privacy questions:{" "}
           <Link
-            href="mailto:privacy@tablekit.uk"
+            href="mailto:privacy@tablekitapp.com"
             className="text-ink hover:text-coral font-semibold underline underline-offset-4"
           >
-            privacy@tablekit.uk
+            privacy@tablekitapp.com
           </Link>
           . For security:{" "}
           <Link
-            href="mailto:security@tablekit.uk"
+            href="mailto:security@tablekitapp.com"
             className="text-ink hover:text-coral font-semibold underline underline-offset-4"
           >
-            security@tablekit.uk
+            security@tablekitapp.com
           </Link>
           .
         </p>

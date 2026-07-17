@@ -127,7 +127,10 @@ describe("enqueueCampaign prepaid gate", () => {
       .limit(1);
     await db
       .update(schema.campaignSends)
-      .set({ status: "sent" })
+      // A real send stamps sent_at as well as status; reconcile counts
+      // sent_at (not status), so the fixture must set it or the send is
+      // seen as unsent and the full reserve is refunded.
+      .set({ status: "sent", sentAt: NOW })
       .where(eq(schema.campaignSends.id, firstSend!.id));
 
     await reconcileCampaign(campaignId);

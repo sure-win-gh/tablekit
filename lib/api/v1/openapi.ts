@@ -190,7 +190,7 @@ export function buildOpenApiDocument() {
         "Guides in plain English: https://tablekit.uk/docs",
       ].join("\n"),
     },
-    servers: [{ url: "https://api.tablekit.uk/v1" }],
+    servers: [{ url: "https://api.tablekitapp.com/v1" }],
     components: {
       securitySchemes: {
         bearerAuth: {

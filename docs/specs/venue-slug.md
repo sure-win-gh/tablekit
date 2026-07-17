@@ -5,9 +5,9 @@
 
 ## What we're building
 
-A friendly URL form for the public booking page. Operators can pick a slug (`book.tablekit.uk/jane-cafe`) instead of relying on the UUID URL (`book.tablekit.uk/<uuid>`). Existing UUID URLs keep working forever — slugs are an addition, not a replacement.
+A friendly URL form for the public booking page. Operators can pick a slug (`book.tablekitapp.com/jane-cafe`) instead of relying on the UUID URL (`book.tablekitapp.com/<uuid>`). Existing UUID URLs keep working forever — slugs are an addition, not a replacement.
 
-The widget spec already references `book.tablekit.uk/<venue-slug>` aspirationally; this is its implementation.
+The widget spec already references `book.tablekitapp.com/<venue-slug>` aspirationally; this is its implementation.
 
 ## User stories
 

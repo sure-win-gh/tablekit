@@ -48,6 +48,8 @@ This folder holds the source of truth for every feature. Claude should read the 
 
 |27 | [`special-events.md`](special-events.md) | scoping — Plus-tier ticketed event days. New `special_events` (doubles as a general venue-closure primitive) + `event_ticket_types` + `event_order_items` tables (all RLS); date-blocking injected into `availability.ts`/month-calendar as an `event` day state. **Native Stripe-Connect ticketing** reuses the deposits rails (event purchase = `booking` with `source='event'`, `table_id null`, new `payments.kind='event_ticket'`); oversell-proof capacity via atomic `quantity_sold` reservation + janitor release. Phased: block-dates + link-out → native ticketing → pre-ordered menus/offers + cancellation-with-bulk-refund + door check-in. Build plan in [`special-events-plan.md`](special-events-plan.md). |
 
+|26 | [`custom-email-html.md`](custom-email-html.md) | scoping — custom HTML email mode (paste from Canva Email's HTML export or any tool) + Canva Connect integration. Phased: image-first Canva workflow (shipped via banner/image blocks) → sanitised "Custom HTML" mode with forced unsubscribe footer + tk_c rewriting → Canva Connect OAuth import (PNG first, HTML pending API verification). |
+
 ## Internal tools
 
 | #  | Spec                                       | Notes |

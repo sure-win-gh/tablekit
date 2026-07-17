@@ -18,10 +18,11 @@
 
 import "server-only";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import { estimateCostPence } from "@/lib/billing/usage";
+import { emailCampaignCostPence } from "@/lib/billing/marketing-email";
 import { billingCreditLedger, campaigns, campaignSends, organisations } from "@/lib/db/schema";
 import type * as schema from "@/lib/db/schema";
 import type { MessageChannel } from "@/lib/messaging/registry";
@@ -195,7 +196,12 @@ export async function reserveForCampaign(
 export async function reconcileCampaign(campaignId: string): Promise<void> {
   const db = adminDb();
   const [campaign] = await db
-    .select({ organisationId: campaigns.organisationId, channel: campaigns.channel })
+    .select({
+      organisationId: campaigns.organisationId,
+      channel: campaigns.channel,
+      allowanceRemainingAtReserve: campaigns.allowanceRemainingAtReserve,
+      overagePencePer1000AtReserve: campaigns.overagePencePer1000AtReserve,
+    })
     .from(campaigns)
     .where(eq(campaigns.id, campaignId))
     .limit(1);
@@ -214,15 +220,28 @@ export async function reconcileCampaign(campaignId: string): Promise<void> {
   const reservedPence = reserve ? -reserve.delta : 0;
   if (reservedPence <= 0) return; // nothing was reserved (e.g. email campaign)
 
+  // A send that succeeded has sent_at stamped; its status may since have
+  // advanced to 'delivered' (or 'bounced') via provider webhooks. Those
+  // sends still cost us, so count sent_at — counting status='sent' would
+  // over-refund any campaign whose delivery events land before reconcile.
   const [{ n } = { n: 0 }] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(campaignSends)
-    .where(and(eq(campaignSends.campaignId, campaignId), eq(campaignSends.status, "sent")));
+    .where(and(eq(campaignSends.campaignId, campaignId), isNotNull(campaignSends.sentAt)));
 
-  // INVARIANT: reconcile MUST cost actuals with the same function the
-  // reserve used (estimateCostPence), or refunds drift. If cost ever
-  // becomes per-message/variable, reserve + reconcile must change together.
-  const actualPence = estimateCostPence(campaign.channel as MessageChannel, n);
+  // INVARIANT: reconcile MUST cost actuals with the same function AND the
+  // same base the reserve used — estimateCostPence for SMS/WhatsApp;
+  // emailCampaignCostPence against the allowance + rate SNAPSHOTS taken at
+  // reserve time for email (a plan change mid-campaign must not reprice
+  // it). If cost ever changes shape, reserve + reconcile change together.
+  const actualPence =
+    campaign.channel === "email"
+      ? emailCampaignCostPence(
+          n,
+          campaign.allowanceRemainingAtReserve ?? 0,
+          campaign.overagePencePer1000AtReserve ?? 0,
+        )
+      : estimateCostPence(campaign.channel as MessageChannel, n);
   const refund = Math.max(0, reservedPence - actualPence);
   if (refund === 0) return;
 

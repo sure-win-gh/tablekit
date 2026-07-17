@@ -9,14 +9,14 @@
 export const SITE = {
   name: "TableKit",
   legalName: "TableKit Ltd",
-  // Marketing origin. The booking surface lives at book.tablekit.uk and
-  // the API at api.tablekit.uk; this is the public marketing host.
-  url: process.env["NEXT_PUBLIC_SITE_URL"] ?? "https://tablekit.uk",
+  // Marketing origin. The booking surface lives at book.tablekitapp.com and
+  // the API at api.tablekitapp.com; this is the public marketing host.
+  url: process.env["NEXT_PUBLIC_SITE_URL"] ?? "https://tablekitapp.com",
   // The canonical, attributable claim. Kept factual so it can be quoted.
   tagline: "Table booking for independent UK hospitality, without the per-cover fees.",
   oneLiner:
     "TableKit is a UK table-booking platform for independent cafés, pubs and restaurants — free for up to 50 bookings a month, with paid plans from £29 + VAT and no long contracts.",
-  contactEmail: "hello@tablekit.uk",
+  contactEmail: "hello@tablekitapp.com",
 } as const;
 
 // Primary action everywhere: free sign-up into the existing flow.

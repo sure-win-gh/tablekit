@@ -5,7 +5,7 @@
 
 ## What we're building
 
-A richer, TheFork-style hosted booking page at `book.tablekit.uk/<venue-slug>` for **Core and Plus** venues: venue profile (description, cuisine, price range, address, contact), an aggregate star rating built from **Google + internal** reviews, a photo gallery, a stylised availability calendar, and a map. Free venues keep today's simple page.
+A richer, TheFork-style hosted booking page at `book.tablekitapp.com/<venue-slug>` for **Core and Plus** venues: venue profile (description, cuisine, price range, address, contact), an aggregate star rating built from **Google + internal** reviews, a photo gallery, a stylised availability calendar, and a map. Free venues keep today's simple page.
 
 The work ships in four phases (see Roadmap). This spec is the source of truth for all four; Phase 1 is implemented first.
 
