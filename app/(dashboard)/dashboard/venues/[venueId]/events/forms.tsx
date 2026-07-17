@@ -1,6 +1,7 @@
 "use client";
 
 import { ExternalLink, Plus } from "lucide-react";
+import Link from "next/link";
 import { useActionState, useEffect, useState } from "react";
 
 import { cn } from "@/components/ui";
@@ -19,7 +20,17 @@ const STATUS_META: Record<EventStatus, { label: string; className: string }> = {
 // ---------------------------------------------------------------------------
 // New event — collapsed behind a button (auto-open when there are none yet).
 // ---------------------------------------------------------------------------
-export function NewEventForm({ venueId, startOpen }: { venueId: string; startOpen: boolean }) {
+export function NewEventForm({
+  venueId,
+  startOpen,
+  areaOptions,
+}: {
+  venueId: string;
+  startOpen: boolean;
+  // Floor-plan areas for the scope chips. Chips render only with ≥2 areas
+  // (with one area, scoping is meaningless — it IS the venue).
+  areaOptions: { id: string; name: string }[];
+}) {
   const [state, action, pending] = useActionState<ActionState, FormData>(createSpecialEvent, {
     status: "idle",
   });
@@ -123,6 +134,26 @@ export function NewEventForm({ venueId, startOpen }: { venueId: string; startOpe
         )}
       </div>
 
+      {areaOptions.length >= 2 ? (
+        <fieldset className="flex flex-col gap-1.5 text-sm">
+          <legend className="text-ink text-xs font-medium">Blocks which areas?</legend>
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {areaOptions.map((a) => (
+              <label key={a.id} className="cursor-pointer">
+                <input type="checkbox" name="area_ids" value={a.id} className="peer sr-only" />
+                <span className="rounded-pill border-hairline text-ash peer-checked:border-ink peer-checked:bg-ink hover:border-ink inline-flex border bg-white px-3 py-1 text-xs font-semibold transition select-none peer-checked:text-white">
+                  {a.name}
+                </span>
+              </label>
+            ))}
+          </div>
+          <span className="text-ash text-[11px]">
+            Leave all unticked to block the whole venue. Tick areas to close only those — the rest
+            keeps taking standard bookings.
+          </span>
+        </fieldset>
+      ) : null}
+
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-ink text-xs font-medium">
           Ticket link <span className="text-ash">(optional)</span>
@@ -204,6 +235,8 @@ export function EventRow({
     externalTicketUrl: string | null;
     dateLabel: string;
     timeLabel: string;
+    // e.g. "Terrace only" / "Terrace + Bar only"; null = whole venue.
+    scopeLabel: string | null;
   };
   venueId: string;
 }) {
@@ -242,10 +275,16 @@ export function EventRow({
           {meta.label}
         </span>
         <span className="text-ink min-w-0 flex-1 truncate text-sm">
-          {event.name}
+          <Link
+            href={`/dashboard/venues/${venueId}/events/${event.id}`}
+            className="hover:text-coral font-medium"
+          >
+            {event.name}
+          </Link>
           <span className="text-ash">
             {" · "}
             {event.timeLabel}
+            {event.scopeLabel ? ` · ${event.scopeLabel}` : ""}
           </span>
           {event.externalTicketUrl ? (
             <a

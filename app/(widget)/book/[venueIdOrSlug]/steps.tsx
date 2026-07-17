@@ -168,6 +168,20 @@ function MonthCalendar({
   monthLink: (m: string) => LinkProps;
 }) {
   const weeks = monthGridDays(`${month}-01`);
+  // Area-scoped events in view: days that still take standard bookings but
+  // also host a ticketed event (status ≠ "event"). Whole-venue event days
+  // already render as coral event cells, so only scoped ones need the
+  // banner (spec §Area-scoped events: banner, not dual targets in a cell).
+  const seenEventSlugs = new Set<string>();
+  const scopedEvents: { slug: string; name: string; ymd: string }[] = [];
+  for (const [ymd, ev] of Object.entries(events)) {
+    if (days[ymd] === "event") continue;
+    if (ymd.slice(0, 7) !== month) continue;
+    if (seenEventSlugs.has(ev.slug)) continue;
+    seenEventSlugs.add(ev.slug);
+    scopedEvents.push({ slug: ev.slug, name: ev.name, ymd });
+  }
+  scopedEvents.sort((a, b) => (a.ymd < b.ymd ? -1 : 1));
   const monthLabel = new Date(`${month}-01T12:00:00Z`).toLocaleDateString("en-GB", {
     month: "long",
     year: "numeric",
@@ -262,6 +276,26 @@ function MonthCalendar({
           );
         })}
       </div>
+      {scopedEvents.length > 0 ? (
+        <div className="flex flex-col gap-1 pt-1">
+          {scopedEvents.map((ev) => (
+            <a
+              key={ev.slug}
+              href={eventHref(ev.slug)}
+              className="border-coral/40 bg-coral/5 text-coral-deep hover:border-coral rounded-input flex items-center justify-between gap-2 border px-3 py-1.5 text-xs font-semibold"
+            >
+              <span className="min-w-0 truncate">🎟 {ev.name}</span>
+              <span className="shrink-0">
+                {new Date(`${ev.ymd}T12:00:00Z`).toLocaleDateString("en-GB", {
+                  day: "numeric",
+                  month: "short",
+                })}{" "}
+                · tickets →
+              </span>
+            </a>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

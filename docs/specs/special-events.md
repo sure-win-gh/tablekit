@@ -33,6 +33,7 @@ Right now the availability engine (`lib/bookings/availability.ts`) has no notion
 |---|---|
 | **1** | `special_events` model + **date blocking** wired into availability + month-calendar "event" day state + dashboard event CRUD (no ticketing) + public event landing card with optional operator "Get tickets" **link-out**. Ships closures + link-out value immediately. |
 | **2** | **Native ticketing.** `event_ticket_types` + oversell-safe capacity reservation + public ticket picker → Stripe Connect checkout reusing `payments-deposits` rails + event bookings through the standard pipeline (guest record, confirmation email/SMS, dashboard attendee list, refunds). |
+| **2.5 (pre-launch)** | **Area-scoped events.** An event can block specific floor-plan areas instead of the whole venue ("Terrace closed for Beaujolais tasting; Main keeps taking standard bookings"). Whole-venue stays the default and becomes the special case of "all areas". See §Area-scoped events. |
 | **3** | **Pre-ordered menus / offers / add-ons** per ticket; **event cancellation with bulk refund**; door **check-in** (QR / attendee list mark-off); event-level revenue in `reporting.md`; **"duplicate event"** (Beaujolais is annual — clone last year's event to a new date). |
 
 ## User stories
@@ -185,9 +186,24 @@ Phase 2 (ticketing):
 - [ ] Refund from the existing booking detail view works for event bookings; ticket-return-to-inventory honours the operator checkbox; partial refund can't exceed amount-minus-prior-refunds (server-enforced).
 - [ ] With Stripe off (`paymentsDisabled()`/`stripeEnabled()` false), ticket creation is blocked and the event page degrades to link-out / "unavailable" — never a broken checkout.
 
+## Area-scoped events (Phase 2.5 — pre-launch)
+
+An event may block a subset of the venue's floor-plan **areas** rather than the whole venue. The Terrace runs the ticketed tasting while Main keeps taking standard bookings.
+
+Decisions and invariants:
+
+- **Data model:** `special_event_areas` junction (`event_id`, `area_id`, denormalised `organisation_id`; PK `(event_id, area_id)`; RLS member-read). **Zero rows = whole venue** — every existing event keeps today's behaviour with no backfill, and whole-venue remains the default in the form.
+- **Area deletion is restricted, not cascaded.** The junction's `area_id` FK is `ON DELETE NO ACTION`: deleting an area referenced by an event fails with a clear error and the operator edits the event first. Rationale: cascading could silently empty the junction and flip an area-scoped event to whole-venue — a semantic change no one asked for.
+- **Availability semantics:** `ClosureWindow` gains `areaIds: string[] | null` (null = whole venue). In `findSlots`, a whole-venue closure drops the candidate slot outright (today's behaviour, unchanged); an area-scoped closure instead **removes that area's tables from the free set** for the window before options are built. If every area is scoped, the free set empties and the slot disappears — whole-venue is literally the degenerate case, one code path. Same-area combining collapses naturally (combos are built from the free set).
+- **`venue-closed` stays whole-venue-only.** The distinct 409 reason (and the widget copy pointing at the event) only fires when a whole-venue closure covers the requested instant. An area-scoped closure that eliminates a specific slot is ordinary `no-availability` — other areas may well have tables, so "the venue is closed" would be wrong.
+- **Month calendar — the mixed day.** A day covered only by area-scoped events is *both* bookable and an event day. Day classification: `"event"` **only when a whole-venue blocking event covers the day**; otherwise the day classifies open/full/closed as normal from the remaining tables. The per-day `events` map is populated for *any* day overlapped by a published blocking event (whole-venue or scoped), and the calendar renders scoped-event days as a normal bookable cell plus a slim **event banner** beneath the calendar ("🎟 {name} · {date} — tickets") linking to the event page. Banner, not in-cell dual targets: a 40px grid cell can't hold two tap targets accessibly.
+- **Publish-collision warning scopes too:** publishing an area-scoped event counts only standard bookings whose `area_id` is in the scoped set.
+- **Tickets stay GA.** Ticket capacity is still an operator-set number, deliberately not derived from the area's covers (an event can pack a terrace beyond its seated capacity, or cap below it). The ticket-type form shows the scoped areas' total covers as a **hint**, never enforcement.
+- **Purchase flow untouched.** Reservation, Stripe intent, janitor, webhook — all unaware of areas.
+
 ## Out of scope
 
-- **Reserved-seat / table selection for events.** Events sell general-admission ticket counts against event capacity, not specific tables — that's the whole point of bypassing the table-availability engine. Table booking stays the standard flow.
+- **Reserved-seat / table selection for events.** Events sell general-admission ticket counts against event capacity (GA within the scoped areas once Phase 2.5 lands), not specific tables — that's the whole point of bypassing the table-availability engine. Table booking stays the standard flow.
 - **Recurring-event engine.** Beaujolais Day is annual, but recurrence is handled by a Phase 3 "duplicate event" clone, not a schedule engine.
 - **Waitlist for sold-out events.** Could later reuse `waitlist.md`; not MVP.
 - **Dynamic / time-based pricing** (early-bird tiers auto-expiring). Operators create a new tier manually.
