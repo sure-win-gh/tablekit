@@ -16,10 +16,11 @@
 import "server-only";
 
 import type Stripe from "stripe";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { bookingEvents, bookings, payments } from "@/lib/db/schema";
 import { onBookingConfirmed } from "@/lib/messaging/triggers";
+import { captureMessage } from "@/lib/observability/capture";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 
@@ -82,10 +83,52 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
     })
     .where(eq(payments.id, payment.id));
 
-  await db
+  // Confirm ONLY a booking still awaiting payment. Without the status
+  // guard a late success could resurrect a janitor-cancelled booking
+  // whose capacity/tables were already released (→ oversell /
+  // double-booking), or downgrade a seated/finished booking.
+  const confirmed = await db
     .update(bookings)
     .set({ status: "confirmed", depositIntentId: pi.id })
-    .where(eq(bookings.id, payment.bookingId));
+    .where(and(eq(bookings.id, payment.bookingId), eq(bookings.status, "requested")))
+    .returning({ id: bookings.id });
+
+  if (confirmed.length === 0) {
+    // Money was taken for a booking we can't confirm (most likely
+    // cancelled by the janitor after release). Keep the payments row
+    // `succeeded` (it reflects Stripe reality), never re-confirm, and
+    // alert so the operator refunds from the dashboard — refunds are
+    // dashboard-only per the payments playbook.
+    const [current] = await db
+      .select({ status: bookings.status })
+      .from(bookings)
+      .where(eq(bookings.id, payment.bookingId))
+      .limit(1);
+    await audit.log({
+      organisationId: payment.organisationId,
+      actorUserId: null,
+      action: "stripe.paid_after_cancel",
+      targetType: "payment",
+      targetId: payment.id,
+      metadata: {
+        intentId: pi.id,
+        bookingId: payment.bookingId,
+        kind: payment.kind,
+        bookingStatus: current?.status ?? "missing",
+      },
+    });
+    captureMessage(
+      "stripe.paid_after_cancel: intent succeeded for non-requested booking",
+      "error",
+      {
+        paymentId: payment.id,
+        bookingId: payment.bookingId,
+        bookingStatus: current?.status ?? "missing",
+        kind: payment.kind,
+      },
+    );
+    return;
+  }
 
   await db.insert(bookingEvents).values({
     organisationId: payment.organisationId,

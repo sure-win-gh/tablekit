@@ -18,7 +18,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { syncAllConnectedGoogleVenues } from "@/lib/google/sync-reviews";
 import { processNextBatch } from "@/lib/messaging/dispatch";
-import { sweepAbandonedDeposits } from "@/lib/payments/janitor";
+import { sweepAbandonedDeposits, sweepAbandonedEventBookings } from "@/lib/payments/janitor";
 import { sweepDueNoShowCaptures } from "@/lib/payments/no-show";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +35,8 @@ export async function GET(req: NextRequest) {
   }
 
   const janitor = await sweepAbandonedDeposits();
+  // Release capacity held by abandoned event-ticket purchases (Phase 2).
+  const eventJanitor = await sweepAbandonedEventBookings();
   const noShow = await sweepDueNoShowCaptures();
   // Drain whatever messaging work is due. 200 rows is a generous cap;
   // each send is ~500ms, well under Vercel's function timeout.
@@ -45,6 +47,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     abandonment: janitor,
+    eventAbandonment: eventJanitor,
     noShow,
     messages,
     googleReviews,
