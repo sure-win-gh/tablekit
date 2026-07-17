@@ -1,6 +1,6 @@
 import { CtaLink } from "./cta-link";
 import { TrustLine } from "./trust-line";
-import { DEMO_HREF, DEMO_IS_EXTERNAL, SIGNUP_HREF } from "@/lib/marketing/site";
+import { DEMO_CTA_EXTERNAL, DEMO_CTA_HREF, SIGNUP_HREF } from "@/lib/marketing/site";
 
 // The repeated closing call-to-action. Same single primary action every
 // time (free sign-up), with the demo as the only secondary, and honest
@@ -25,7 +25,7 @@ export function CtaBand({
           <CtaLink href={SIGNUP_HREF} size="lg">
             Start free — no card needed
           </CtaLink>
-          <CtaLink href={DEMO_HREF} variant="secondary" size="lg" external={DEMO_IS_EXTERNAL}>
+          <CtaLink href={DEMO_CTA_HREF} variant="secondary" size="lg" external={DEMO_CTA_EXTERNAL}>
             Book a 15-min demo
           </CtaLink>
         </div>

@@ -46,6 +46,12 @@ const HCAPTCHA = ["https://hcaptcha.com", "https://*.hcaptcha.com"];
 // the violating page, dodging cross-origin reporting restrictions.
 const REPORT_URI = "/api/csp-report";
 
+// Serialise a directive list to a CSP header string. Shared by every policy
+// below so their formatting can't drift.
+function serializeCsp(directives: Array<[string, string[]]>): string {
+  return directives.map(([name, values]) => `${name} ${values.join(" ")}`).join("; ");
+}
+
 function buildCsp({ frameAncestors }: { frameAncestors: string }): string {
   // 'unsafe-inline' on script-src is the unfortunate cost of Next.js
   // server-rendered hydration scripts. The nonce-based approach is
@@ -53,7 +59,7 @@ function buildCsp({ frameAncestors }: { frameAncestors: string }): string {
   // we're report-only for now, so keep this and tighten in a follow-up.
   // 'unsafe-inline' on style-src covers Tailwind + Stripe Elements +
   // hCaptcha which all inject inline styles.
-  const directives: Array<[string, string[]]> = [
+  return serializeCsp([
     ["default-src", ["'self'"]],
     ["connect-src", ["'self'", "https://api.tablekitapp.com", ...STRIPE, ...HCAPTCHA]],
     ["script-src", ["'self'", "'unsafe-inline'", ...STRIPE_SCRIPTS, ...HCAPTCHA]],
@@ -66,12 +72,32 @@ function buildCsp({ frameAncestors }: { frameAncestors: string }): string {
     ["form-action", ["'self'"]],
     ["object-src", ["'none'"]],
     ["report-uri", [REPORT_URI]],
-  ];
-  return directives.map(([name, values]) => `${name} ${values.join(" ")}`).join("; ");
+  ]);
 }
 
 const EMBED_CSP = buildCsp({ frameAncestors: "*" });
 const BOOK_CSP = buildCsp({ frameAncestors: "'self'" });
+
+// CSP for the /demo marketing page (demo-scheduler.md). The marketing site has
+// no site-wide CSP today, so this is a net-new, report-only, page-scoped policy.
+// PR 1 is self-only — no third-party origins (the page is a plain link-out). The
+// follow-up PR adds the Cal.com embed and extends `script-src` / `frame-src` /
+// `connect-src` with `https://app.cal.com` (+ `https://cal.com` on frame-src)
+// alongside the island — kept report-only, matching the /book /embed posture.
+const DEMO_CSP = serializeCsp([
+  ["default-src", ["'self'"]],
+  ["script-src", ["'self'", "'unsafe-inline'"]],
+  ["style-src", ["'self'", "'unsafe-inline'"]],
+  ["img-src", ["'self'", "data:", "https:"]],
+  ["font-src", ["'self'", "data:"]],
+  ["connect-src", ["'self'"]],
+  ["frame-src", ["'self'"]],
+  ["frame-ancestors", ["'self'"]],
+  ["base-uri", ["'self'"]],
+  ["form-action", ["'self'"]],
+  ["object-src", ["'none'"]],
+  ["report-uri", [REPORT_URI]],
+]);
 
 const nextConfig: NextConfig = {
   async headers() {
@@ -89,6 +115,14 @@ const nextConfig: NextConfig = {
         // /book (frame-ancestors 'self'; no Stripe/captcha needed here).
         source: "/events/:path*",
         headers: [{ key: "Content-Security-Policy-Report-Only", value: BOOK_CSP }],
+      },
+      {
+        // Marketing demo page (demo-scheduler.md). `:path*` matches the bare
+        // /demo and any future sub-route (e.g. a /demo/thanks confirmation), so
+        // the policy can't silently miss one — same pattern as the siblings.
+        // Self-only for now; the Cal embed PR extends DEMO_CSP with Cal origins.
+        source: "/demo/:path*",
+        headers: [{ key: "Content-Security-Policy-Report-Only", value: DEMO_CSP }],
       },
     ];
   },
