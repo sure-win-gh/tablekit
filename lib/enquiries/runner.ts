@@ -33,7 +33,7 @@
 
 import "server-only";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, notInArray, sql } from "drizzle-orm";
 
 import { enquiries, venues as venuesTable } from "@/lib/db/schema";
 import { loadPublicAvailability, loadPublicVenue } from "@/lib/public/venue";
@@ -49,6 +49,9 @@ import { sanitiseEnquiryError } from "./sanitise-error";
 import { resolveFromAddress, sendEnquiryReply } from "./send-reply";
 import type { ParsedEnquiry, SuggestedSlot } from "./types";
 
+import { checkAiBudget } from "@/lib/billing/ai-caps";
+import { recordAiUsage } from "@/lib/billing/ai-usage";
+import { captureException } from "@/lib/observability/capture";
 import { audit } from "@/lib/server/admin/audit";
 
 // Cap on parse attempts — every retry costs Bedrock tokens.
@@ -73,7 +76,11 @@ export type ProcessResult =
         | "terminal"
         | "retry-pending"
         | "rate-limited-org"
-        | "rate-limited-sender";
+        | "rate-limited-sender"
+        | "budget-paused";
+      // Set for budget-paused so the tick can skip the org's queue
+      // without starving other orgs.
+      organisationId?: string;
     };
 
 export async function processEnquiry(enquiryId: string): Promise<ProcessResult> {
@@ -105,6 +112,29 @@ export async function processEnquiry(enquiryId: string): Promise<ProcessResult> 
     return {
       status: "skipped",
       reason: rl.bucket === "org" ? "rate-limited-org" : "rate-limited-sender",
+      // Org-bucket rejects let the tick skip the whole org this pass.
+      ...(rl.bucket === "org" ? { organisationId: meta.organisationId } : {}),
+    };
+  }
+
+  // Monthly AI budget — also pre-claim, for the same reason as the
+  // rate limit: a paused enquiry stays 'received' with
+  // parse_attempts untouched, and resumes when the billing period
+  // rolls over ("queue-paused", docs/specs/ai-usage.md).
+  // Pre-claim + read-then-act means concurrent workers can each
+  // overshoot the cap by one call — bounded and accepted.
+  const budget = await checkAiBudget(meta.organisationId, new Date());
+  if (!budget.ok) {
+    if (budget.reason === "no-ai-plan") {
+      // Org downgraded after the enquiry arrived. This never resumes
+      // (no budget to roll over), so park it terminally instead of
+      // re-checking it every tick forever.
+      return await markFailed(db, { id: enquiryId }, "ai unavailable on current plan");
+    }
+    return {
+      status: "skipped",
+      reason: "budget-paused",
+      organisationId: meta.organisationId,
     };
   }
 
@@ -154,6 +184,34 @@ export async function processEnquiry(enquiryId: string): Promise<ProcessResult> 
     const bodyText = await decryptPii(job.organisationId, job.bodyCipher as Ciphertext);
 
     const parseResult = await parseEnquiry(bodyText);
+
+    // Meter the Bedrock call regardless of parse outcome — a
+    // schema-miss still consumed tokens. Best-effort: a metering
+    // failure must never fail the enquiry itself.
+    if (parseResult.usage) {
+      try {
+        await recordAiUsage({
+          organisationId: job.organisationId,
+          venueId: job.venueId,
+          usage: parseResult.usage,
+          now: new Date(),
+        });
+        await audit.log({
+          organisationId: job.organisationId,
+          action: "enquiry.ai_parse",
+          targetType: "enquiry",
+          targetId: job.id,
+          metadata: {
+            venueId: job.venueId,
+            inputTokens: parseResult.usage.inputTokens,
+            outputTokens: parseResult.usage.outputTokens,
+          },
+        });
+      } catch (err) {
+        captureException(err, { where: "enquiry-runner.recordAiUsage" });
+      }
+    }
+
     if (!parseResult.ok) {
       return await markParseOutcome(db, job, parseResult);
     }
@@ -441,15 +499,42 @@ export async function processNextEnquiries(
   const limit = opts.limit ?? 10;
   const db = adminDb();
   const processed: ProcessResult[] = [];
+  // Two exclusion sets keep one stuck enquiry from eating the tick:
+  //   - attemptedIds: every id we processed this tick, whatever the
+  //     outcome. Skips (sender rate limit, locked, retry-pending)
+  //     leave the row 'received', so without this the same oldest row
+  //     is re-selected every iteration.
+  //   - pausedOrgIds: orgs that reported an org-wide condition
+  //     (budget exhausted, org rate limit) — no point trying their
+  //     other enquiries this pass.
+  const attemptedIds = new Set<string>();
+  const pausedOrgIds = new Set<string>();
   for (let i = 0; i < limit; i++) {
     const [next] = await db
       .select({ id: enquiries.id })
       .from(enquiries)
-      .where(eq(enquiries.status, "received"))
+      .where(
+        and(
+          eq(enquiries.status, "received"),
+          attemptedIds.size > 0 ? notInArray(enquiries.id, [...attemptedIds]) : undefined,
+          pausedOrgIds.size > 0
+            ? notInArray(enquiries.organisationId, [...pausedOrgIds])
+            : undefined,
+        ),
+      )
       .orderBy(enquiries.receivedAt)
       .limit(1);
     if (!next) break;
-    processed.push(await processEnquiry(next.id));
+    attemptedIds.add(next.id);
+    const result = await processEnquiry(next.id);
+    processed.push(result);
+    if (
+      result.status === "skipped" &&
+      (result.reason === "budget-paused" || result.reason === "rate-limited-org") &&
+      result.organisationId
+    ) {
+      pausedOrgIds.add(result.organisationId);
+    }
   }
   return { processed };
 }

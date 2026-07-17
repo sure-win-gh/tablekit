@@ -125,6 +125,7 @@ export type AuditAction =
   | "import.queued"
   // ai-enquiry phase
   | "enquiry.received"
+  | "enquiry.ai_parse"
   | "enquiry.rejected"
   | "enquiry.replied"
   | "enquiry.dismissed"
@@ -150,6 +151,16 @@ export type AuditAction =
   | "pos.order.dsar_scrubbed"
   | "pos.retention.swept"
   | "pos.backfill.swept"
+  // special-events phase
+  | "special_event.created"
+  | "special_event.status_changed"
+  | "special_event.deleted"
+  // special-events phase 2 — native ticketing
+  | "event_ticket_type.created"
+  | "event_ticket_type.deleted"
+  | "event_booking.created"
+  | "booking.event_ticket.abandoned"
+  | "stripe.paid_after_cancel"
   // follow-up phases (listed so TS flags unknown strings early)
   | "invite.created"
   | "invite.accepted"
@@ -184,7 +195,9 @@ export type AuditTargetType =
   | "api_key"
   | "webhook_subscription"
   | "pos_connection"
-  | "pos_order";
+  | "pos_order"
+  | "special_event"
+  | "event_ticket_type";
 
 export type AuditInput = {
   organisationId: string;

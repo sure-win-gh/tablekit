@@ -12,6 +12,7 @@ import Link from "next/link";
 
 import { hasPlan, toPlan } from "@/lib/auth/plan-level";
 import { requireRole } from "@/lib/auth/require-role";
+import { getAiUsageSummary, type AiUsageSummary } from "@/lib/billing/ai-usage-summary";
 import { getUsageSummary, type UsageSummary } from "@/lib/billing/usage-summary";
 import { withUser } from "@/lib/db/client";
 import { billingSubscriptions, organisations, venues } from "@/lib/db/schema";
@@ -32,7 +33,7 @@ export default async function OrganisationPage() {
   const { role } = await requireRole("host");
   const isOwner = role === "owner";
 
-  const { org, venueCount, usage, billingPastDue } = await withUser(async (db) => {
+  const { org, venueCount, usage, aiUsage, billingPastDue } = await withUser(async (db) => {
     const [o] = await db
       .select({
         id: organisations.id,
@@ -43,18 +44,25 @@ export default async function OrganisationPage() {
       })
       .from(organisations)
       .limit(1);
-    if (!o) return { org: null, venueCount: 0, usage: null, billingPastDue: false };
+    if (!o) return { org: null, venueCount: 0, usage: null, aiUsage: null, billingPastDue: false };
     const v = await db
       .select({ id: venues.id })
       .from(venues)
       .where(eq(venues.organisationId, o.id));
     const usage = await getUsageSummary(db, o.id, new Date());
+    const aiUsage = await getAiUsageSummary(db, o.id, toPlan(o.plan), new Date());
     const [sub] = await db
       .select({ status: billingSubscriptions.status })
       .from(billingSubscriptions)
       .where(eq(billingSubscriptions.organisationId, o.id))
       .limit(1);
-    return { org: o, venueCount: v.length, usage, billingPastDue: sub?.status === "past_due" };
+    return {
+      org: o,
+      venueCount: v.length,
+      usage,
+      aiUsage,
+      billingPastDue: sub?.status === "past_due",
+    };
   });
 
   if (!org) {
@@ -187,8 +195,29 @@ export default async function OrganisationPage() {
         ) : null}
 
         {usage ? <UsageSection usage={usage} /> : null}
+        {aiUsage && aiUsage.budgetPence > 0 ? <AiUsageSection usage={aiUsage} /> : null}
       </div>
     </main>
+  );
+}
+
+// AI enquiry usage this month — call volume + share of the plan's
+// included monthly AI allowance. Only rendered on plans with a
+// non-zero budget (the enquiry feature is Plus-gated).
+function AiUsageSection({ usage }: { usage: AiUsageSummary }) {
+  const pct = Math.min(100, Math.round((usage.estCostPence / usage.budgetPence) * 100));
+  return (
+    <section className="flex flex-col gap-2 md:col-span-2">
+      <h2 className="text-ink text-sm font-semibold tracking-tight">AI enquiry usage</h2>
+      <p className="text-ash text-sm">
+        {usage.callCount === 0
+          ? `No AI enquiry processing this month (${usage.period}).`
+          : `${usage.callCount} ${usage.callCount === 1 ? "enquiry" : "enquiries"} processed this month (${usage.period}) — ${pct}% of the included allowance.`}
+        {usage.overBudget
+          ? " Processing is paused until next month; queued enquiries are kept and resume automatically."
+          : ""}
+      </p>
+    </section>
   );
 }
 

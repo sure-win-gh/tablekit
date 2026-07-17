@@ -1,6 +1,6 @@
 "use client";
 
-import { Maximize2, Minus, Pencil, Plus as PlusIcon } from "lucide-react";
+import { Link2, Maximize2, Minus, Pencil, Plus as PlusIcon } from "lucide-react";
 import {
   useActionState,
   useCallback,
@@ -20,7 +20,12 @@ import {
   type FloorTableState,
 } from "@/lib/bookings/floor-state";
 
-import { createTable, saveTablePosition } from "./actions";
+import {
+  createTable,
+  saveTablePosition,
+  setVenueMaxCombineTables,
+  toggleTableCombination,
+} from "./actions";
 import { AutoRefresh } from "./auto-refresh";
 import { NewAreaForm } from "./forms";
 import { SidePanel, type ActiveBookingDetail } from "./side-panel";
@@ -41,12 +46,22 @@ export type CanvasTable = TableShapeData & {
   areaId: string;
 };
 
+// An operator-set "these two can be pushed together" join edge.
+export type CanvasCombination = {
+  id: string;
+  areaId: string;
+  tableAId: string;
+  tableBId: string;
+};
+
 type Props = {
   venueId: string;
   date: string;
   canEdit: boolean;
   areas: CanvasArea[];
   tables: CanvasTable[];
+  combinations: CanvasCombination[];
+  maxCombineTables: number;
   activeByTableId: Record<string, ActiveBookingDetail>;
   upcomingByTableId: Record<string, ActiveBookingDetail>;
   floorStateByTableId: Record<string, FloorTableState>;
@@ -91,12 +106,19 @@ export function FloorPlanCanvas({
   canEdit,
   areas,
   tables,
+  combinations,
+  maxCombineTables,
   activeByTableId,
   upcomingByTableId,
   floorStateByTableId,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [editMode, setEditMode] = useState(false);
+  // "Set up table joins" mode — mutually exclusive with editMode. Its
+  // connector lines only render while this is on.
+  const [joinMode, setJoinMode] = useState(false);
+  // First table tapped in join mode; the next tap toggles the edge.
+  const [joinAnchorId, setJoinAnchorId] = useState<string | null>(null);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   // The canvas always scopes to one area. Default to the first one.
   const [activeAreaId, setActiveAreaId] = useState<string | null>(() => areas[0]?.id ?? null);
@@ -119,6 +141,67 @@ export function FloorPlanCanvas({
   const [, startTransition] = useTransition();
   const [, formAction] = useActionState(saveTablePosition, idle);
   const [createState, createAction, createPending] = useActionState(createTable, idle);
+  const [joinState, joinAction] = useActionState(toggleTableCombination, idle);
+  const [maxState, maxAction] = useActionState(setVenueMaxCombineTables, idle);
+
+  // Optimistic join edges — a tap toggles immediately; the server action
+  // revalidates and the RSC re-renders with the persisted set.
+  const [optimisticEdges, applyEdgeToggle] = useOptimistic(
+    combinations,
+    (current: CanvasCombination[], pair: { a: string; b: string }) => {
+      const isPair = (e: CanvasCombination) =>
+        (e.tableAId === pair.a && e.tableBId === pair.b) ||
+        (e.tableAId === pair.b && e.tableBId === pair.a);
+      if (current.some(isPair)) return current.filter((e) => !isPair(e));
+      const areaId = tables.find((t) => t.id === pair.a)?.areaId ?? "";
+      return [
+        ...current,
+        { id: `opt-${pair.a}-${pair.b}`, areaId, tableAId: pair.a, tableBId: pair.b },
+      ];
+    },
+  );
+
+  // Join-mode tap: first tap picks an anchor, second toggles the edge.
+  const handleJoinTap = useCallback(
+    (id: string) => {
+      if (!joinAnchorId) {
+        setJoinAnchorId(id);
+        return;
+      }
+      if (joinAnchorId === id) {
+        setJoinAnchorId(null); // tap self to deselect
+        return;
+      }
+      const a = tables.find((t) => t.id === joinAnchorId);
+      const b = tables.find((t) => t.id === id);
+      // Canvas shows one area at a time, so this is a guard, not a path
+      // users normally hit; move the anchor rather than erroring.
+      if (a && b && a.areaId !== b.areaId) {
+        setJoinAnchorId(id);
+        return;
+      }
+      const fd = new FormData();
+      fd.set("table_a_id", joinAnchorId);
+      fd.set("table_b_id", id);
+      const anchor = joinAnchorId;
+      startTransition(() => {
+        applyEdgeToggle({ a: anchor, b: id });
+        joinAction(fd);
+      });
+      setJoinAnchorId(null);
+    },
+    [joinAnchorId, tables, applyEdgeToggle, joinAction],
+  );
+
+  const handleMaxChange = useCallback(
+    (value: string) => {
+      const fd = new FormData();
+      fd.set("venue_id", venueId);
+      fd.set("max_tables", value);
+      startTransition(() => maxAction(fd));
+    },
+    [venueId, maxAction],
+  );
 
   // First render fits to whichever area is active by default.
   const [viewBox, setViewBox] = useState(() => {
@@ -135,6 +218,7 @@ export function FloorPlanCanvas({
     (id: string | null) => {
       setActiveAreaId(id);
       setSelectedTableId(null);
+      setJoinAnchorId(null);
       const subset = id ? tables.filter((t) => t.areaId === id) : tables;
       setViewBox(fitViewBox(subset));
     },
@@ -329,11 +413,31 @@ export function FloorPlanCanvas({
           <Button
             variant={editMode ? "primary" : "secondary"}
             size="sm"
-            onClick={() => setEditMode((m) => !m)}
+            onClick={() => {
+              setEditMode((m) => !m);
+              setJoinMode(false);
+              setJoinAnchorId(null);
+            }}
             className="hidden md:inline-flex"
           >
             <Pencil className="h-3.5 w-3.5" aria-hidden />
             {editMode ? "Editing" : "Edit"}
+          </Button>
+        ) : null}
+        {canEdit ? (
+          <Button
+            variant={joinMode ? "primary" : "secondary"}
+            size="sm"
+            onClick={() => {
+              setJoinMode((m) => !m);
+              setEditMode(false);
+              setJoinAnchorId(null);
+              setSelectedTableId(null);
+            }}
+            className="hidden md:inline-flex"
+          >
+            <Link2 className="h-3.5 w-3.5" aria-hidden />
+            {joinMode ? "Setting up joins" : "Set up table joins"}
           </Button>
         ) : null}
         {areas.length > 1 ? (
@@ -371,9 +475,49 @@ export function FloorPlanCanvas({
         </div>
       ) : null}
 
+      {joinMode ? (
+        <div className="border-hairline rounded-card absolute bottom-3 left-3 z-10 flex max-w-[75%] flex-col gap-2 border bg-white/95 p-3 text-xs shadow-sm">
+          <p className="text-ink font-semibold">Set up table joins</p>
+          <p className="text-ash">
+            Tap two tables you can push together to seat bigger groups, then tap a join again to
+            remove it. We only offer a combined table when every joined table in it is free.
+          </p>
+          {activeAreaId && !optimisticEdges.some((e) => e.areaId === activeAreaId) ? (
+            <p className="text-ash">
+              No joins here yet — until you add some, tables in this area combine in pairs
+              automatically.
+            </p>
+          ) : null}
+          <label className="text-ash mt-0.5 flex items-center gap-2">
+            Most tables you&rsquo;d ever push together
+            <select
+              defaultValue={String(maxCombineTables)}
+              onChange={(e) => handleMaxChange(e.target.value)}
+              className="border-hairline rounded-input text-ink border bg-white px-2 py-1 text-xs tabular-nums"
+            >
+              {[2, 3, 4, 5, 6].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          {joinState.status === "error" ? (
+            <p role="alert" className="text-red-600">
+              {joinState.message}
+            </p>
+          ) : null}
+          {maxState.status === "error" ? (
+            <p role="alert" className="text-red-600">
+              {maxState.message}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       <svg
         ref={svgRef}
-        className={`h-full w-full ${editMode ? "bg-cloud" : "bg-white"}`}
+        className={`h-full w-full ${editMode || joinMode ? "bg-cloud" : "bg-white"}`}
         viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
         onWheel={onWheel}
       >
@@ -398,7 +542,7 @@ export function FloorPlanCanvas({
           y={-1000}
           width={2000}
           height={2000}
-          className={`${editMode ? "fill-cloud" : "fill-white"} cursor-grab active:cursor-grabbing`}
+          className={`${editMode || joinMode ? "fill-cloud" : "fill-white"} cursor-grab active:cursor-grabbing`}
           onPointerDown={onBgPointerDown}
           onPointerMove={onBgPointerMove}
           onPointerUp={onBgPointerUp}
@@ -464,6 +608,38 @@ export function FloorPlanCanvas({
           );
         })}
 
+        {/* Operator-set join edges — rendered ONLY in join-setup mode so
+            they never clutter the live floor. Solid terracotta to read as
+            "these can be pushed together", distinct from the dashed
+            live-booking connectors above. */}
+        {joinMode
+          ? optimisticEdges.map((e) => {
+              const a = tableById.get(e.tableAId);
+              const b = tableById.get(e.tableBId);
+              if (!a || !b) return null;
+              if (activeAreaId && (a.areaId !== activeAreaId || b.areaId !== activeAreaId)) {
+                return null;
+              }
+              const ax = a.position.x + a.position.w / 2;
+              const ay = a.position.y + a.position.h / 2;
+              const bx = b.position.x + b.position.w / 2;
+              const by = b.position.y + b.position.h / 2;
+              return (
+                <line
+                  key={`join-${e.id}`}
+                  x1={ax}
+                  y1={ay}
+                  x2={bx}
+                  y2={by}
+                  stroke="#c2603f"
+                  strokeWidth={0.12}
+                  strokeLinecap="round"
+                  pointerEvents="none"
+                />
+              );
+            })
+          : null}
+
         {/* Tables */}
         {visibleTables.map((t) => {
           const state: FloorTableState = floorStateByTableId[t.id] ?? "empty";
@@ -490,10 +666,10 @@ export function FloorPlanCanvas({
               table={t}
               state={state}
               occupant={occupant}
-              selected={t.id === selectedTableId}
+              selected={joinMode ? t.id === joinAnchorId : t.id === selectedTableId}
               editMode={editMode}
               svgRef={svgRef}
-              onSelect={setSelectedTableId}
+              onSelect={joinMode ? handleJoinTap : setSelectedTableId}
               onDragEnd={editMode ? handleDragEnd : undefined}
             />
           );
@@ -552,7 +728,7 @@ export function FloorPlanCanvas({
       {/* Polling lives here (not the page) so it can pause during edit
           mode — a refresh mid-drag would revert optimistic positions
           and reset the side panel's edit form. */}
-      <AutoRefresh paused={editMode} />
+      <AutoRefresh paused={editMode || joinMode} />
     </div>
   );
 }

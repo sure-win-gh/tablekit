@@ -30,10 +30,12 @@ for each candidate slot (every 15 min within the service window):
   find tables with min_cover <= party_size <= max_cover
   exclude tables occupied at [slot_start, slot_start + turn_minutes]
   if a single table fits → offer slot
-  if combinable tables exist (same area, adjacent) → offer slot
+  else, per area: if the area has operator-set join edges → offer each connected set of free
+       tables (up to settings.tableCombining.maxTables) that fits; otherwise offer any
+       same-area pair that fits
 ```
 
-Keep this in `lib/bookings/availability.ts`. Must be pure, well-tested, O(services × tables × slots) at worst.
+Keep this in `lib/bookings/availability.ts`. Must be pure, well-tested, O(services × tables × slots) at worst. Operator-controlled combining (the join graph + connected-set enumeration) is specced in [`table-combining.md`](table-combining.md); when a venue sets no joins this reduces to the legacy same-area-pair behaviour.
 
 ## User stories
 

@@ -2,9 +2,17 @@
 
 **Audience:** the operator (solo), with Claude Code as an assistant.
 **Read before:** changing WAF/rate-limit rules, or during an active abuse incident.
-**Scope:** edge configuration that lives in the Cloudflare dashboard (or Terraform),
+**Scope:** edge configuration that lives in the Cloudflare dashboard,
 not application code. The app-level companion lives in `lib/public/rate-limit.ts`
 and the auth/booking route handlers.
+
+> **Source of truth:** the concrete rules (rate limits R1-R5, skip rules, zone
+> toggles) are codified in **`infra/cloudflare/ruleset.ts`** — versioned, PR-reviewed,
+> and pinned to the codebase by `tests/unit/cloudflare-ruleset.test.ts`. Change the
+> file first, apply in the dashboard after merge, then verify with the read-only
+> drift check: `pnpm tsx scripts/cloudflare-drift.ts` (needs a **Zone:Read** API
+> token + zone id). This playbook keeps the *why* and the incident procedures; the
+> ruleset file keeps the *what*.
 
 ## Why this layer exists
 
@@ -117,7 +125,9 @@ All of the following are available on Cloudflare's **Free** plan unless noted.
 
 Cloudflare dashboard → **Security → WAF → Rate limiting rules**. Match on the
 `cf-connecting-ip` (the same header `ipFromHeaders()` reads, so app + edge agree
-on identity). Suggested starting rules — tune against real traffic:
+on identity). The canonical rule definitions (ids, expressions, thresholds,
+rationale) live in `infra/cloudflare/ruleset.ts`; the table below is the summary —
+tune against real traffic and update the ruleset file in the same PR:
 
 | # | Path / matcher | Threshold | Period | Action | Mitigation timeout |
 |---|----------------|-----------|--------|--------|--------------------|
@@ -169,7 +179,9 @@ not a substitute.
 Add **Skip** rules (WAF → Custom rules → *Skip* all remaining rules + Rate
 limiting) for the signed server-to-server endpoints below — they're
 signature-verified in-app, so a WAF challenge or rate-limit would only break
-legitimate, already-authenticated traffic. The actual receiver paths in this repo:
+legitimate, already-authenticated traffic. The canonical list is
+`SKIP_RULES` in `infra/cloudflare/ruleset.ts` (a unit test asserts every entry
+maps to a real route, so a skip rule can't outlive its endpoint). Summary:
 
 | Path | Source | Verification |
 |------|--------|--------------|
@@ -251,6 +263,9 @@ dashboard without touching Cloudflare), that's an app-side feature checked in
 
 - **Monthly:** review IP Access Rules; remove expired/stale bans.
 - **Quarterly:** re-tune rate-limit thresholds against real traffic; confirm
-  webhook source ranges still skip the WAF.
+  webhook source ranges still skip the WAF. Run the drift check
+  (`pnpm tsx scripts/cloudflare-drift.ts`) and reconcile any differences —
+  either apply the repo's ruleset to the dashboard or PR the dashboard's
+  reality back into `infra/cloudflare/ruleset.ts`.
 - **After any incident:** capture rule changes in the post-mortem so the config has
   an audit trail even though it lives outside the repo.

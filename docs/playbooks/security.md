@@ -89,8 +89,22 @@ A future change must **never** add a wildcard `Access-Control-Allow-Origin: *`. 
 - Implemented at Vercel Edge with Upstash Redis for state.
 - **Network-layer limits, bot challenges, and IP bans live at Cloudflare — see
   `cloudflare.md`.** The edge absorbs floods before they reach Vercel; the app
-  limiter (which fails open if Upstash is unconfigured) enforces the precise
-  per-account boundary.
+  limiter enforces the precise per-account boundary.
+- Degraded-mode posture (`lib/public/rate-limit.ts`): missing Upstash env in
+  production fails **closed** for every bucket (one-time Sentry alert); dev/CI
+  stay permissive. A runtime Upstash outage fails open by default so a blip
+  can't take down the booking widget, but the credential buckets (login,
+  signup, password reset) and the per-API-key bucket pass `{ failOpen: false }`
+  and fail closed.
+
+### Third-party CDN (docs viewer)
+
+The public API reference (`/docs/api`) loads Stoplight Elements from unpkg —
+the one external script on any TableKit page. Mitigations: exact version pin +
+SRI `integrity` hashes (browser refuses a tampered/changed bundle), and a
+no-JS/CDN-down fallback linking the raw `/api/v1/openapi.json`. Residual risk:
+unpkg availability only — an outage degrades the page to the fallback link.
+Self-hosting the bundle removes even that; do it if the page ever matters more.
 
 ### Headers
 - `X-Content-Type-Options: nosniff`

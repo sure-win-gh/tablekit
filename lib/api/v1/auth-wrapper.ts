@@ -69,7 +69,9 @@ export function withApiAuth(handler: ApiHandler) {
 
     // Per-key sliding-window rate limit. Bucket on keyId (not orgId)
     // so two keys in the same org have independent budgets.
-    const rl = await rateLimit(`apikey:${resolved.id}`, RATE_LIMIT_PER_MIN, RATE_WINDOW_SEC);
+    const rl = await rateLimit(`apikey:${resolved.id}`, RATE_LIMIT_PER_MIN, RATE_WINDOW_SEC, {
+      failOpen: false,
+    });
     if (!rl.ok) {
       void log(429);
       return rateLimitedResponse(rl.retryAfterSec ?? RATE_WINDOW_SEC);

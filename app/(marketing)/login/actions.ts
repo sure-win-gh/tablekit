@@ -60,12 +60,16 @@ export async function signInWithPassword(
   // still trips at ACCOUNT_ATTEMPTS failures/hour. We peek the account
   // bucket here and record a hit only on a failed auth below.
   const ip = await clientIp();
-  const ipLimit = await rateLimit(`login:ip:${ip}`, IP_ATTEMPTS, IP_WINDOW_SEC);
+  const ipLimit = await rateLimit(`login:ip:${ip}`, IP_ATTEMPTS, IP_WINDOW_SEC, {
+    failOpen: false,
+  });
   if (!ipLimit.ok) {
     return { status: "error", message: RATE_LIMITED_MESSAGE };
   }
   const accountBucket = `login:acct:${hashForLookup(parsed.data.email, "email")}`;
-  const accountLimit = await peekRateLimit(accountBucket, ACCOUNT_ATTEMPTS, ACCOUNT_WINDOW_SEC);
+  const accountLimit = await peekRateLimit(accountBucket, ACCOUNT_ATTEMPTS, ACCOUNT_WINDOW_SEC, {
+    failOpen: false,
+  });
   if (!accountLimit.ok) {
     return { status: "error", message: RATE_LIMITED_MESSAGE };
   }
@@ -78,7 +82,7 @@ export async function signInWithPassword(
 
   if (error || !data.user) {
     // Record the failed attempt against the per-account bucket.
-    await rateLimit(accountBucket, ACCOUNT_ATTEMPTS, ACCOUNT_WINDOW_SEC);
+    await rateLimit(accountBucket, ACCOUNT_ATTEMPTS, ACCOUNT_WINDOW_SEC, { failOpen: false });
     // We deliberately don't distinguish "wrong password" from "no such
     // user" — same message for both denies account enumeration.
     return { status: "error", message: "Invalid email or password." };
@@ -110,7 +114,9 @@ export async function signInWithMagicLink(
 
   // Same IP throttle — magic-link send is an email-spam vector.
   const ip = await clientIp();
-  const ipLimit = await rateLimit(`login:ip:${ip}`, IP_ATTEMPTS, IP_WINDOW_SEC);
+  const ipLimit = await rateLimit(`login:ip:${ip}`, IP_ATTEMPTS, IP_WINDOW_SEC, {
+    failOpen: false,
+  });
   if (!ipLimit.ok) {
     return { status: "error", message: RATE_LIMITED_MESSAGE };
   }

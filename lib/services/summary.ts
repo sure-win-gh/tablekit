@@ -19,6 +19,7 @@ import {
   type Slot,
   type TableSpec,
 } from "@/lib/bookings/availability";
+import { loadVenueCombining } from "@/lib/bookings/combinable";
 import { dayKeyInZone, venueLocalDayRange, zonedWallToUtc, type DayKey } from "@/lib/bookings/time";
 import { bookings, bookingTables, services, venueTables } from "@/lib/db/schema";
 import type * as schema from "@/lib/db/schema";
@@ -157,6 +158,7 @@ export async function getServiceSummary(
     turnMinutes: s.turnMinutes,
   }));
   const tableSpecs: TableSpec[] = tableRows;
+  const { combinable, maxCombineTables } = await loadVenueCombining(db, venueId);
   const slots: Slot[] = findSlots({
     timezone,
     date,
@@ -164,6 +166,8 @@ export async function getServiceSummary(
     services: serviceSpecs,
     tables: tableSpecs,
     occupied: occupied as Occupancy[],
+    combinable,
+    maxCombineTables,
   });
   const openByService = new Map<string, number>();
   for (const slot of slots) {

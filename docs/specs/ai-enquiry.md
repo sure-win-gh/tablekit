@@ -56,7 +56,7 @@ Email content is untrusted. Rules:
 
 - [ ] Parse rate >90% on a test set of 50 real-world enquiries (stripped and consented). Tracked as a manual launch-readiness check — not codified in CI.
 - [ ] p95 parse-to-draft latency <10s. Observed via Bedrock telemetry; not in CI.
-- [ ] Cost <£0.02 per enquiry (Haiku pricing buffer). Tracked in `lib/llm/bedrock.ts` per-call telemetry; spot-checks against monthly Bedrock invoices.
+- [ ] Cost <£0.02 per enquiry (Haiku pricing buffer). Tracked in the `ai_usage` ledger (see [`ai-usage.md`](ai-usage.md)) — per-call token capture at the runner, cost derived via `lib/billing/ai-usage.ts`; spot-checks against monthly Bedrock invoices.
 - [x] Never sends a reply without operator approval unless auto-send mode is enabled for the venue AND the enquiry passes the guardrail. Auto-send wired in [`lib/enquiries/runner.ts`](../../lib/enquiries/runner.ts) → `attemptAutoSend`. Guardrail at [`lib/enquiries/guardrail.ts`](../../lib/enquiries/guardrail.ts) holds on: no slots, any `specialRequests` (Article-9 surface), body >2000 chars, reply-chain markers, prompt-injection keywords. Per-venue toggle at `venue.settings.aiEnquiryAutoSendEnabled` (default false). Audit: `enquiry.auto_sent` on success, `enquiry.auto_sent_held` with reason on guard miss.
 - [x] Replies always include a human fallback line. Baked into [`lib/enquiries/draft.ts`](../../lib/enquiries/draft.ts) — every generated draft (whether operator-sent or auto-sent) ends with "Not quite right? Reply to this email and our team will help."
 - [x] Enquiry emails and drafts retained for 90 days then purged. [`lib/enquiries/retention.ts`](../../lib/enquiries/retention.ts) sweep + `/api/cron/enquiry-retention` daily cron; audit `enquiry.retention.swept`.

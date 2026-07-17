@@ -43,9 +43,13 @@ import { stripeEnabled } from "@/lib/stripe/client";
 import { getAccount } from "@/lib/stripe/connect";
 
 import { findSlots, type TableOption } from "./availability";
-import { venueLocalDayRange } from "./time";
+import { isWholeVenue, loadEventClosures } from "./closures";
+import { loadVenueCombining } from "./combinable";
+import { venueLocalDayRange, zonedWallToUtc } from "./time";
 
-export type BookingSource = "host" | "widget" | "rwg" | "api";
+// "event" rows are written by lib/events/purchase.ts, never by
+// createBooking — listed so shared consumers type the full domain.
+export type BookingSource = "host" | "widget" | "rwg" | "api" | "event";
 
 export type CreateBookingInput = {
   venueId: string;
@@ -103,6 +107,10 @@ export type CreateBookingResult =
   | { ok: false; reason: "guest-invalid"; issues: string[] }
   | { ok: false; reason: "slot-taken" }
   | { ok: false; reason: "no-availability" }
+  // The venue is closed to standard bookings at this time because a
+  // published special event blocks the date (docs/specs/special-events.md).
+  // Defence in depth — the slot shouldn't have been offered.
+  | { ok: false; reason: "venue-closed" }
   | { ok: false; reason: "venue-not-found" }
   | { ok: false; reason: "deposit-failed"; bookingId: string };
 
@@ -182,22 +190,30 @@ export async function createBooking(
     .where(eq(venueTables.venueId, venue.id));
 
   const { startUtc, endUtc } = venueLocalDayRange(input.date, venue.timezone);
-  const occupied = await db
-    .select({
-      tableId: bookingTables.tableId,
-      startAt: bookingTables.startAt,
-      endAt: bookingTables.endAt,
-    })
-    .from(bookingTables)
-    .where(
-      and(
-        eq(bookingTables.venueId, venue.id),
-        gte(bookingTables.startAt, startUtc),
-        lt(bookingTables.startAt, endUtc),
+  const [occupied, closures] = await Promise.all([
+    db
+      .select({
+        tableId: bookingTables.tableId,
+        startAt: bookingTables.startAt,
+        endAt: bookingTables.endAt,
+      })
+      .from(bookingTables)
+      .where(
+        and(
+          eq(bookingTables.venueId, venue.id),
+          gte(bookingTables.startAt, startUtc),
+          lt(bookingTables.startAt, endUtc),
+        ),
       ),
-    );
+    // Special-event closures blocking standard bookings this day (shared
+    // loader — carries per-event area scope). See docs/specs/special-events.md.
+    loadEventClosures(db, venue.id, startUtc, endUtc),
+  ]);
 
-  // 3. Run availability. Must have at least one matching slot.
+  // 3. Run availability. Must have at least one matching slot. Same
+  // combinable input as the public availability path, or a valid
+  // combined-table booking would be rejected here as no-availability.
+  const { combinable, maxCombineTables } = await loadVenueCombining(db, venue.id);
   const slots = findSlots({
     timezone: venue.timezone,
     date: input.date,
@@ -210,12 +226,26 @@ export async function createBooking(
     })),
     tables: venueTablesRows,
     occupied,
+    combinable,
+    maxCombineTables,
+    closures,
   });
 
   const slot = slots.find(
     (s) => s.serviceId === input.serviceId && s.wallStart === input.wallStart,
   );
-  if (!slot) return { ok: false, reason: "no-availability" };
+  if (!slot) {
+    // Distinguish "the date is sold as a ticketed event" from ordinary
+    // no-availability, so the API can 409 with the right reason and the
+    // widget can point the guest at the event page. Only a WHOLE-VENUE
+    // closure earns venue-closed — an area-scoped closure leaves other
+    // areas bookable, so a missing slot there is plain no-availability.
+    const reqStart = zonedWallToUtc(input.date, input.wallStart, venue.timezone).getTime();
+    const closed = closures.some(
+      (c) => isWholeVenue(c) && c.startAt.getTime() <= reqStart && c.endAt.getTime() > reqStart,
+    );
+    return { ok: false, reason: closed ? "venue-closed" : "no-availability" };
+  }
 
   // Pick the option. If the caller supplied a preferred table set,
   // match it against the offered options (same membership, any order)

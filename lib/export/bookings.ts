@@ -15,7 +15,7 @@ import { and, asc, eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import * as schema from "@/lib/db/schema";
-import { areas, bookings, guests, services, venues } from "@/lib/db/schema";
+import { areas, bookings, guests, services, specialEvents, venues } from "@/lib/db/schema";
 import { bookingReference } from "@/lib/public/captcha";
 import { type CsvColumn, toCsv } from "@/lib/reports/csv";
 import { type Ciphertext, decryptPii } from "@/lib/security/crypto";
@@ -51,6 +51,7 @@ export async function loadBookingsForExport(db: Db, orgId: string): Promise<Expo
       venueName: venues.name,
       serviceName: services.name,
       areaName: areas.name,
+      eventName: specialEvents.name,
       guestId: bookings.guestId,
       guestFirstName: guests.firstName,
       guestEmailCipher: guests.emailCipher,
@@ -66,8 +67,13 @@ export async function loadBookingsForExport(db: Db, orgId: string): Promise<Expo
     })
     .from(bookings)
     .innerJoin(venues, eq(venues.id, bookings.venueId))
-    .innerJoin(services, eq(services.id, bookings.serviceId))
-    .innerJoin(areas, eq(areas.id, bookings.areaId))
+    // Left joins: event-ticket bookings have null service/area (their
+    // context is the special event). Inner joins here silently dropped
+    // every paid event booking from the export — a GDPR completeness
+    // hole (the controller must be able to export all guest records).
+    .leftJoin(services, eq(services.id, bookings.serviceId))
+    .leftJoin(areas, eq(areas.id, bookings.areaId))
+    .leftJoin(specialEvents, eq(specialEvents.id, bookings.eventId))
     .innerJoin(guests, eq(guests.id, bookings.guestId))
     // Defence-in-depth: filter explicitly by orgId on both anchor
     // tables. Bookings RLS is venue-scoped (migration 0013) which
@@ -85,8 +91,10 @@ export async function loadBookingsForExport(db: Db, orgId: string): Promise<Expo
       reference: bookingReference(row.id),
       venueId: row.venueId,
       venueName: row.venueName,
-      serviceName: row.serviceName,
-      areaName: row.areaName,
+      // Event bookings label the service column with the event's name
+      // ("Event: …") so the CSV stays one flat, self-explanatory table.
+      serviceName: row.serviceName ?? (row.eventName !== null ? `Event: ${row.eventName}` : ""),
+      areaName: row.areaName ?? "",
       guestId: row.guestId,
       guestFirstName: row.guestFirstName,
       guestEmail,

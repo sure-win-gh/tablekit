@@ -36,22 +36,34 @@ Tick items off as they land and delete this file when Phase 4 ships.
 
 ## 2. Phase 3 — signup + region capture (code; can start any time)
 
-- [ ] Country selector on `/signup` — explicit choice decides (D1); edge geo
-      headers (`lib/geo/visitor-region.ts` pattern) may pre-select only.
-- [ ] Wire `regionForCountry()` into signup: write `region` +
-      `billing_entity` on the new org row.
-- [ ] Gate the US option on `regionEnabled("us")` (lib/regions/config.ts) —
-      currently nothing calls it; this is the launch-gate enforcement point.
-- [ ] Create the org in the correct regional DB (signup currently writes via
-      `adminDb()` default-EU — fine until `REGION_US_ENABLED` flips, but the
-      routing must exist before it does).
+**Status 2026-07-15:** signup capture slice landed — the org now records its
+region/entity at creation and is written to its own regional pool, gated dark
+for US. The request-time routing (control-plane map + per-request region on
+existing call sites) is deferred: it is only _exercised_ once a US DB exists,
+and every org is `eu` until then. See the two open boxes below.
+
+- [x] Country selector on `/signup` — explicit choice decides (D1); edge geo
+      (`visitorCountry()` in `lib/geo/visitor-region.ts`) pre-selects only.
+      `app/(marketing)/signup/{page,form}.tsx`.
+- [x] Wire `regionForCountry()` into signup: writes `region` +
+      `billing_entity` on the new org row. `app/(marketing)/signup/actions.ts`.
+- [x] Gate the US option on `regionEnabled("us")` — the form hides the US
+      `<option>` and the server `resolveSignupRegion()` **clamps** a US post to
+      eu/uk when the gate is closed (fail closed; `captureMessage` on clamp).
+- [x] Create the org in the correct regional DB — insert now goes through
+      `adminDb(region)`. Resolves to EU today (region is clamped), flips to the
+      US project with no code change once `REGION_US_ENABLED` is true.
 - [ ] Control-plane routing map (D5): org/venue → region lookup in the EU
       project; widget/public/API paths resolve venue → region before
-      querying.
+      querying. **Deferred — Phase 4 prerequisite (unreachable while US dark).**
 - [ ] Region-aware `withUser`/`anonymous`/`adminDb` call sites: resolve the
       session org's / venue's region once per request and pass it through.
-- [ ] Tests: signup writes the right pair for US vs non-US; US option hidden
-      while `regionEnabled("us")` is false.
+      **Deferred — includes the signup `audit.log` write, which still targets
+      the default (EU) pool; correct today, must follow the org's region once
+      US orgs can exist (cross-region FK otherwise).**
+- [x] Tests: `resolveSignupRegion()` clamp — US open→us/us, US closed→eu/uk,
+      non-US always eu/uk, case/whitespace — in `tests/unit/regions.test.ts`
+      (20 passing).
 
 ## 3. Phase 4 — US bring-up (code; blocked on external gates below)
 

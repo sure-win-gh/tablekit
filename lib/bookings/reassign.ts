@@ -41,6 +41,13 @@ export async function reassignBookingTable(
     .where(and(eq(bookings.id, input.bookingId), eq(bookings.organisationId, input.organisationId)))
     .limit(1);
   if (!booking) return { ok: false, reason: "not-found" };
+  // Event-ticket bookings (area_id null) have no table assignment to
+  // move — treat as not-found rather than let the null flow into the
+  // booking_tables insert below.
+  if (booking.areaId === null) return { ok: false, reason: "not-found" };
+  // Const capture: the narrowing above doesn't flow into the
+  // transaction closure below.
+  const bookingAreaId = booking.areaId;
 
   const [target] = await db
     .select({ id: venueTables.id, areaId: venueTables.areaId })
@@ -71,7 +78,7 @@ export async function reassignBookingTable(
         // Overwritten by the enforce_booking_tables_denorm trigger.
         organisationId: input.organisationId,
         venueId: "00000000-0000-0000-0000-000000000000",
-        areaId: booking.areaId,
+        areaId: bookingAreaId,
         startAt: new Date(0),
         endAt: new Date(0),
       });

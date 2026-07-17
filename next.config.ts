@@ -84,6 +84,12 @@ const nextConfig: NextConfig = {
         source: "/book/:path*",
         headers: [{ key: "Content-Security-Policy-Report-Only", value: BOOK_CSP }],
       },
+      {
+        // Public special-event landing pages — same hosted-page posture as
+        // /book (frame-ancestors 'self'; no Stripe/captcha needed here).
+        source: "/events/:path*",
+        headers: [{ key: "Content-Security-Policy-Report-Only", value: BOOK_CSP }],
+      },
     ];
   },
 };

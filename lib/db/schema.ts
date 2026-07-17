@@ -406,6 +406,44 @@ export const venueTables = pgTable(
   ],
 );
 
+// Operator-declared "these two tables can be pushed together" edges — an
+// undirected adjacency graph. A booking combines a connected set of these.
+// org/venue/area are denormalised, populated by the
+// enforce_table_combinations_denorm trigger from the endpoint tables (which
+// also RAISEs if the two tables sit in different areas — edges are
+// same-area, keeping combined bookings single-area). Canonical ordering
+// (table_a_id < table_b_id, a CHECK in the migration) stores each unordered
+// pair once. See docs/specs/table-combining.md.
+export const tableCombinations = pgTable(
+  "table_combinations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    areaId: uuid("area_id")
+      .notNull()
+      .references(() => areas.id, { onDelete: "cascade" }),
+    tableAId: uuid("table_a_id")
+      .notNull()
+      .references(() => venueTables.id, { onDelete: "cascade" }),
+    tableBId: uuid("table_b_id")
+      .notNull()
+      .references(() => venueTables.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("table_combinations_pair_uq").on(t.tableAId, t.tableBId),
+    index("table_combinations_a_idx").on(t.tableAId),
+    index("table_combinations_b_idx").on(t.tableBId),
+    index("table_combinations_venue_idx").on(t.venueId),
+    index("table_combinations_org_idx").on(t.organisationId),
+  ],
+);
+
 export const services = pgTable(
   "services",
   {
@@ -615,12 +653,14 @@ export const bookings = pgTable(
     venueId: uuid("venue_id")
       .notNull()
       .references(() => venues.id, { onDelete: "cascade" }),
-    serviceId: uuid("service_id")
-      .notNull()
-      .references(() => services.id),
-    areaId: uuid("area_id")
-      .notNull()
-      .references(() => areas.id),
+    // Nullable for event bookings — GA tickets have no service/area. The
+    // bookings_event_or_service_check below keeps standard vs event rows
+    // honest. See docs/specs/special-events.md Phase 2.
+    serviceId: uuid("service_id").references(() => services.id),
+    areaId: uuid("area_id").references(() => areas.id),
+    // Set for event-ticket bookings (source='event'); null for standard.
+    // No onDelete → an event with sold tickets can't be hard-deleted.
+    eventId: uuid("event_id").references(() => specialEvents.id),
     guestId: uuid("guest_id")
       .notNull()
       .references(() => guests.id),
@@ -678,6 +718,15 @@ export const bookings = pgTable(
     index("bookings_venue_start_active_idx")
       .on(t.venueId, t.startAt)
       .where(sql`${t.status} <> 'cancelled'`),
+    // Event bookings carry event_id + null service/area; standard bookings
+    // the reverse. Neither kind can be malformed.
+    check(
+      "bookings_event_or_service_check",
+      sql`(${t.eventId} is not null and ${t.serviceId} is null and ${t.areaId} is null) or (${t.eventId} is null and ${t.serviceId} is not null and ${t.areaId} is not null)`,
+    ),
+    index("bookings_event_idx")
+      .on(t.eventId)
+      .where(sql`${t.eventId} is not null`),
   ],
 );
 
@@ -721,6 +770,157 @@ export const bookingEvents = pgTable(
   (t) => [
     index("booking_events_booking_idx").on(t.bookingId, t.createdAt),
     index("booking_events_org_idx").on(t.organisationId),
+  ],
+);
+
+// =============================================================================
+// Special events (ticketed event days + date blocking) — Phase 1: the
+// event model + closure primitive. Ticketing tables land in Phase 2.
+// See docs/specs/special-events.md.
+// =============================================================================
+
+export const eventStatus = pgEnum("event_status", ["draft", "published", "cancelled"]);
+
+export const specialEvents = pgTable(
+  "special_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    // Public URL segment under /events. Unique per venue.
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    // Event window, venue-local wall time stored as UTC (per bookings.md).
+    // A whole-day event is written as a full local-day [starts_at, ends_at)
+    // window at create time, so the availability loaders treat the stored
+    // window as authoritative and need no timezone maths.
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    status: eventStatus("status").notNull().default("draft"),
+    // When true (+ published), the event blocks standard table bookings over
+    // its window. A row with zero ticket types + this flag is a pure venue
+    // closure (holiday, private hire).
+    blocksStandardBookings: boolean("blocks_standard_bookings").notNull().default(true),
+    // How the operator declared the block; the concrete window above is what
+    // the loaders read. 'whole_day' is resolved to a full-day window on write.
+    blockScope: text("block_scope").notNull().default("window"),
+    // Link-out mode (Phase 1): operator-supplied external ticketing URL
+    // (Eventbrite / DesignMyNight / their own). Native ticketing (Phase 2)
+    // supersedes this. https only, validated at the write boundary.
+    externalTicketUrl: text("external_ticket_url"),
+    // Hero image in the public `venue-photos` Supabase bucket (booking-page.md).
+    heroPhotoPath: text("hero_photo_path"),
+    currency: char("currency", { length: 3 }).notNull().default("GBP"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("special_events_venue_slug_unique").on(t.venueId, t.slug),
+    // Overlap scan for the closure loaders: venue + window range.
+    index("special_events_venue_window_idx").on(t.venueId, t.startsAt, t.endsAt),
+    index("special_events_org_idx").on(t.organisationId),
+    check("special_events_block_scope_check", sql`${t.blockScope} in ('window', 'whole_day')`),
+    check("special_events_window_check", sql`${t.endsAt} > ${t.startsAt}`),
+  ],
+);
+
+// Area scope for an event (Phase 2.5). Zero rows = the event blocks the
+// WHOLE venue — the default, and what every pre-2.5 event already means
+// (no backfill). area_id FK is NO ACTION on purpose: deleting an area that
+// an event is scoped to must fail loudly rather than silently emptying the
+// junction and widening the block to the whole venue. See
+// docs/specs/special-events.md §Area-scoped events.
+export const specialEventAreas = pgTable(
+  "special_event_areas",
+  {
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => specialEvents.id, { onDelete: "cascade" }),
+    areaId: uuid("area_id")
+      .notNull()
+      .references(() => areas.id),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.eventId, t.areaId] }),
+    index("special_event_areas_area_idx").on(t.areaId),
+    index("special_event_areas_org_idx").on(t.organisationId),
+  ],
+);
+
+// -----------------------------------------------------------------------------
+// Native ticketing (Phase 2). event_ticket_types = price tiers per event;
+// event_order_items = the per-tier breakdown of a purchase (a booking with
+// source='event'). quantity_sold is the oversell guard — reserved via an
+// atomic conditional UPDATE inside the booking transaction, backstopped by the
+// quantity_sold <= quantity_total check. See docs/specs/special-events.md.
+// -----------------------------------------------------------------------------
+
+export const eventTicketTypes = pgTable(
+  "event_ticket_types",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => specialEvents.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    priceMinor: integer("price_minor").notNull(),
+    quantityTotal: integer("quantity_total").notNull(),
+    quantitySold: integer("quantity_sold").notNull().default(0),
+    maxPerOrder: integer("max_per_order").notNull().default(10),
+    sort: integer("sort").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("event_ticket_types_event_idx").on(t.eventId),
+    index("event_ticket_types_org_idx").on(t.organisationId),
+    check("event_ticket_types_price_nonneg_check", sql`${t.priceMinor} >= 0`),
+    check("event_ticket_types_qty_total_pos_check", sql`${t.quantityTotal} > 0`),
+    check(
+      "event_ticket_types_qty_sold_check",
+      sql`${t.quantitySold} >= 0 and ${t.quantitySold} <= ${t.quantityTotal}`,
+    ),
+    check("event_ticket_types_max_per_order_pos_check", sql`${t.maxPerOrder} > 0`),
+  ],
+);
+
+export const eventOrderItems = pgTable(
+  "event_order_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    // No onDelete → a ticket type with sales can't be deleted.
+    ticketTypeId: uuid("ticket_type_id")
+      .notNull()
+      .references(() => eventTicketTypes.id),
+    quantity: integer("quantity").notNull(),
+    // Snapshot of the tier price at purchase — later edits never rewrite history.
+    unitPriceMinor: integer("unit_price_minor").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("event_order_items_booking_idx").on(t.bookingId),
+    index("event_order_items_org_idx").on(t.organisationId),
+    index("event_order_items_ticket_type_idx").on(t.ticketTypeId),
+    check("event_order_items_quantity_pos_check", sql`${t.quantity} > 0`),
+    check("event_order_items_unit_price_nonneg_check", sql`${t.unitPriceMinor} >= 0`),
   ],
 );
 
@@ -1396,6 +1596,36 @@ export const messageUsage = pgTable(
       t.channel,
     ),
     index("message_usage_org_idx").on(t.organisationId),
+  ],
+);
+
+// Monthly AI (Bedrock) usage ledger — (org, period, venue) token tally.
+// Mirrors message_usage; cost is DERIVED at read time from the price
+// map in lib/billing/ai-usage.ts (per-call cost is sub-penny, so a
+// stored pence column would round to zero). Writes via adminDb() from
+// the enquiry runner only; member SELECT under RLS for the dashboard.
+// See docs/specs/ai-usage.md.
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    // 'yyyy-mm' billing period (UTC) — reuses billingPeriod().
+    period: text("period").notNull(),
+    callCount: integer("call_count").notNull().default(0),
+    inputTokens: bigint("input_tokens", { mode: "number" }).notNull().default(0),
+    outputTokens: bigint("output_tokens", { mode: "number" }).notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("ai_usage_org_period_venue_unique").on(t.organisationId, t.period, t.venueId),
+    index("ai_usage_venue_idx").on(t.venueId),
   ],
 );
 

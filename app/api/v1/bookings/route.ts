@@ -181,6 +181,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       "guest-invalid": 400,
       "slot-taken": 409,
       "no-availability": 409,
+      "venue-closed": 409,
       "venue-not-found": 404,
       "deposit-failed": 502,
     }[r.reason];
@@ -348,6 +349,7 @@ const authedPost = withApiAuth(async ({ req, orgId, keyId }) => {
         "guest-invalid": 400,
         "slot-taken": 409,
         "no-availability": 409,
+        "venue-closed": 409,
         "venue-not-found": 404,
         "deposit-failed": 502,
       };

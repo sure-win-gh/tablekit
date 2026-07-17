@@ -69,7 +69,7 @@ At MVP scale:
 
 The spec says "same area, adjacent", but "adjacent" needs spatial reasoning against the `position` jsonb which our form-based floor plan doesn't maintain reliably. MVP substitute: operators arrange areas so tables within an area genuinely can combine (e.g., a long bench or two nearby 2-tops). If they need finer control, they create smaller areas.
 
-Future (not this phase): a `tables.combinable_with uuid[]` column that operators set explicitly — more operator work, perfect control. Or spatial adjacency from `position` once we have a drag-drop editor with meaningful coordinates.
+~~Future (not this phase): a `tables.combinable_with uuid[]` column that operators set explicitly~~ — **shipped** as operator-controlled joins: a `table_combinations` edge table (adjacency graph) with a visual "Set up table joins" mode on the floor plan and connected-set enumeration in the engine. See [`docs/specs/table-combining.md`](../../docs/specs/table-combining.md). The same-area-pair rule described above is now the fallback for areas with no operator-set joins.
 
 ### D3. State machine: encoded in TS, enforced at write, audited in `booking_events`
 

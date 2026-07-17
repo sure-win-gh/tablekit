@@ -27,6 +27,8 @@ import {
   type Slot,
   type TableSpec,
 } from "@/lib/bookings/availability";
+import { isWholeVenue, loadEventClosures } from "@/lib/bookings/closures";
+import { loadVenueCombining } from "@/lib/bookings/combinable";
 import { todayInZone, venueLocalDayRange } from "@/lib/bookings/time";
 import { daysInMonth } from "@/lib/services/calendar";
 import { type Plan, toPlan } from "@/lib/auth/plan-level";
@@ -151,20 +153,23 @@ export async function loadPublicAvailability(
   ]);
 
   const { startUtc, endUtc } = venueLocalDayRange(input.date, venue.timezone);
-  const occupied = await db
-    .select({
-      tableId: bookingTables.tableId,
-      startAt: bookingTables.startAt,
-      endAt: bookingTables.endAt,
-    })
-    .from(bookingTables)
-    .where(
-      and(
-        eq(bookingTables.venueId, venue.id),
-        gte(bookingTables.startAt, startUtc),
-        lt(bookingTables.startAt, endUtc),
+  const [occupied, closures] = await Promise.all([
+    db
+      .select({
+        tableId: bookingTables.tableId,
+        startAt: bookingTables.startAt,
+        endAt: bookingTables.endAt,
+      })
+      .from(bookingTables)
+      .where(
+        and(
+          eq(bookingTables.venueId, venue.id),
+          gte(bookingTables.startAt, startUtc),
+          lt(bookingTables.startAt, endUtc),
+        ),
       ),
-    );
+    loadEventClosures(db, venue.id, startUtc, endUtc),
+  ]);
 
   const serviceSpecs: ServiceSpec[] = serviceRows.map((s) => ({
     id: s.id,
@@ -173,6 +178,7 @@ export async function loadPublicAvailability(
     turnMinutes: s.turnMinutes,
   }));
   const tableSpecs: TableSpec[] = tableRows;
+  const { combinable, maxCombineTables } = await loadVenueCombining(db, venue.id);
 
   const slots: Slot[] = findSlots({
     timezone: venue.timezone,
@@ -181,6 +187,9 @@ export async function loadPublicAvailability(
     services: serviceSpecs,
     tables: tableSpecs,
     occupied,
+    combinable,
+    maxCombineTables,
+    closures,
   });
 
   return {
@@ -196,10 +205,12 @@ export async function loadPublicAvailability(
 
 // --- Month availability (rich page calendar shading) ------------------------
 
-export type DayAvailability = "open" | "full" | "closed" | "past";
+export type DayAvailability = "open" | "full" | "closed" | "past" | "event";
 export type MonthAvailability = {
   month: string; // YYYY-MM
   days: Record<string, DayAvailability>; // dateYMD -> classification
+  // For "event" days: the published event to deep-link to (slug + name).
+  events: Record<string, { slug: string; name: string }>;
 };
 
 const DOW_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
@@ -208,6 +219,7 @@ const DOW_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 // tables + the whole month's occupancy ONCE, then runs the pure findSlots per
 // day (no per-day DB query). A day is:
 //   past   — before today in the venue zone
+//   event  — a published special event blocks standard bookings that day
 //   closed — no service runs that weekday
 //   full   — services run but every slot is taken for this party size
 //   open   — at least one slot is bookable
@@ -246,22 +258,27 @@ export async function loadPublicMonthAvailability(
 
   const { startUtc } = venueLocalDayRange(firstYmd, venue.timezone);
   const { endUtc } = venueLocalDayRange(lastYmd, venue.timezone);
-  // Occupancy across the whole month in one query. findSlots only overlaps
-  // same-day candidate slots, so passing the full month set is correct.
-  const occupied = await db
-    .select({
-      tableId: bookingTables.tableId,
-      startAt: bookingTables.startAt,
-      endAt: bookingTables.endAt,
-    })
-    .from(bookingTables)
-    .where(
-      and(
-        eq(bookingTables.venueId, venue.id),
-        gte(bookingTables.startAt, startUtc),
-        lt(bookingTables.startAt, endUtc),
+  // Occupancy + closures across the whole month in one round-trip each.
+  // findSlots only overlaps same-day candidate slots, so passing the full
+  // month set is correct for both. The closures query also carries the
+  // event slug/name so the calendar can deep-link each "event" day.
+  const [occupied, closures] = await Promise.all([
+    db
+      .select({
+        tableId: bookingTables.tableId,
+        startAt: bookingTables.startAt,
+        endAt: bookingTables.endAt,
+      })
+      .from(bookingTables)
+      .where(
+        and(
+          eq(bookingTables.venueId, venue.id),
+          gte(bookingTables.startAt, startUtc),
+          lt(bookingTables.startAt, endUtc),
+        ),
       ),
-    );
+    loadEventClosures(db, venue.id, startUtc, endUtc),
+  ]);
 
   const serviceSpecs: ServiceSpec[] = serviceRows.map((s) => ({
     id: s.id,
@@ -271,12 +288,33 @@ export async function loadPublicMonthAvailability(
   }));
   const tableSpecs: TableSpec[] = tableRows;
   const today = todayInZone(venue.timezone);
+  const { combinable, maxCombineTables } = await loadVenueCombining(db, venue.id);
 
   const days: Record<string, DayAvailability> = {};
+  const events: Record<string, { slug: string; name: string }> = {};
   for (let d = 1; d <= dim; d++) {
     const ymd = `${input.month}-${String(d).padStart(2, "0")}`;
     if (ymd < today) {
       days[ymd] = "past";
+      continue;
+    }
+    // Published blocking events covering this day. A WHOLE-VENUE event
+    // trumps open/full/closed — the date is sold as tickets, not tables.
+    // An AREA-SCOPED event still lands in `events` (the calendar shows a
+    // banner) but the day classifies normally from the remaining tables
+    // (findSlots strips the scoped areas' tables itself).
+    const { startUtc: dayStart, endUtc: dayEnd } = venueLocalDayRange(ymd, venue.timezone);
+    const covering = closures.filter(
+      (c) => c.startAt.getTime() < dayEnd.getTime() && c.endAt.getTime() > dayStart.getTime(),
+    );
+    const firstCovering = covering[0];
+    if (firstCovering) {
+      events[ymd] = { slug: firstCovering.slug, name: firstCovering.name };
+    }
+    const wholeVenue = covering.find(isWholeVenue);
+    if (wholeVenue) {
+      days[ymd] = "event";
+      events[ymd] = { slug: wholeVenue.slug, name: wholeVenue.name };
       continue;
     }
     const dow = DOW_KEYS[new Date(`${ymd}T12:00:00Z`).getUTCDay()]!;
@@ -291,10 +329,13 @@ export async function loadPublicMonthAvailability(
       services: serviceSpecs,
       tables: tableSpecs,
       occupied,
+      combinable,
+      maxCombineTables,
+      closures,
     });
     days[ymd] = slots.length > 0 ? "open" : "full";
   }
-  return { month: input.month, days };
+  return { month: input.month, days, events };
 }
 
 export type PublicShowcaseReview = {

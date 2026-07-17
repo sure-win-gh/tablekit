@@ -99,6 +99,7 @@ export async function createBookingAction(
       "guest-invalid": `Guest details invalid: ${"issues" in r ? r.issues.join("; ") : ""}`,
       "slot-taken": "Someone else just took that slot — pick another.",
       "no-availability": "That slot is no longer available.",
+      "venue-closed": "That date is closed to standard bookings for a special event.",
       "venue-not-found": "Venue not found.",
       // `deposit-failed` can't fire here — host bookings skip the
       // deposit branch inside createBooking — but the map has to be

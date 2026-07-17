@@ -207,6 +207,13 @@ export function SidebarShell({
         },
         {
           kind: "item",
+          href: `/dashboard/venues/${venueId}/events`,
+          label: "Events",
+          icon: CalendarDays,
+          locked: isLocked(data.org.plan, "events"),
+        },
+        {
+          kind: "item",
           href: `/dashboard/venues/${venueId}/guests`,
           label: "Guests",
           icon: Users,

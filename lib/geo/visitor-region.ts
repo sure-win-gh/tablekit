@@ -57,6 +57,16 @@ function firstHeader(headers: Headers, ...names: string[]): string | null {
 }
 
 /**
+ * The visitor's ISO 3166-1 alpha-2 country code from edge geo headers, or
+ * null when unknown (local dev, CI, privacy proxies). Best-effort only —
+ * used to PRE-SELECT the signup country picker; the selected value always
+ * decides region/entity (D1), geo never does.
+ */
+export function visitorCountry(headers: Headers): string | null {
+  return firstHeader(headers, "cf-ipcountry", "x-vercel-ip-country");
+}
+
+/**
  * Returns "wales" for visitors geolocated to Wales, "great-britain" for the
  * rest of the UK, or null when the visitor is outside the UK or location is
  * unknown.

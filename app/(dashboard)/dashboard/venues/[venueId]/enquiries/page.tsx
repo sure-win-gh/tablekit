@@ -7,6 +7,7 @@ import { isLocked } from "@/lib/auth/entitlements";
 import { getPlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { assertVenueVisible } from "@/lib/auth/venue-scope";
+import { getAiUsageSummary } from "@/lib/billing/ai-usage-summary";
 import { withUser } from "@/lib/db/client";
 import { type InboxBucket, loadInboxList } from "@/lib/enquiries/inbox";
 
@@ -39,7 +40,10 @@ export default async function EnquiriesPage({
   const bucket: InboxBucket =
     sp.bucket === "replied" || sp.bucket === "discarded" ? sp.bucket : "needs_action";
 
-  const rows = await withUser((db) => loadInboxList(db, { venueId, bucket }));
+  const { rows, aiUsage } = await withUser(async (db) => ({
+    rows: await loadInboxList(db, { venueId, bucket }),
+    aiUsage: await getAiUsageSummary(db, orgId, plan, new Date()),
+  }));
 
   return (
     <section className="flex flex-col gap-6">
@@ -49,6 +53,23 @@ export default async function EnquiriesPage({
           Inbound emails forwarded to this venue. Drafts are AI-generated; you review and send.
         </p>
       </div>
+
+      {aiUsage.overBudget ? (
+        <p
+          role="status"
+          className="rounded-card border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+        >
+          AI enquiry processing is paused — this month&apos;s included AI allowance has been
+          reached. New enquiries are safely queued and will be processed automatically from{" "}
+          {aiUsage.resumesAt.toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+            timeZone: "UTC",
+          })}
+          .
+        </p>
+      ) : null}
 
       <nav className="border-hairline flex gap-1 border-b text-sm">
         {BUCKETS.map((b) => {

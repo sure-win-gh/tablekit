@@ -180,8 +180,15 @@ export function buildOpenApiDocument() {
     info: {
       title: "TableKit API",
       version: "1.0.0",
-      description:
-        "REST API for Plus-tier customers. Bearer auth via API keys issued from /dashboard/organisation/api-keys.",
+      description: [
+        "REST API for Plus-tier customers. Bearer auth via API keys issued from /dashboard/organisation/api-keys (account owner only).",
+        "",
+        "**Rate limits:** 600 requests/minute per key. Exceeding it returns 429 with a `Retry-After` header (seconds). Request bodies over 32 KB are rejected.",
+        "",
+        "**Webhooks:** subscribe at /dashboard/organisation/webhooks to receive booking.created / updated / cancelled / seated / no_show events, signed with `X-TableKit-Signature: sha256=<hmac>` over the raw body. Verification guide: https://tablekit.uk/docs/webhooks",
+        "",
+        "Guides in plain English: https://tablekit.uk/docs",
+      ].join("\n"),
     },
     servers: [{ url: "https://api.tablekitapp.com/v1" }],
     components: {

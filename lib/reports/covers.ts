@@ -27,7 +27,10 @@ export async function getCoversReport(
   const rows = await db
     .select({
       day: sql<string>`(${bookings.startAt} AT TIME ZONE ${bounds.timezone})::date::text`.as("day"),
-      serviceId: bookings.serviceId,
+      // services.id, not bookings.serviceId: identical by the inner
+      // join, but non-null in the type now that event bookings carry
+      // a null service_id (they're excluded by this join by design).
+      serviceId: services.id,
       serviceName: services.name,
       bookings: sql<number>`count(*)::int`.as("bookings"),
       coversBooked: sql<number>`coalesce(sum(${bookings.partySize}), 0)::int`.as("coversBooked"),
@@ -45,7 +48,7 @@ export async function getCoversReport(
         lt(bookings.startAt, bounds.endUtc),
       ),
     )
-    .groupBy(sql`1`, bookings.serviceId, services.name)
+    .groupBy(sql`1`, services.id, services.name)
     .orderBy(asc(sql`1`), asc(services.name));
 
   return rows;
