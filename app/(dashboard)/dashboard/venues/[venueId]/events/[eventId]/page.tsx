@@ -18,6 +18,7 @@ import {
   venueTables,
 } from "@/lib/db/schema";
 
+import { EditEventForm, EventUrlCopy } from "./event-forms";
 import { NewTicketTypeForm, TicketTypeRow } from "./ticket-forms";
 
 export const metadata = {
@@ -49,10 +50,13 @@ export default async function EventDetailPage({
       .select({
         id: specialEvents.id,
         name: specialEvents.name,
+        slug: specialEvents.slug,
+        description: specialEvents.description,
         status: specialEvents.status,
         startsAt: specialEvents.startsAt,
         endsAt: specialEvents.endsAt,
         blockScope: specialEvents.blockScope,
+        externalTicketUrl: specialEvents.externalTicketUrl,
         venueId: specialEvents.venueId,
       })
       .from(specialEvents)
@@ -61,10 +65,18 @@ export default async function EventDetailPage({
     if (!event) return null;
 
     const [venue] = await db
-      .select({ timezone: venues.timezone })
+      .select({ timezone: venues.timezone, slug: venues.slug })
       .from(venues)
       .where(eq(venues.id, venueId))
       .limit(1);
+
+    // All the venue's areas (for the edit form's scope chips) + the ids this
+    // event is currently scoped to (empty = whole venue).
+    const areaOptions = await db
+      .select({ id: areas.id, name: areas.name })
+      .from(areas)
+      .where(eq(areas.venueId, venueId))
+      .orderBy(asc(areas.sort), asc(areas.name));
 
     const types = await db
       .select({
@@ -121,6 +133,9 @@ export default async function EventDetailPage({
     return {
       event,
       timezone: venue?.timezone ?? "Europe/London",
+      venueSlug: venue?.slug ?? null,
+      areaOptions,
+      scopedAreaIds: scopeRows.map((s) => s.areaId),
       types,
       attendees,
       scopeNames: scopeRows.map((s) => s.name),
@@ -129,7 +144,17 @@ export default async function EventDetailPage({
   });
 
   if (!data) notFound();
-  const { event, timezone, types, attendees, scopeNames, coversHint } = data;
+  const {
+    event,
+    timezone,
+    venueSlug,
+    areaOptions,
+    scopedAreaIds,
+    types,
+    attendees,
+    scopeNames,
+    coversHint,
+  } = data;
 
   const dateLabel = new Intl.DateTimeFormat("en-GB", {
     weekday: "long",
@@ -147,6 +172,28 @@ export default async function EventDetailPage({
     event.blockScope === "whole_day"
       ? "All day"
       : `${timeFmt.format(event.startsAt)}–${timeFmt.format(event.endsAt)}`;
+
+  // Public URL — same base + venue-slug fallback the embed page uses. The
+  // public /events page only serves published events, so for a draft this
+  // link is the URL it *will* have once published.
+  const appUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "https://book.tablekitapp.com";
+  const publicUrl = `${appUrl}/events/${venueSlug ?? venueId}/${event.slug}`;
+
+  // Venue-local values to pre-fill the edit form (windows are stored in UTC
+  // but authored in venue-local wall time).
+  const dateValue = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: timezone,
+  }).format(event.startsAt);
+  const hhmm = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: timezone,
+  });
+  const scope = event.blockScope === "whole_day" ? "whole_day" : "window";
 
   const soldTickets = attendees
     .filter((a) => a.status !== "no_show" && a.status !== "requested")
@@ -174,6 +221,34 @@ export default async function EventDetailPage({
           ticket sales and close the date to standard bookings.
         </p>
       ) : null}
+
+      <div className="flex flex-col gap-3">
+        <h3 className="text-ink text-sm font-bold tracking-tight">Event details</h3>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-ash text-xs font-medium">Public event page</span>
+          <EventUrlCopy url={publicUrl} />
+          <span className="text-ash text-[11px]">
+            {event.status === "published"
+              ? "Share this link — guests can view the event and book in."
+              : "This link goes live once the event is published."}
+          </span>
+        </div>
+        <EditEventForm
+          event={{
+            id: event.id,
+            venueId,
+            name: event.name,
+            description: event.description,
+            date: dateValue,
+            scope,
+            startTime: hhmm.format(event.startsAt),
+            endTime: hhmm.format(event.endsAt),
+            externalTicketUrl: event.externalTicketUrl,
+            areaIds: scopedAreaIds,
+          }}
+          areaOptions={areaOptions}
+        />
+      </div>
 
       <div className="flex flex-col gap-3">
         <h3 className="text-ink text-sm font-bold tracking-tight">Ticket types</h3>

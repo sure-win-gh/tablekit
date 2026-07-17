@@ -232,6 +232,175 @@ export async function createSpecialEvent(
 }
 
 // ---------------------------------------------------------------------------
+// Update (edit an existing event's details)
+// ---------------------------------------------------------------------------
+
+const UpdateBody = z
+  .object({
+    eventId: z.uuid(),
+    venueId: z.uuid(),
+    name: z.string().trim().min(2, "Give the event a name").max(120),
+    description: z
+      .string()
+      .trim()
+      .max(4000)
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date"),
+    scope: z.enum(["window", "whole_day"]),
+    startTime: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/)
+      .optional(),
+    endTime: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/)
+      .optional(),
+    areaIds: z.array(z.uuid()).max(50).default([]),
+    externalTicketUrl: z
+      .string()
+      .trim()
+      .url("Ticket link must be a valid URL")
+      .refine((v) => v.startsWith("https://"), "Ticket link must start with https://")
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+  })
+  .refine((d) => d.scope !== "window" || (d.startTime && d.endTime), {
+    message: "Set a start and end time, or choose 'Whole day'.",
+    path: ["startTime"],
+  });
+
+export async function updateSpecialEvent(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = UpdateBody.safeParse({
+    eventId: formData.get("event_id"),
+    venueId: formData.get("venue_id"),
+    name: formData.get("name"),
+    description: formData.get("description") || undefined,
+    date: formData.get("date"),
+    scope: formData.get("scope"),
+    startTime: formData.get("start_time") || undefined,
+    endTime: formData.get("end_time") || undefined,
+    areaIds: formData.getAll("area_ids").map(String),
+    externalTicketUrl: formData.get("external_ticket_url") || undefined,
+  });
+  if (!parsed.success) {
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the fields." };
+  }
+
+  // Same Plus gate + role as create — the form is UX only; this re-asserts so
+  // a crafted request can't edit events on a non-Plus org.
+  const { orgId, userId } = await requireRole("manager");
+  await requirePlan(orgId, "plus");
+  const tz = await venueTimezone(parsed.data.venueId, orgId);
+
+  // Recompute the concrete UTC window exactly as create does.
+  let startsAt: Date;
+  let endsAt: Date;
+  if (parsed.data.scope === "whole_day") {
+    const range = venueLocalDayRange(parsed.data.date, tz);
+    startsAt = range.startUtc;
+    endsAt = range.endUtc;
+  } else {
+    startsAt = zonedWallToUtc(parsed.data.date, parsed.data.startTime!, tz);
+    endsAt = zonedWallToUtc(parsed.data.date, parsed.data.endTime!, tz);
+    if (endsAt.getTime() <= startsAt.getTime()) {
+      return { status: "error", message: "End time must be after the start time." };
+    }
+  }
+
+  // Area scope: every posted id must belong to THIS venue (same guard as
+  // create) — a crafted id from another venue/org must fail.
+  const scopedAreaIds = [...new Set(parsed.data.areaIds)];
+  if (scopedAreaIds.length > 0) {
+    const venueAreas = await adminDb()
+      .select({ id: areas.id })
+      .from(areas)
+      .where(and(eq(areas.venueId, parsed.data.venueId), inArray(areas.id, scopedAreaIds)));
+    if (venueAreas.length !== scopedAreaIds.length) {
+      return {
+        status: "error",
+        message: "One of the selected areas doesn't belong to this venue.",
+      };
+    }
+  }
+
+  // The slug is deliberately NOT regenerated from the name: it's the public
+  // URL segment guests may already have, so a rename never breaks a shared
+  // link. Cleared optional fields are written back as null.
+  const db = adminDb();
+  const updated = await db.transaction(async (tx) => {
+    const rows = await tx
+      .update(specialEvents)
+      .set({
+        name: parsed.data.name,
+        description: parsed.data.description ?? null,
+        startsAt,
+        endsAt,
+        blockScope: parsed.data.scope,
+        externalTicketUrl: parsed.data.externalTicketUrl ?? null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(specialEvents.id, parsed.data.eventId),
+          eq(specialEvents.venueId, parsed.data.venueId),
+          eq(specialEvents.organisationId, orgId),
+        ),
+      )
+      .returning({ id: specialEvents.id, status: specialEvents.status });
+    const event = rows[0];
+    if (!event) return null;
+
+    // Replace the area scope wholesale — simplest correct semantics for an
+    // edit (add/remove areas), and the set is tiny.
+    await tx.delete(specialEventAreas).where(eq(specialEventAreas.eventId, event.id));
+    if (scopedAreaIds.length > 0) {
+      await tx.insert(specialEventAreas).values(
+        scopedAreaIds.map((areaId) => ({
+          eventId: event.id,
+          areaId,
+          organisationId: orgId,
+        })),
+      );
+    }
+    return event;
+  });
+
+  if (!updated) {
+    return { status: "error", message: "Event not found." };
+  }
+
+  await audit.log({
+    organisationId: orgId,
+    actorUserId: userId,
+    action: "special_event.updated",
+    targetType: "special_event",
+    targetId: parsed.data.eventId,
+    metadata: {
+      venueId: parsed.data.venueId,
+      scope: parsed.data.scope,
+      areaIds: scopedAreaIds,
+    },
+  });
+
+  // Editing the date/window of a published event can newly collide with
+  // existing standard bookings — same non-blocking notice as publish.
+  const warning =
+    updated.status === "published"
+      ? collisionWarning(
+          await countCollidingBookings(parsed.data.venueId, startsAt, endsAt, scopedAreaIds),
+        )
+      : undefined;
+
+  revalidatePath(`/dashboard/venues/${parsed.data.venueId}/events`);
+  revalidatePath(`/dashboard/venues/${parsed.data.venueId}/events/${parsed.data.eventId}`);
+  return warning ? { status: "saved", warning } : { status: "saved" };
+}
+
+// ---------------------------------------------------------------------------
 // Set status (publish / unpublish / cancel)
 // ---------------------------------------------------------------------------
 
