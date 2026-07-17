@@ -47,6 +47,12 @@ type Ctx = {
   venueBId: string;
   eventAId: string;
   eventBId: string;
+  areaAId: string;
+  areaBId: string;
+  ticketTypeAId: string;
+  ticketTypeBId: string;
+  orderItemAId: string;
+  orderItemBId: string;
 };
 
 const run = Date.now().toString(36);
@@ -118,6 +124,85 @@ beforeAll(async () => {
   const eventAId = await mkEvent(orgA.id, venueAId, "A");
   const eventBId = await mkEvent(orgB.id, venueBId, "B");
 
+  // Area scope rows (Phase 2.5) — one area per venue, each event scoped to
+  // its own venue's area, so the junction has cross-tenant data to isolate.
+  const mkArea = async (orgId: string, venueId: string, tag: string) => {
+    const [area] = await db
+      .insert(schema.areas)
+      .values({ organisationId: orgId, venueId, name: `Area ${tag}` })
+      .returning({ id: schema.areas.id });
+    if (!area) throw new Error("area insert returned no row");
+    return area.id;
+  };
+  const areaAId = await mkArea(orgA.id, venueAId, "A");
+  const areaBId = await mkArea(orgB.id, venueBId, "B");
+  await db.insert(schema.specialEventAreas).values([
+    { eventId: eventAId, areaId: areaAId, organisationId: orgA.id },
+    { eventId: eventBId, areaId: areaBId, organisationId: orgB.id },
+  ]);
+
+  // Ticketing rows (Phase 2) — a ticket type and one purchased order
+  // item per org, so both 0060 tables have cross-tenant data to
+  // isolate. The order item needs an event booking + guest.
+  const mkTicketing = async (orgId: string, venueId: string, eventId: string, tag: string) => {
+    const [ticketType] = await db
+      .insert(schema.eventTicketTypes)
+      .values({
+        organisationId: orgId,
+        eventId,
+        name: `Standard ${tag}`,
+        priceMinor: 4500,
+        quantityTotal: 10,
+        maxPerOrder: 10,
+      })
+      .returning({ id: schema.eventTicketTypes.id });
+    if (!ticketType) throw new Error("ticket type insert returned no row");
+
+    const [guest] = await db
+      .insert(schema.guests)
+      .values({
+        organisationId: orgId,
+        firstName: "G",
+        lastNameCipher: "c",
+        emailCipher: "c",
+        emailHash: `evt-rls-${tag}-${run}`,
+      })
+      .returning({ id: schema.guests.id });
+    if (!guest) throw new Error("guest insert returned no row");
+
+    const [booking] = await db
+      .insert(schema.bookings)
+      .values({
+        organisationId: orgId,
+        venueId,
+        eventId,
+        guestId: guest.id,
+        partySize: 2,
+        startAt: new Date("2026-11-21T18:00:00Z"),
+        endAt: new Date("2026-11-21T23:00:00Z"),
+        status: "confirmed",
+        source: "event",
+      })
+      .returning({ id: schema.bookings.id });
+    if (!booking) throw new Error("booking insert returned no row");
+
+    const [orderItem] = await db
+      .insert(schema.eventOrderItems)
+      .values({
+        organisationId: orgId,
+        bookingId: booking.id,
+        ticketTypeId: ticketType.id,
+        quantity: 2,
+        unitPriceMinor: 4500,
+      })
+      .returning({ id: schema.eventOrderItems.id });
+    if (!orderItem) throw new Error("order item insert returned no row");
+
+    return { ticketTypeId: ticketType.id, orderItemId: orderItem.id };
+  };
+  const ticketingA = await mkTicketing(orgA.id, venueAId, eventAId, "A");
+  const ticketingB = await mkTicketing(orgB.id, venueBId, eventBId, "B");
+
   ctx = {
     userAId,
     userBId,
@@ -127,6 +212,12 @@ beforeAll(async () => {
     venueBId,
     eventAId,
     eventBId,
+    areaAId,
+    areaBId,
+    ticketTypeAId: ticketingA.ticketTypeId,
+    ticketTypeBId: ticketingB.ticketTypeId,
+    orderItemAId: ticketingA.orderItemId,
+    orderItemBId: ticketingB.orderItemId,
   };
 });
 
@@ -171,5 +262,69 @@ describe("special_events RLS cross-tenant isolation", () => {
         }),
       ),
     ).rejects.toThrow();
+  });
+
+  it("user A reads only their own event's area scope", async () => {
+    const rows = await asUser(ctx.userAId, (tx) => tx.select().from(schema.specialEventAreas));
+    const eventIds = rows.map((r) => r.eventId);
+    expect(eventIds).toContain(ctx.eventAId);
+    expect(eventIds).not.toContain(ctx.eventBId);
+  });
+
+  it("authenticated role cannot insert an area-scope row directly", async () => {
+    // Fresh (event, area) pair — not the stored ones — so this proves the
+    // RLS denial, not a primary-key conflict.
+    await expect(
+      asUser(ctx.userAId, (tx) =>
+        tx.insert(schema.specialEventAreas).values({
+          eventId: ctx.eventAId,
+          areaId: ctx.areaBId,
+          organisationId: ctx.orgAId,
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("user A reads only their own ticket types", async () => {
+    const rows = await asUser(ctx.userAId, (tx) => tx.select().from(schema.eventTicketTypes));
+    const ids = rows.map((r) => r.id);
+    expect(ids).toContain(ctx.ticketTypeAId);
+    expect(ids).not.toContain(ctx.ticketTypeBId);
+  });
+
+  it("user B reads only their own order items (mirror)", async () => {
+    const rows = await asUser(ctx.userBId, (tx) => tx.select().from(schema.eventOrderItems));
+    const ids = rows.map((r) => r.id);
+    expect(ids).toContain(ctx.orderItemBId);
+    expect(ids).not.toContain(ctx.orderItemAId);
+  });
+
+  it("authenticated role cannot insert a ticket type directly", async () => {
+    await expect(
+      asUser(ctx.userAId, (tx) =>
+        tx.insert(schema.eventTicketTypes).values({
+          organisationId: ctx.orgAId,
+          eventId: ctx.eventAId,
+          name: "Sneaky tier",
+          priceMinor: 100,
+          quantityTotal: 5,
+          maxPerOrder: 5,
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("authenticated role cannot update quantity_sold directly", async () => {
+    // No UPDATE policy exists; a member must not be able to zero the
+    // sold counter (which would re-open a sold-out event).
+    const rows = await asUser(ctx.userAId, (tx) =>
+      tx
+        .update(schema.eventTicketTypes)
+        .set({ quantitySold: 0 })
+        .where(eq(schema.eventTicketTypes.id, ctx.ticketTypeAId))
+        .returning({ id: schema.eventTicketTypes.id }),
+    );
+    // RLS silently filters the row from UPDATE's scope — 0 rows touched.
+    expect(rows).toHaveLength(0);
   });
 });

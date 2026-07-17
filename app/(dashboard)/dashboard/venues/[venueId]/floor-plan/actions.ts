@@ -124,9 +124,26 @@ export async function deleteArea(_prev: ActionState, formData: FormData): Promis
   const { orgId } = await requireRole("manager");
   const { venueId } = await assertAreaInOrg(parsed.data.areaId, orgId);
 
-  await adminDb()
-    .delete(areas)
-    .where(and(eq(areas.id, parsed.data.areaId), eq(areas.organisationId, orgId)));
+  try {
+    await adminDb()
+      .delete(areas)
+      .where(and(eq(areas.id, parsed.data.areaId), eq(areas.organisationId, orgId)));
+  } catch (err) {
+    // 23503 foreign_key_violation — the area is referenced by bookings or a
+    // special event's area scope (special_event_areas is NO ACTION on
+    // purpose; deleting a scoped area must not silently widen the block to
+    // the whole venue — spec §Area-scoped events).
+    const code = (err as { code?: unknown }).code;
+    const causeCode = (err as { cause?: { code?: unknown } }).cause?.code;
+    if (code === "23503" || causeCode === "23503") {
+      return {
+        status: "error",
+        message:
+          "This area is referenced by bookings or a special event — move those (or edit the event's area scope) first.",
+      };
+    }
+    throw err;
+  }
 
   revalidatePath(`/dashboard/venues/${venueId}/floor-plan`);
   return { status: "saved" };

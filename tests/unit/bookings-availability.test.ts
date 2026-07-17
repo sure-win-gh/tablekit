@@ -504,3 +504,65 @@ describe("findSlots — special-event closures", () => {
     expect(starts).toContain("12:00"); // untouched midday slot survives
   });
 });
+
+// Area-scoped closures (docs/specs/special-events.md §Area-scoped events).
+// A closure with areaIds removes only those areas' tables from the free
+// set; whole-venue (areaIds null/empty) drops the slot outright — the
+// degenerate "every area" case of the same rule.
+describe("findSlots — area-scoped closures", () => {
+  const utc = (hhmm: string) => new Date(`${DATE}T${hhmm}:00+01:00`);
+  const base = {
+    timezone: TZ,
+    date: DATE,
+    partySize: 2,
+    services: [cafeService],
+    tables: [t("TA", "A", 1, 2), t("TB", "B", 1, 2)],
+    occupied: [],
+  };
+  const scoped = (areaIds: string[] | null) => [
+    { startAt: utc("12:00"), endAt: utc("14:00"), areaIds },
+  ];
+
+  it("a closure scoped to area A leaves area B bookable in the window", () => {
+    const slots = findSlots({ ...base, closures: scoped(["A"]) });
+    const at1230 = slots.find((s) => s.wallStart === "12:30");
+    expect(at1230).toBeDefined();
+    const tables = at1230!.options.flatMap((o) => o.tableIds);
+    expect(tables).toContain("TB");
+    expect(tables).not.toContain("TA");
+    // Outside the window, area A is back.
+    const at0900 = slots.find((s) => s.wallStart === "09:00");
+    expect(at0900!.options.flatMap((o) => o.tableIds)).toContain("TA");
+  });
+
+  it("scoping every area ≡ whole-venue: the slot disappears", () => {
+    const slots = findSlots({ ...base, closures: scoped(["A", "B"]) });
+    expect(slots.map((s) => s.wallStart)).not.toContain("12:30");
+  });
+
+  it("areaIds null and areaIds [] both mean whole venue", () => {
+    for (const areaIds of [null, [] as string[]]) {
+      const slots = findSlots({ ...base, closures: scoped(areaIds) });
+      expect(slots.map((s) => s.wallStart)).not.toContain("12:30");
+      expect(slots.map((s) => s.wallStart)).toContain("09:00");
+    }
+  });
+
+  it("same-area combinations die with their scoped area", () => {
+    // Party of 3 seats only via the A1+A2 pair; TB (max 2) can't hold it.
+    const input = {
+      timezone: TZ,
+      date: DATE,
+      partySize: 3,
+      services: [cafeService],
+      tables: [t("A1", "A", 1, 2), t("A2", "A", 1, 2), t("TB", "B", 1, 2)],
+      occupied: [],
+    };
+    const open = findSlots({ ...input });
+    expect(open.map((s) => s.wallStart)).toContain("12:30");
+    const blocked = findSlots({ ...input, closures: scoped(["A"]) });
+    expect(blocked.map((s) => s.wallStart)).not.toContain("12:30");
+    // The pair returns outside the closure window.
+    expect(blocked.map((s) => s.wallStart)).toContain("09:00");
+  });
+});

@@ -32,7 +32,10 @@ export async function getNoShowReport(
   // produce a single result set the JS side splits.
   const byServiceRows = await db
     .select({
-      serviceId: bookings.serviceId,
+      // services.id, not bookings.serviceId: identical by the inner
+      // join, but non-null in the type now that event bookings carry
+      // a null service_id (they're excluded by this join by design).
+      serviceId: services.id,
       serviceName: services.name,
       eligible: sql<number>`count(*)::int`.as("eligible"),
       noShows: sql<number>`count(*) filter (where ${bookings.status} = 'no_show')::int`.as(
@@ -49,7 +52,7 @@ export async function getNoShowReport(
         inArray(bookings.status, [...ELIGIBLE]),
       ),
     )
-    .groupBy(bookings.serviceId, services.name)
+    .groupBy(services.id, services.name)
     .orderBy(asc(services.name));
 
   let totalEligible = 0;

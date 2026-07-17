@@ -15,7 +15,15 @@ import "server-only";
 
 import { and, eq } from "drizzle-orm";
 
-import { bookings, guests, messageTemplates, reviews, services, venues } from "@/lib/db/schema";
+import {
+  bookings,
+  guests,
+  messageTemplates,
+  reviews,
+  services,
+  specialEvents,
+  venues,
+} from "@/lib/db/schema";
 import { decryptPii, type Ciphertext } from "@/lib/security/crypto";
 import { adminDb } from "@/lib/server/admin/db";
 import { formatVenueDateLong, formatVenueTime } from "@/lib/bookings/time";
@@ -60,6 +68,7 @@ export async function loadMessageContext(input: LoadContextInput): Promise<LoadC
       notes: bookings.notes,
       cancelledReason: bookings.cancelledReason,
       serviceName: services.name,
+      eventName: specialEvents.name,
       venueId: venues.id,
       venueName: venues.name,
       venueLocale: venues.locale,
@@ -78,7 +87,12 @@ export async function loadMessageContext(input: LoadContextInput): Promise<LoadC
       guestErasedAt: guests.erasedAt,
     })
     .from(bookings)
-    .innerJoin(services, eq(services.id, bookings.serviceId))
+    // Left joins: event bookings have a null service_id (their name
+    // comes from the special event), standard bookings a null
+    // event_id. An inner services join here silently dropped event
+    // bookings — their confirmations died as booking-not-found.
+    .leftJoin(services, eq(services.id, bookings.serviceId))
+    .leftJoin(specialEvents, eq(specialEvents.id, bookings.eventId))
     .innerJoin(venues, eq(venues.id, bookings.venueId))
     .innerJoin(guests, eq(guests.id, bookings.guestId))
     .where(eq(bookings.id, input.bookingId))
@@ -146,7 +160,9 @@ export async function loadMessageContext(input: LoadContextInput): Promise<LoadC
     endAtLocal,
     venueName: row.venueName,
     venueLocale: row.venueLocale,
-    serviceName: row.serviceName,
+    // Event bookings substitute the event's name for {{service}} —
+    // the 0060 CHECK guarantees exactly one of the two is set.
+    serviceName: row.serviceName ?? row.eventName ?? "",
     notes: row.notes,
     cancellationReason: row.cancelledReason,
     unsubscribeUrl: unsubscribeUrl(input.appUrl, {

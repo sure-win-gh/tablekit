@@ -421,6 +421,34 @@
       "when": 1784120003000,
       "tag": "0059_special_events",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1784206681000,
+      "tag": "0060_native_ticketing",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1784206682000,
+      "tag": "0061_event_booking_trigger",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1784206683000,
+      "tag": "0062_event_area_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1784206684000,
+      "tag": "0063_bookings_source_event",
+      "breakpoints": true
     }
   ]
 }

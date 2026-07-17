@@ -653,12 +653,14 @@ export const bookings = pgTable(
     venueId: uuid("venue_id")
       .notNull()
       .references(() => venues.id, { onDelete: "cascade" }),
-    serviceId: uuid("service_id")
-      .notNull()
-      .references(() => services.id),
-    areaId: uuid("area_id")
-      .notNull()
-      .references(() => areas.id),
+    // Nullable for event bookings — GA tickets have no service/area. The
+    // bookings_event_or_service_check below keeps standard vs event rows
+    // honest. See docs/specs/special-events.md Phase 2.
+    serviceId: uuid("service_id").references(() => services.id),
+    areaId: uuid("area_id").references(() => areas.id),
+    // Set for event-ticket bookings (source='event'); null for standard.
+    // No onDelete → an event with sold tickets can't be hard-deleted.
+    eventId: uuid("event_id").references(() => specialEvents.id),
     guestId: uuid("guest_id")
       .notNull()
       .references(() => guests.id),
@@ -702,6 +704,15 @@ export const bookings = pgTable(
     index("bookings_venue_start_active_idx")
       .on(t.venueId, t.startAt)
       .where(sql`${t.status} <> 'cancelled'`),
+    // Event bookings carry event_id + null service/area; standard bookings
+    // the reverse. Neither kind can be malformed.
+    check(
+      "bookings_event_or_service_check",
+      sql`(${t.eventId} is not null and ${t.serviceId} is null and ${t.areaId} is null) or (${t.eventId} is null and ${t.serviceId} is not null and ${t.areaId} is not null)`,
+    ),
+    index("bookings_event_idx")
+      .on(t.eventId)
+      .where(sql`${t.eventId} is not null`),
   ],
 );
 
@@ -801,6 +812,101 @@ export const specialEvents = pgTable(
     index("special_events_org_idx").on(t.organisationId),
     check("special_events_block_scope_check", sql`${t.blockScope} in ('window', 'whole_day')`),
     check("special_events_window_check", sql`${t.endsAt} > ${t.startsAt}`),
+  ],
+);
+
+// Area scope for an event (Phase 2.5). Zero rows = the event blocks the
+// WHOLE venue — the default, and what every pre-2.5 event already means
+// (no backfill). area_id FK is NO ACTION on purpose: deleting an area that
+// an event is scoped to must fail loudly rather than silently emptying the
+// junction and widening the block to the whole venue. See
+// docs/specs/special-events.md §Area-scoped events.
+export const specialEventAreas = pgTable(
+  "special_event_areas",
+  {
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => specialEvents.id, { onDelete: "cascade" }),
+    areaId: uuid("area_id")
+      .notNull()
+      .references(() => areas.id),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.eventId, t.areaId] }),
+    index("special_event_areas_area_idx").on(t.areaId),
+    index("special_event_areas_org_idx").on(t.organisationId),
+  ],
+);
+
+// -----------------------------------------------------------------------------
+// Native ticketing (Phase 2). event_ticket_types = price tiers per event;
+// event_order_items = the per-tier breakdown of a purchase (a booking with
+// source='event'). quantity_sold is the oversell guard — reserved via an
+// atomic conditional UPDATE inside the booking transaction, backstopped by the
+// quantity_sold <= quantity_total check. See docs/specs/special-events.md.
+// -----------------------------------------------------------------------------
+
+export const eventTicketTypes = pgTable(
+  "event_ticket_types",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => specialEvents.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    priceMinor: integer("price_minor").notNull(),
+    quantityTotal: integer("quantity_total").notNull(),
+    quantitySold: integer("quantity_sold").notNull().default(0),
+    maxPerOrder: integer("max_per_order").notNull().default(10),
+    sort: integer("sort").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("event_ticket_types_event_idx").on(t.eventId),
+    index("event_ticket_types_org_idx").on(t.organisationId),
+    check("event_ticket_types_price_nonneg_check", sql`${t.priceMinor} >= 0`),
+    check("event_ticket_types_qty_total_pos_check", sql`${t.quantityTotal} > 0`),
+    check(
+      "event_ticket_types_qty_sold_check",
+      sql`${t.quantitySold} >= 0 and ${t.quantitySold} <= ${t.quantityTotal}`,
+    ),
+    check("event_ticket_types_max_per_order_pos_check", sql`${t.maxPerOrder} > 0`),
+  ],
+);
+
+export const eventOrderItems = pgTable(
+  "event_order_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organisationId: uuid("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    // No onDelete → a ticket type with sales can't be deleted.
+    ticketTypeId: uuid("ticket_type_id")
+      .notNull()
+      .references(() => eventTicketTypes.id),
+    quantity: integer("quantity").notNull(),
+    // Snapshot of the tier price at purchase — later edits never rewrite history.
+    unitPriceMinor: integer("unit_price_minor").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("event_order_items_booking_idx").on(t.bookingId),
+    index("event_order_items_org_idx").on(t.organisationId),
+    index("event_order_items_ticket_type_idx").on(t.ticketTypeId),
+    check("event_order_items_quantity_pos_check", sql`${t.quantity} > 0`),
+    check("event_order_items_unit_price_nonneg_check", sql`${t.unitPriceMinor} >= 0`),
   ],
 );
 
