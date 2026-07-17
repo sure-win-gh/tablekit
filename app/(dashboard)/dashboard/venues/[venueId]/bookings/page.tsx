@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, ilike, inArray, lt, or, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, ilike, inArray, lt, or, sql, type SQL } from "drizzle-orm";
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -112,7 +112,10 @@ export default async function BookingsPage({
         partySize: bookings.partySize,
         status: bookings.status,
         notes: bookings.notes,
-        areaId: bookings.areaId,
+        // Typed non-null: the services inner-join excludes event
+        // bookings, and the 0060 CHECK pairs a non-null service_id
+        // with a non-null area_id on every remaining row.
+        areaId: sql<string>`${bookings.areaId}`.as("areaId"),
         serviceName: services.name,
         guestId: bookings.guestId,
         guestFirstName: guests.firstName,

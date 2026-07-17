@@ -7,7 +7,7 @@
 
 import "server-only";
 
-import { and, asc, desc, eq, gt, gte, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, isNull, lt, sql } from "drizzle-orm";
 
 import {
   bookingTables,
@@ -15,7 +15,6 @@ import {
   organisations,
   reviews,
   services,
-  specialEvents,
   venuePhotos,
   venueTables,
   venues,
@@ -24,11 +23,11 @@ import { adminDb } from "@/lib/server/admin/db";
 import { decryptPii, type Ciphertext } from "@/lib/security/crypto";
 import {
   findSlots,
-  type ClosureWindow,
   type ServiceSpec,
   type Slot,
   type TableSpec,
 } from "@/lib/bookings/availability";
+import { isWholeVenue, loadEventClosures } from "@/lib/bookings/closures";
 import { loadVenueCombining } from "@/lib/bookings/combinable";
 import { todayInZone, venueLocalDayRange } from "@/lib/bookings/time";
 import { daysInMonth } from "@/lib/services/calendar";
@@ -126,33 +125,6 @@ export type PublicAvailability = {
   }>;
 };
 
-// Published special events that block standard bookings on this venue and
-// whose window overlaps [rangeStartUtc, rangeEndUtc). Returned as closure
-// windows for findSlots. Whole-day events are stored with a full local-day
-// [starts_at, ends_at) window at write time, so the loader treats the
-// stored window as authoritative and needs no timezone maths.
-// See docs/specs/special-events.md.
-async function loadClosures(
-  db: ReturnType<typeof adminDb>,
-  venueId: string,
-  rangeStartUtc: Date,
-  rangeEndUtc: Date,
-): Promise<ClosureWindow[]> {
-  const rows = await db
-    .select({ startAt: specialEvents.startsAt, endAt: specialEvents.endsAt })
-    .from(specialEvents)
-    .where(
-      and(
-        eq(specialEvents.venueId, venueId),
-        eq(specialEvents.status, "published"),
-        eq(specialEvents.blocksStandardBookings, true),
-        lt(specialEvents.startsAt, rangeEndUtc),
-        gt(specialEvents.endsAt, rangeStartUtc),
-      ),
-    );
-  return rows;
-}
-
 export async function loadPublicAvailability(
   venue: PublicVenue,
   input: { date: string; partySize: number },
@@ -196,7 +168,7 @@ export async function loadPublicAvailability(
           lt(bookingTables.startAt, endUtc),
         ),
       ),
-    loadClosures(db, venue.id, startUtc, endUtc),
+    loadEventClosures(db, venue.id, startUtc, endUtc),
   ]);
 
   const serviceSpecs: ServiceSpec[] = serviceRows.map((s) => ({
@@ -305,23 +277,7 @@ export async function loadPublicMonthAvailability(
           lt(bookingTables.startAt, endUtc),
         ),
       ),
-    db
-      .select({
-        slug: specialEvents.slug,
-        name: specialEvents.name,
-        startAt: specialEvents.startsAt,
-        endAt: specialEvents.endsAt,
-      })
-      .from(specialEvents)
-      .where(
-        and(
-          eq(specialEvents.venueId, venue.id),
-          eq(specialEvents.status, "published"),
-          eq(specialEvents.blocksStandardBookings, true),
-          lt(specialEvents.startsAt, endUtc),
-          gt(specialEvents.endsAt, startUtc),
-        ),
-      ),
+    loadEventClosures(db, venue.id, startUtc, endUtc),
   ]);
 
   const serviceSpecs: ServiceSpec[] = serviceRows.map((s) => ({
@@ -342,15 +298,23 @@ export async function loadPublicMonthAvailability(
       days[ymd] = "past";
       continue;
     }
-    // A published blocking event on this day trumps open/full/closed —
-    // the date is sold as a ticketed event, not standard tables.
+    // Published blocking events covering this day. A WHOLE-VENUE event
+    // trumps open/full/closed — the date is sold as tickets, not tables.
+    // An AREA-SCOPED event still lands in `events` (the calendar shows a
+    // banner) but the day classifies normally from the remaining tables
+    // (findSlots strips the scoped areas' tables itself).
     const { startUtc: dayStart, endUtc: dayEnd } = venueLocalDayRange(ymd, venue.timezone);
-    const coveringEvent = closures.find(
+    const covering = closures.filter(
       (c) => c.startAt.getTime() < dayEnd.getTime() && c.endAt.getTime() > dayStart.getTime(),
     );
-    if (coveringEvent) {
+    const firstCovering = covering[0];
+    if (firstCovering) {
+      events[ymd] = { slug: firstCovering.slug, name: firstCovering.name };
+    }
+    const wholeVenue = covering.find(isWholeVenue);
+    if (wholeVenue) {
       days[ymd] = "event";
-      events[ymd] = { slug: coveringEvent.slug, name: coveringEvent.name };
+      events[ymd] = { slug: wholeVenue.slug, name: wholeVenue.name };
       continue;
     }
     const dow = DOW_KEYS[new Date(`${ymd}T12:00:00Z`).getUTCDay()]!;

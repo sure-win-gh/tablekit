@@ -57,17 +57,26 @@ export type AvailabilityInput = {
   // Default 3. Legacy pair combining is size 2 and always available.
   maxCombineTables?: number;
   // Special-event closures blocking standard bookings on this venue
-  // (docs/specs/special-events.md). Any candidate slot whose
-  // [startAt, endAt) window overlaps a closure is dropped. Loaded by the
-  // caller (loadClosures in lib/public/venue.ts) and injected so this
-  // function stays pure. Omit/empty → behaviour identical to before the
-  // feature. Half-open overlap, same rule as isTableOccupied.
+  // (docs/specs/special-events.md). A WHOLE-VENUE closure (areaIds null/
+  // empty) drops any candidate slot whose [startAt, endAt) overlaps it; an
+  // AREA-SCOPED closure instead removes that area's tables from the free
+  // set for the window — other areas keep booking. Loaded by the caller
+  // (lib/bookings/closures.ts) and injected so this function stays pure.
+  // Omit/empty → behaviour identical to before the feature. Half-open
+  // overlap, same rule as isTableOccupied.
   closures?: ClosureWindow[];
 };
 
 // A window during which standard bookings are blocked (a published,
 // blocking special event). UTC instants; half-open [startAt, endAt).
-export type ClosureWindow = { startAt: Date; endAt: Date };
+export type ClosureWindow = {
+  startAt: Date;
+  endAt: Date;
+  // Floor-plan areas the closure applies to. null/undefined/empty = the
+  // whole venue (the default; every pre-2.5 event). See spec §Area-scoped
+  // events.
+  areaIds?: string[] | null;
+};
 
 // Precomputed, per-call combining context shared across every slot.
 type CombineContext = {
@@ -133,13 +142,22 @@ export function findSlots(input: AvailabilityInput): Slot[] {
       const startAt = zonedWallToUtc(input.date, wallStart, input.timezone);
       const endAt = new Date(startAt.getTime() + svc.turnMinutes * 60_000);
 
-      // A special-event closure blocks the whole slot: if the booking
-      // window overlaps any closure, this time isn't bookable as a
-      // standard table at all (the date is sold as a ticketed event).
-      if (overlapsClosure(startAt, endAt, input.closures)) continue;
+      // Special-event closures. Whole-venue closure ⇒ the slot isn't
+      // bookable at all (the date is sold as a ticketed event). Area-scoped
+      // closure ⇒ only that area's tables leave the free set; whole-venue
+      // is the degenerate "every area" case of the same rule.
+      const closing = overlappingClosures(startAt, endAt, input.closures);
+      if (closing.some((c) => !c.areaIds || c.areaIds.length === 0)) continue;
+      let closedAreas: Set<string> | null = null;
+      if (closing.length > 0) {
+        closedAreas = new Set<string>();
+        for (const c of closing) for (const id of c.areaIds!) closedAreas.add(id);
+      }
 
       const free = input.tables.filter(
-        (t) => !isTableOccupied(t.id, startAt, endAt, input.occupied),
+        (t) =>
+          !isTableOccupied(t.id, startAt, endAt, input.occupied) &&
+          (closedAreas === null || !closedAreas.has(t.areaId)),
       );
 
       const cacheKey = free
@@ -167,24 +185,25 @@ export function findSlots(input: AvailabilityInput): Slot[] {
   return slots;
 }
 
-// True iff [startAt, endAt) overlaps any closure window. Half-open, so a
-// closure ending exactly at the slot start (or starting exactly at the
-// slot end) does not block. Empty/undefined closures → never blocks, so
-// the pre-feature behaviour is preserved byte-for-byte.
-function overlapsClosure(
+// Closures whose window overlaps [startAt, endAt). Half-open, so a closure
+// ending exactly at the slot start (or starting exactly at the slot end)
+// does not block. Empty/undefined closures → always [], so the pre-feature
+// behaviour is preserved byte-for-byte.
+function overlappingClosures(
   startAt: Date,
   endAt: Date,
   closures: ClosureWindow[] | undefined,
-): boolean {
-  if (!closures || closures.length === 0) return false;
+): ClosureWindow[] {
+  if (!closures || closures.length === 0) return [];
   const s = startAt.getTime();
   const e = endAt.getTime();
+  const out: ClosureWindow[] = [];
   for (const c of closures) {
     if (c.endAt.getTime() <= s) continue;
     if (c.startAt.getTime() >= e) continue;
-    return true;
+    out.push(c);
   }
-  return false;
+  return out;
 }
 
 // A table is occupied for [startAt, endAt) iff any existing occupancy

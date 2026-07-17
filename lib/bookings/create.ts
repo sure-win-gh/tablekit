@@ -19,7 +19,7 @@
 
 import "server-only";
 
-import { and, eq, gt, gte, lt, sql } from "drizzle-orm";
+import { and, eq, gte, lt, sql } from "drizzle-orm";
 
 import { upsertGuest } from "@/lib/guests/upsert";
 import { type UpsertGuestRawInput } from "@/lib/guests/schema";
@@ -29,7 +29,6 @@ import {
   bookings,
   payments,
   services,
-  specialEvents,
   venueTables,
   venues,
 } from "@/lib/db/schema";
@@ -43,11 +42,14 @@ import { adminDb } from "@/lib/server/admin/db";
 import { stripeEnabled } from "@/lib/stripe/client";
 import { getAccount } from "@/lib/stripe/connect";
 
-import { findSlots, type ClosureWindow, type TableOption } from "./availability";
+import { findSlots, type TableOption } from "./availability";
+import { isWholeVenue, loadEventClosures } from "./closures";
 import { loadVenueCombining } from "./combinable";
 import { venueLocalDayRange, zonedWallToUtc } from "./time";
 
-export type BookingSource = "host" | "widget" | "rwg" | "api";
+// "event" rows are written by lib/events/purchase.ts, never by
+// createBooking — listed so shared consumers type the full domain.
+export type BookingSource = "host" | "widget" | "rwg" | "api" | "event";
 
 export type CreateBookingInput = {
   venueId: string;
@@ -199,21 +201,9 @@ export async function createBooking(
           lt(bookingTables.startAt, endUtc),
         ),
       ),
-    // Special-event closures blocking standard bookings this day. Inlined
-    // (rather than reusing lib/public/venue.ts) to keep the booking path's
-    // dependency surface tight. See docs/specs/special-events.md.
-    db
-      .select({ startAt: specialEvents.startsAt, endAt: specialEvents.endsAt })
-      .from(specialEvents)
-      .where(
-        and(
-          eq(specialEvents.venueId, venue.id),
-          eq(specialEvents.status, "published"),
-          eq(specialEvents.blocksStandardBookings, true),
-          lt(specialEvents.startsAt, endUtc),
-          gt(specialEvents.endsAt, startUtc),
-        ),
-      ) as Promise<ClosureWindow[]>,
+    // Special-event closures blocking standard bookings this day (shared
+    // loader — carries per-event area scope). See docs/specs/special-events.md.
+    loadEventClosures(db, venue.id, startUtc, endUtc),
   ]);
 
   // 3. Run availability. Must have at least one matching slot. Same
@@ -243,10 +233,12 @@ export async function createBooking(
   if (!slot) {
     // Distinguish "the date is sold as a ticketed event" from ordinary
     // no-availability, so the API can 409 with the right reason and the
-    // widget can point the guest at the event page.
+    // widget can point the guest at the event page. Only a WHOLE-VENUE
+    // closure earns venue-closed — an area-scoped closure leaves other
+    // areas bookable, so a missing slot there is plain no-availability.
     const reqStart = zonedWallToUtc(input.date, input.wallStart, venue.timezone).getTime();
     const closed = closures.some(
-      (c) => c.startAt.getTime() <= reqStart && c.endAt.getTime() > reqStart,
+      (c) => isWholeVenue(c) && c.startAt.getTime() <= reqStart && c.endAt.getTime() > reqStart,
     );
     return { ok: false, reason: closed ? "venue-closed" : "no-availability" };
   }

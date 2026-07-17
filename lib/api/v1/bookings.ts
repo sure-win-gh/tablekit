@@ -11,7 +11,7 @@
 
 import "server-only";
 
-import { and, desc, eq, gte, inArray, lt, lte, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, lt, lte, or } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import * as schema from "@/lib/db/schema";
@@ -66,7 +66,12 @@ export type ListBookingsResult = {
 };
 
 export async function listBookings(db: Db, args: ListBookingsArgs): Promise<ListBookingsResult> {
-  const conds = [eq(bookings.organisationId, args.organisationId)];
+  // Event-ticket bookings (service_id null, source='event') are a
+  // different resource shape — excluded from the standard bookings
+  // API rather than breaking the documented `service_id: string`
+  // contract. They get their own v1 surface with event reporting
+  // (special-events.md §Event revenue reporting).
+  const conds = [eq(bookings.organisationId, args.organisationId), isNotNull(bookings.serviceId)];
   if (args.venueId) conds.push(eq(bookings.venueId, args.venueId));
   if (args.from) conds.push(gte(bookings.startAt, args.from));
   if (args.to) conds.push(lte(bookings.startAt, args.to));
@@ -109,8 +114,14 @@ export async function listBookings(db: Db, args: ListBookingsArgs): Promise<List
     .orderBy(desc(bookings.startAt), desc(bookings.id))
     .limit(args.limit + 1);
 
-  const hasMore = rows.length > args.limit;
-  const page = hasMore ? rows.slice(0, args.limit) : rows;
+  // The isNotNull(service_id) condition guarantees this at runtime;
+  // the filter only narrows the row type for TS.
+  const standard = rows.filter(
+    (r): r is (typeof rows)[number] & { serviceId: string } => r.serviceId !== null,
+  );
+
+  const hasMore = standard.length > args.limit;
+  const page = hasMore ? standard.slice(0, args.limit) : standard;
   const last = page[page.length - 1];
   const next_cursor =
     hasMore && last ? encodeCursor({ k: last.startAt.toISOString(), i: last.id }) : null;
@@ -141,8 +152,12 @@ export async function getBooking(
     .from(bookings)
     .where(and(eq(bookings.id, args.id), eq(bookings.organisationId, args.organisationId)))
     .limit(1);
-  if (!row) return null;
-  return serialise(row);
+  // Event-ticket bookings are not part of this API surface (see
+  // listBookings) — treat them as not found rather than emit a row
+  // that violates the `service_id: string` contract.
+  if (!row || row.serviceId === null) return null;
+  // Spread so the narrowed serviceId re-types the object for TS.
+  return serialise({ ...row, serviceId: row.serviceId });
 }
 
 function serialise(row: {
