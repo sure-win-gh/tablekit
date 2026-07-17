@@ -173,7 +173,7 @@ function StatusBadge({ status }: { status: SendingDomainRow["status"] }) {
         : "bg-amber-50 text-amber-800";
   return (
     <span
-      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${tone}`}
+      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase ${tone}`}
     >
       {label}
     </span>
@@ -203,8 +203,8 @@ function DnsTable({ records }: { records: SendingDomainRow["records"] }) {
           {records.map((r, i) => (
             <tr key={i} className="border-t border-gray-100">
               <td className="px-2 py-1.5 font-mono">{r.type}</td>
-              <td className="break-all px-2 py-1.5 font-mono">{r.name}</td>
-              <td className="break-all px-2 py-1.5 font-mono">{r.value}</td>
+              <td className="px-2 py-1.5 font-mono break-all">{r.name}</td>
+              <td className="px-2 py-1.5 font-mono break-all">{r.value}</td>
             </tr>
           ))}
         </tbody>
