@@ -147,6 +147,89 @@ export async function createDepositIntent(
   }
 }
 
+export type CreateEventTicketIntentInput = {
+  organisationId: string;
+  bookingId: string;
+  paymentId: string; // id of the placeholder `payments` row
+  guestId: string;
+  amountMinor: number; // ticket total, computed by the purchase flow
+  currency: string; // e.g. 'GBP'
+  stripeAccountId: string; // acct_*
+};
+
+// Event-ticket PaymentIntent. Mirrors createDepositIntent but the amount is
+// the ticket total (Σ quantity × price), not a deposit rule. Same Connect
+// direct-charge + forced-3DS + metadata posture. On throw, the placeholder
+// `payments` row stays pending for the event janitor to release the
+// reservation. See docs/specs/special-events.md Phase 2.
+export async function createEventTicketIntent(
+  input: CreateEventTicketIntentInput,
+): Promise<CreateDepositIntentResult> {
+  if (paymentsDisabled()) {
+    throw new DepositIntentError("payments kill-switch engaged", "payments-disabled");
+  }
+  if (input.amountMinor <= 0) {
+    throw new DepositIntentError("event ticket amount resolved to 0", "no-amount");
+  }
+
+  const db = adminDb();
+  const s = stripe();
+
+  try {
+    const customerId = await ensureCustomer(db, s, input);
+
+    const idempotencyKey = `booking_${input.bookingId}_event_ticket_v1`;
+    const pi = await s.paymentIntents.create(
+      {
+        amount: input.amountMinor,
+        currency: input.currency.toLowerCase(),
+        customer: customerId,
+        capture_method: "automatic",
+        confirmation_method: "automatic",
+        payment_method_options: {
+          card: { request_three_d_secure: "any" },
+        },
+        metadata: {
+          booking_id: input.bookingId,
+          payment_id: input.paymentId,
+          organisation_id: input.organisationId,
+          kind: "event_ticket",
+        },
+      },
+      { idempotencyKey, stripeAccount: input.stripeAccountId },
+    );
+
+    if (!pi.client_secret) {
+      throw new DepositIntentError("PaymentIntent returned no client_secret", "stripe-error");
+    }
+
+    await db
+      .update(payments)
+      .set({
+        stripeIntentId: pi.id,
+        stripeCustomerId: customerId,
+        amountMinor: input.amountMinor,
+        status: pi.status,
+      })
+      .where(eq(payments.id, input.paymentId));
+
+    await audit.log({
+      organisationId: input.organisationId,
+      actorUserId: null,
+      action: "stripe.intent.created",
+      targetType: "payment",
+      targetId: input.paymentId,
+      metadata: { intentId: pi.id, amountMinor: input.amountMinor, kind: "event_ticket" },
+    });
+
+    return { clientSecret: pi.client_secret, intentId: pi.id, amountMinor: input.amountMinor };
+  } catch (err) {
+    if (err instanceof DepositIntentError) throw err;
+    const message = err instanceof Stripe.errors.StripeError ? err.message : (err as Error).message;
+    throw new DepositIntentError(message, "stripe-error", err);
+  }
+}
+
 // Look up guests.stripe_customer_id; if null, create a Customer on the
 // connected account and persist. Idempotency-keyed on the guest id so
 // two concurrent calls converge on the same Stripe Customer.
@@ -157,7 +240,7 @@ export async function createDepositIntent(
 async function ensureCustomer(
   db: ReturnType<typeof adminDb>,
   s: Stripe,
-  input: CreateDepositIntentInput,
+  input: { guestId: string; organisationId: string; stripeAccountId: string },
 ): Promise<string> {
   const [guest] = await db
     .select({ stripeCustomerId: guests.stripeCustomerId })
