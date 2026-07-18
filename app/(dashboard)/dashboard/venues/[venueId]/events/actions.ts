@@ -9,6 +9,7 @@ import { requirePlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { venueLocalDayRange, zonedWallToUtc } from "@/lib/bookings/time";
 import { areas, bookings, specialEventAreas, specialEvents, venues } from "@/lib/db/schema";
+import { applyEventUpdate } from "@/lib/events/update";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 
@@ -311,66 +312,32 @@ export async function updateSpecialEvent(
     }
   }
 
-  // Area scope: every posted id must belong to THIS venue (same guard as
-  // create) — a crafted id from another venue/org must fail.
+  // The tenant-scoped update + area replace lives in a plain, integration-
+  // tested helper (lib/events/update.ts). The slug is deliberately NOT
+  // regenerated so a rename never breaks a shared public link; cleared optional
+  // fields are written as null.
   const scopedAreaIds = [...new Set(parsed.data.areaIds)];
-  if (scopedAreaIds.length > 0) {
-    const venueAreas = await adminDb()
-      .select({ id: areas.id })
-      .from(areas)
-      .where(and(eq(areas.venueId, parsed.data.venueId), inArray(areas.id, scopedAreaIds)));
-    if (venueAreas.length !== scopedAreaIds.length) {
-      return {
-        status: "error",
-        message: "One of the selected areas doesn't belong to this venue.",
-      };
-    }
-  }
-
-  // The slug is deliberately NOT regenerated from the name: it's the public
-  // URL segment guests may already have, so a rename never breaks a shared
-  // link. Cleared optional fields are written back as null.
-  const db = adminDb();
-  const updated = await db.transaction(async (tx) => {
-    const rows = await tx
-      .update(specialEvents)
-      .set({
-        name: parsed.data.name,
-        description: parsed.data.description ?? null,
-        startsAt,
-        endsAt,
-        blockScope: parsed.data.scope,
-        externalTicketUrl: parsed.data.externalTicketUrl ?? null,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(specialEvents.id, parsed.data.eventId),
-          eq(specialEvents.venueId, parsed.data.venueId),
-          eq(specialEvents.organisationId, orgId),
-        ),
-      )
-      .returning({ id: specialEvents.id, status: specialEvents.status });
-    const event = rows[0];
-    if (!event) return null;
-
-    // Replace the area scope wholesale — simplest correct semantics for an
-    // edit (add/remove areas), and the set is tiny.
-    await tx.delete(specialEventAreas).where(eq(specialEventAreas.eventId, event.id));
-    if (scopedAreaIds.length > 0) {
-      await tx.insert(specialEventAreas).values(
-        scopedAreaIds.map((areaId) => ({
-          eventId: event.id,
-          areaId,
-          organisationId: orgId,
-        })),
-      );
-    }
-    return event;
+  const result = await applyEventUpdate(adminDb(), {
+    orgId,
+    venueId: parsed.data.venueId,
+    eventId: parsed.data.eventId,
+    name: parsed.data.name,
+    description: parsed.data.description ?? null,
+    startsAt,
+    endsAt,
+    blockScope: parsed.data.scope,
+    externalTicketUrl: parsed.data.externalTicketUrl ?? null,
+    areaIds: scopedAreaIds,
   });
 
-  if (!updated) {
-    return { status: "error", message: "Event not found." };
+  if (!result.ok) {
+    return {
+      status: "error",
+      message:
+        result.reason === "area-not-in-venue"
+          ? "One of the selected areas doesn't belong to this venue."
+          : "Event not found.",
+    };
   }
 
   await audit.log({
@@ -389,7 +356,7 @@ export async function updateSpecialEvent(
   // Editing the date/window of a published event can newly collide with
   // existing standard bookings — same non-blocking notice as publish.
   const warning =
-    updated.status === "published"
+    result.status === "published"
       ? collisionWarning(
           await countCollidingBookings(parsed.data.venueId, startsAt, endsAt, scopedAreaIds),
         )
