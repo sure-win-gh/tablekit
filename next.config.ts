@@ -80,17 +80,18 @@ const BOOK_CSP = buildCsp({ frameAncestors: "'self'" });
 
 // CSP for the /demo marketing page (demo-scheduler.md). The marketing site has
 // no site-wide CSP today, so this is a net-new, report-only, page-scoped policy.
-// The only third party is the consent-gated Cal.com scheduler embed:
-//   - app.cal.com serves the embed script (script-src) + the booking iframe and
-//     its API calls (frame-src / connect-src).
-//   - cal.com is the booking-page origin the iframe navigates to (frame-src) and
-//     may post to (connect-src).
+// The only third party is the consent-gated Cal.com scheduler embed, pinned to
+// Cal.com's **EU region** for data residency (docs/specs/demo-scheduler.md):
+//   - app.cal.eu serves the embed script (script-src) + iframe/API (frame/connect).
+//   - cal.eu is the booking-page origin the iframe navigates to (frame-src) and
+//     posts to (connect-src).
+// Must stay in lockstep with CAL_ORIGIN/CAL_EMBED_JS_URL in lib/marketing/site.ts.
 // The embed injects inline styles (covered by 'unsafe-inline'). Kept report-only,
 // matching the /book /embed /events posture — a missed origin logs, never blocks.
-const CAL = ["https://app.cal.com", "https://cal.com"];
+const CAL = ["https://app.cal.eu", "https://cal.eu"];
 const DEMO_CSP = serializeCsp([
   ["default-src", ["'self'"]],
-  ["script-src", ["'self'", "'unsafe-inline'", "https://app.cal.com"]],
+  ["script-src", ["'self'", "'unsafe-inline'", ...CAL]],
   ["style-src", ["'self'", "'unsafe-inline'"]],
   ["img-src", ["'self'", "data:", "https:"]],
   ["font-src", ["'self'", "data:"]],

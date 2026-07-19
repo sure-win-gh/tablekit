@@ -27,8 +27,10 @@ Today the marketing "Book a 15-min demo" CTA is a link-out (`NEXT_PUBLIC_DEMO_UR
 
 - **`/demo`** (new page, `app/(marketing)/(site)/demo/page.tsx`) — RSC shell hosting the scheduler island, plus the `CtaBand` and trust copy. The site's "Book a 15-min demo" CTA points here (internal link) instead of the external URL when the embed is enabled.
 - **`<DemoScheduler>`** (new `"use client"` island) — renders the placeholder + "Load scheduler" button by default; on click, dynamically imports `@calcom/embed-react` and mounts the inline embed, and persists consent to `localStorage`. The link-out (`DEMO_HREF`) is always present as a no-JS / no-consent fallback.
-- **Config** (`lib/marketing/site.ts`): `CAL_LINK` (e.g. `tablekit/15min`) and `DEMO_EMBED_ENABLED` from env; when disabled, the CTA falls back to today's link-out behaviour with zero code change elsewhere.
-- **CSP** (`security.md` / middleware): add Cal's origins to `frame-src` and `script-src`. No server actions, no webhooks, no new cron in v1.
+- **Config** (`lib/marketing/site.ts`): `CAL_LINK` from env (`NEXT_PUBLIC_CAL_LINK`, default `tablekit/demo-call` — the path of the public link `https://cal.eu/tablekit/demo-call`) and `DEMO_EMBED_ENABLED`; when disabled, the CTA falls back to today's link-out with zero code change elsewhere. `CAL_LINK` is a **public** value — **no Cal.com API token / webhook secret is needed** (the embed just iframes the public booking page). The **EU region** origin + embed-script URL (`CAL_ORIGIN` = `https://cal.eu`, `CAL_EMBED_JS_URL` = `https://app.cal.eu/embed/embed.js`) are pinned in code so booking data stays EU-resident, and must stay in lockstep with the CSP.
+- **CSP** (`next.config.ts`): report-only, `/demo`-scoped; allow-lists the Cal **EU** origins (`app.cal.eu` on `script-src`; `app.cal.eu` + `cal.eu` on `frame-src`/`connect-src`). No other third-party origins. No server actions, no webhooks, no new cron in v1.
+
+**Go-live checklist (ops, once the DPA is signed + 30-day notice given):** set `NEXT_PUBLIC_CAL_LINK=tablekit/demo-call` (optional — it's the default) and `NEXT_PUBLIC_DEMO_EMBED_ENABLED=1` in Vercel. Both are public `NEXT_PUBLIC_*` values; nothing secret. If Cal.com only later exposes demo bookings we want as CRM leads, that's a **separate** spec (needs a Cal webhook signing secret + an RLS-policied `demo_leads` table) — out of scope here.
 
 ## Acceptance criteria
 

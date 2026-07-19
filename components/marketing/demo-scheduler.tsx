@@ -4,7 +4,13 @@ import { CalendarClock } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useState, useSyncExternalStore } from "react";
 
-import { CAL_LINK, DEMO_HREF, DEMO_IS_EXTERNAL } from "@/lib/marketing/site";
+import {
+  CAL_EMBED_JS_URL,
+  CAL_LINK,
+  CAL_ORIGIN,
+  DEMO_HREF,
+  DEMO_IS_EXTERNAL,
+} from "@/lib/marketing/site";
 import {
   readSchedulerConsent,
   SCHEDULER_CONSENT_KEY,
@@ -77,6 +83,10 @@ export function DemoScheduler() {
       <SchedulerFrame>
         <Cal
           calLink={CAL_LINK}
+          // Pin the embed to Cal.com's EU region so the booking data stays
+          // EU-resident (defaults would load the US app.cal.com instance).
+          calOrigin={CAL_ORIGIN}
+          embedJsUrl={CAL_EMBED_JS_URL}
           style={{ width: "100%", height: "100%", overflow: "scroll" }}
           config={{ layout: "month_view" }}
         />
