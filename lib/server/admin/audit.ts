@@ -153,6 +153,7 @@ export type AuditAction =
   | "pos.backfill.swept"
   // special-events phase
   | "special_event.created"
+  | "special_event.updated"
   | "special_event.status_changed"
   | "special_event.deleted"
   // special-events phase 2 — native ticketing

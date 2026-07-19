@@ -9,6 +9,7 @@ import { requirePlan } from "@/lib/auth/require-plan";
 import { requireRole } from "@/lib/auth/require-role";
 import { venueLocalDayRange, zonedWallToUtc } from "@/lib/bookings/time";
 import { areas, bookings, specialEventAreas, specialEvents, venues } from "@/lib/db/schema";
+import { applyEventUpdate } from "@/lib/events/update";
 import { audit } from "@/lib/server/admin/audit";
 import { adminDb } from "@/lib/server/admin/db";
 
@@ -228,6 +229,141 @@ export async function createSpecialEvent(
       : undefined;
 
   revalidatePath(`/dashboard/venues/${parsed.data.venueId}/events`);
+  return warning ? { status: "saved", warning } : { status: "saved" };
+}
+
+// ---------------------------------------------------------------------------
+// Update (edit an existing event's details)
+// ---------------------------------------------------------------------------
+
+const UpdateBody = z
+  .object({
+    eventId: z.uuid(),
+    venueId: z.uuid(),
+    name: z.string().trim().min(2, "Give the event a name").max(120),
+    description: z
+      .string()
+      .trim()
+      .max(4000)
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date"),
+    scope: z.enum(["window", "whole_day"]),
+    startTime: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/)
+      .optional(),
+    endTime: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/)
+      .optional(),
+    areaIds: z.array(z.uuid()).max(50).default([]),
+    externalTicketUrl: z
+      .string()
+      .trim()
+      .url("Ticket link must be a valid URL")
+      .refine((v) => v.startsWith("https://"), "Ticket link must start with https://")
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+  })
+  .refine((d) => d.scope !== "window" || (d.startTime && d.endTime), {
+    message: "Set a start and end time, or choose 'Whole day'.",
+    path: ["startTime"],
+  });
+
+export async function updateSpecialEvent(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = UpdateBody.safeParse({
+    eventId: formData.get("event_id"),
+    venueId: formData.get("venue_id"),
+    name: formData.get("name"),
+    description: formData.get("description") || undefined,
+    date: formData.get("date"),
+    scope: formData.get("scope"),
+    startTime: formData.get("start_time") || undefined,
+    endTime: formData.get("end_time") || undefined,
+    areaIds: formData.getAll("area_ids").map(String),
+    externalTicketUrl: formData.get("external_ticket_url") || undefined,
+  });
+  if (!parsed.success) {
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the fields." };
+  }
+
+  // Same Plus gate + role as create — the form is UX only; this re-asserts so
+  // a crafted request can't edit events on a non-Plus org.
+  const { orgId, userId } = await requireRole("manager");
+  await requirePlan(orgId, "plus");
+  const tz = await venueTimezone(parsed.data.venueId, orgId);
+
+  // Recompute the concrete UTC window exactly as create does.
+  let startsAt: Date;
+  let endsAt: Date;
+  if (parsed.data.scope === "whole_day") {
+    const range = venueLocalDayRange(parsed.data.date, tz);
+    startsAt = range.startUtc;
+    endsAt = range.endUtc;
+  } else {
+    startsAt = zonedWallToUtc(parsed.data.date, parsed.data.startTime!, tz);
+    endsAt = zonedWallToUtc(parsed.data.date, parsed.data.endTime!, tz);
+    if (endsAt.getTime() <= startsAt.getTime()) {
+      return { status: "error", message: "End time must be after the start time." };
+    }
+  }
+
+  // The tenant-scoped update + area replace lives in a plain, integration-
+  // tested helper (lib/events/update.ts). The slug is deliberately NOT
+  // regenerated so a rename never breaks a shared public link; cleared optional
+  // fields are written as null.
+  const scopedAreaIds = [...new Set(parsed.data.areaIds)];
+  const result = await applyEventUpdate(adminDb(), {
+    orgId,
+    venueId: parsed.data.venueId,
+    eventId: parsed.data.eventId,
+    name: parsed.data.name,
+    description: parsed.data.description ?? null,
+    startsAt,
+    endsAt,
+    blockScope: parsed.data.scope,
+    externalTicketUrl: parsed.data.externalTicketUrl ?? null,
+    areaIds: scopedAreaIds,
+  });
+
+  if (!result.ok) {
+    return {
+      status: "error",
+      message:
+        result.reason === "area-not-in-venue"
+          ? "One of the selected areas doesn't belong to this venue."
+          : "Event not found.",
+    };
+  }
+
+  await audit.log({
+    organisationId: orgId,
+    actorUserId: userId,
+    action: "special_event.updated",
+    targetType: "special_event",
+    targetId: parsed.data.eventId,
+    metadata: {
+      venueId: parsed.data.venueId,
+      scope: parsed.data.scope,
+      areaIds: scopedAreaIds,
+    },
+  });
+
+  // Editing the date/window of a published event can newly collide with
+  // existing standard bookings — same non-blocking notice as publish.
+  const warning =
+    result.status === "published"
+      ? collisionWarning(
+          await countCollidingBookings(parsed.data.venueId, startsAt, endsAt, scopedAreaIds),
+        )
+      : undefined;
+
+  revalidatePath(`/dashboard/venues/${parsed.data.venueId}/events`);
+  revalidatePath(`/dashboard/venues/${parsed.data.venueId}/events/${parsed.data.eventId}`);
   return warning ? { status: "saved", warning } : { status: "saved" };
 }
 
