@@ -14,7 +14,7 @@ import { TrustLine } from "@/components/marketing/trust-line";
 import { HOME_FAQ, PROBLEMS } from "@/lib/marketing/content";
 import { HOME_FEATURES } from "@/lib/marketing/features";
 import { buildMetadata } from "@/lib/marketing/seo";
-import { DEMO_HREF, DEMO_IS_EXTERNAL, PRICING, SIGNUP_HREF } from "@/lib/marketing/site";
+import { DEMO_CTA_EXTERNAL, DEMO_CTA_HREF, PRICING, SIGNUP_HREF } from "@/lib/marketing/site";
 import { faqPageLd, organizationLd, websiteLd } from "@/lib/marketing/structured-data";
 
 export const metadata: Metadata = buildMetadata({
@@ -54,7 +54,12 @@ export default function HomePage() {
               <CtaLink href={SIGNUP_HREF} size="lg">
                 Start free — no card needed
               </CtaLink>
-              <CtaLink href={DEMO_HREF} variant="secondary" size="lg" external={DEMO_IS_EXTERNAL}>
+              <CtaLink
+                href={DEMO_CTA_HREF}
+                variant="secondary"
+                size="lg"
+                external={DEMO_CTA_EXTERNAL}
+              >
                 Book a 15-min demo
               </CtaLink>
             </div>

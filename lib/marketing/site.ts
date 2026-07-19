@@ -34,6 +34,23 @@ export const DEMO_HREF =
 // True when DEMO_HREF points off-site (so links get rel/target treatment).
 export const DEMO_IS_EXTERNAL = /^https?:/.test(DEMO_HREF);
 
+// Internal demo page hosting the consent-gated Cal.com embed (demo-scheduler.md).
+export const DEMO_PAGE_HREF = "/demo";
+
+// Master switch for the embedded scheduler. Off (unset / ≠ "1") ⇒ every demo
+// CTA behaves exactly as today: a link-out via DEMO_HREF, no /demo page in the
+// flow, no Cal.com script anywhere. On ⇒ CTAs point at the internal /demo page,
+// which still only loads Cal after an explicit consent click. Flipping this to
+// "1" is the go-live step and is gated on the Cal.com sub-processor paperwork
+// (docs/playbooks/gdpr.md) — see docs/specs/demo-scheduler.md.
+export const DEMO_EMBED_ENABLED = process.env["NEXT_PUBLIC_DEMO_EMBED_ENABLED"] === "1";
+
+// Where the "Book a 15-min demo" CTA points, and whether it's an off-site link.
+// Embed on ⇒ internal /demo page; embed off ⇒ today's link-out. Call sites use
+// these two so the flag lives in one place.
+export const DEMO_CTA_HREF = DEMO_EMBED_ENABLED ? DEMO_PAGE_HREF : DEMO_HREF;
+export const DEMO_CTA_EXTERNAL = DEMO_EMBED_ENABLED ? false : DEMO_IS_EXTERNAL;
+
 // Honest proof, reused next to every CTA. No fabricated social proof.
 export const TRUST_POINTS = [
   "No card required",
