@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 
 import { CtaBand } from "@/components/marketing/cta-band";
 import { CtaLink } from "@/components/marketing/cta-link";
+import { DemoScheduler } from "@/components/marketing/demo-scheduler";
 import { JsonLd } from "@/components/marketing/json-ld";
 import { Section, SectionHeading } from "@/components/marketing/section";
 import { TrustLine } from "@/components/marketing/trust-line";
 import { buildMetadata } from "@/lib/marketing/seo";
-import { DEMO_HREF, DEMO_IS_EXTERNAL } from "@/lib/marketing/site";
+import { DEMO_EMBED_ENABLED, DEMO_HREF, DEMO_IS_EXTERNAL } from "@/lib/marketing/site";
 import { organizationLd } from "@/lib/marketing/structured-data";
 
 export const metadata: Metadata = buildMetadata({
@@ -16,12 +17,11 @@ export const metadata: Metadata = buildMetadata({
   path: "/demo",
 });
 
-// Demo page (demo-scheduler.md). PR 1 renders the link-out only — the
-// consent-gated Cal.com embed island lands in the follow-up PR and replaces
-// the standalone button below. With NEXT_PUBLIC_DEMO_EMBED_ENABLED off, no CTA
-// links here, so this page is reachable only by direct URL; it still works as a
-// plain link-out to whatever DEMO_HREF resolves to (a scheduler link or the
-// mailto fallback).
+// Demo page (demo-scheduler.md). When NEXT_PUBLIC_DEMO_EMBED_ENABLED is on, the
+// CTAs route here and we render the consent-gated Cal.com embed (which itself
+// loads nothing third-party until the visitor clicks). When off, no CTA links
+// here and a direct visit still works as a plain link-out to whatever DEMO_HREF
+// resolves to — so the page degrades gracefully either way.
 export default function DemoPage() {
   return (
     <>
@@ -35,12 +35,19 @@ export default function DemoPage() {
           title="See TableKit in 15 minutes"
           lead="A quick, no-pressure walkthrough of bookings, deposits, and Reserve with Google — tailored to how your venue runs. Pick a time that suits you."
         />
-        <div className="mt-10 flex flex-col items-center gap-5">
-          <CtaLink href={DEMO_HREF} size="lg" external={DEMO_IS_EXTERNAL}>
-            Book a 15-min demo
-          </CtaLink>
-          <TrustLine align="center" />
-        </div>
+        {DEMO_EMBED_ENABLED ? (
+          <div className="mx-auto mt-10 flex w-full max-w-2xl flex-col items-center gap-5">
+            <DemoScheduler />
+            <TrustLine align="center" />
+          </div>
+        ) : (
+          <div className="mt-10 flex flex-col items-center gap-5">
+            <CtaLink href={DEMO_HREF} size="lg" external={DEMO_IS_EXTERNAL}>
+              Book a 15-min demo
+            </CtaLink>
+            <TrustLine align="center" />
+          </div>
+        )}
       </Section>
 
       <CtaBand

@@ -37,6 +37,10 @@ export const DEMO_IS_EXTERNAL = /^https?:/.test(DEMO_HREF);
 // Internal demo page hosting the consent-gated Cal.com embed (demo-scheduler.md).
 export const DEMO_PAGE_HREF = "/demo";
 
+// Cal.com event slug the embed books against (e.g. "tablekit/15min"). Only read
+// by the /demo embed island; the link-out fallback still uses DEMO_HREF.
+export const CAL_LINK = process.env["NEXT_PUBLIC_CAL_LINK"] ?? "tablekit/15min";
+
 // Master switch for the embedded scheduler. Off (unset / ≠ "1") ⇒ every demo
 // CTA behaves exactly as today: a link-out via DEMO_HREF, no /demo page in the
 // flow, no Cal.com script anywhere. On ⇒ CTAs point at the internal /demo page,
