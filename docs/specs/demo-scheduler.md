@@ -1,6 +1,6 @@
 # Demo scheduler (Cal.com)
 
-**Status:** draft — 2026-06-13
+**Status:** built, flag-off — merged to main 2026-07-19 (PRs #125 plumbing + #127 embed). Ships behind `NEXT_PUBLIC_DEMO_EMBED_ENABLED` (unset ⇒ demo CTA is a link-out, no Cal.com anywhere). **Go-live remaining:** sign the Cal.com DPA, then flip the flag after the 30-day sub-processor notice. Cal.com **EU data region confirmed** on the account, so no SCCs/IDTA/TRA beyond a residency check; sub-processor rows added to `/legal/sub-processors` + `docs/playbooks/gdpr.md`. Note: Cal.com processes only prospect (demo-booking) data — never venue/guest data. Repo has no DOM test harness, so the consent gate is a pure unit-tested module (`lib/marketing/scheduler-consent.ts`) + a Playwright smoke.
 
 ## Depends on
 
