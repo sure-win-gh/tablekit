@@ -30,7 +30,22 @@ Today the marketing "Book a 15-min demo" CTA is a link-out (`NEXT_PUBLIC_DEMO_UR
 - **Config** (`lib/marketing/site.ts`): `CAL_LINK` from env (`NEXT_PUBLIC_CAL_LINK`, default `tablekit/demo-call` — the path of the public link `https://cal.eu/tablekit/demo-call`) and `DEMO_EMBED_ENABLED`; when disabled, the CTA falls back to today's link-out with zero code change elsewhere. `CAL_LINK` is a **public** value — **no Cal.com API token / webhook secret is needed** (the embed just iframes the public booking page). The **EU region** origin + embed-script URL (`CAL_ORIGIN` = `https://cal.eu`, `CAL_EMBED_JS_URL` = `https://app.cal.eu/embed/embed.js`) are pinned in code so booking data stays EU-resident, and must stay in lockstep with the CSP.
 - **CSP** (`next.config.ts`): report-only, `/demo`-scoped; allow-lists the Cal **EU** origins (`app.cal.eu` on `script-src`; `app.cal.eu` + `cal.eu` on `frame-src`/`connect-src`). No other third-party origins. No server actions, no webhooks, no new cron in v1.
 
-**Go-live checklist (ops, once the DPA is signed + 30-day notice given):** set `NEXT_PUBLIC_CAL_LINK=tablekit/demo-call` (optional — it's the default) and `NEXT_PUBLIC_DEMO_EMBED_ENABLED=1` in Vercel. Both are public `NEXT_PUBLIC_*` values; nothing secret. If Cal.com only later exposes demo bookings we want as CRM leads, that's a **separate** spec (needs a Cal webhook signing secret + an RLS-policied `demo_leads` table) — out of scope here.
+## Go-live checklist
+
+The embed is built and merged but ships **flag-off**. Everything below is what's
+left to actually switch it on. `[x]` = done in code/PRs; `[ ]` = ops/legal action.
+
+- [x] Build merged to `main`, flag-off — **#125** (plumbing) + **#127** (embed).
+- [x] Cal.com **EU data region** confirmed on the account (booking link `https://cal.eu/tablekit/demo-call`).
+- [x] Embed + `/demo` CSP pinned to the EU region (`cal.eu` / `app.cal.eu`, not the US `cal.com`) — **#128**.
+- [x] Sub-processor rows added to `/legal/sub-processors` + `docs/playbooks/gdpr.md`; lawful basis recorded (Art. 6(1)(b)/(f)) — **#128**.
+- [ ] **Sign the Cal.com DPA.**
+- [ ] Create the public Cal.com event type for the demo call (slug `tablekit/demo-call`, EU region).
+- [ ] **Give existing customers the 30-day sub-processor notice.** Courtesy/transparency here — Cal.com processes only prospect demo-booking data, never venue/guest data, so it isn't a strict Art. 28 change to a customer's processing chain. Clock starts on notice; first egress = first prospect who loads the embed with the flag on.
+- [ ] **Merge #128** to `main`.
+- [ ] In **Vercel**, set `NEXT_PUBLIC_DEMO_EMBED_ENABLED=1` (and optionally `NEXT_PUBLIC_CAL_LINK=tablekit/demo-call` — it's already the default). Both are public `NEXT_PUBLIC_*` values.
+
+**No Cal.com API token or webhook secret is needed** — the embed only iframes the public booking page; `NEXT_PUBLIC_CAL_LINK` is a public value. A token/webhook secret would only be required for the *deferred* "ingest demo bookings as CRM leads" feature, which is a **separate** spec (needs a Cal webhook signing secret + an RLS-policied `demo_leads` table) — out of scope here.
 
 ## Acceptance criteria
 
@@ -39,7 +54,7 @@ Today the marketing "Book a 15-min demo" CTA is a link-out (`NEXT_PUBLIC_DEMO_UR
 - [ ] A prospect can complete a demo booking in the inline embed and see Cal's confirmation.
 - [ ] `@calcom/embed-react` is **dynamically imported** (not in the initial bundle); Lighthouse on `/` is unaffected (the embed lives on `/demo`, not the home critical path).
 - [ ] CSP updated to allow Cal origins; no other third-party origins introduced; `pnpm typecheck && pnpm lint && pnpm test` pass.
-- [ ] **GDPR gate (blocks go-live):** Cal.com row added to `/legal/sub-processors` and the `gdpr.md` table; lawful basis recorded (Art. 6(1)(b)/(f) — booking a requested demo); **EU data region used if available, else SCCs/UK IDTA + a completed transfer risk assessment** (Cal.com Cloud defaults to the US — treat as the documented non-EU exception, mirroring the WhatsApp/Meta precedent); 30-day customer notice given before first production egress.
+- [ ] **GDPR gate (blocks go-live):** Cal.com row added to `/legal/sub-processors` and the `gdpr.md` table ✅ (#128); lawful basis recorded (Art. 6(1)(b)/(f) — booking a requested demo) ✅; **EU data region confirmed on the account** ✅ — so no SCCs/UK IDTA/TRA beyond a residency check (the earlier US-default assumption no longer applies); DPA signature + 30-day customer notice still outstanding (see Go-live checklist).
 - [ ] A new dependency (`@calcom/embed-react`) is justified in the PR per the marketing playbook's no-new-deps rule.
 
 ## Marketing impact
