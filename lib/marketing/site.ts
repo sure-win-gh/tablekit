@@ -37,9 +37,17 @@ export const DEMO_IS_EXTERNAL = /^https?:/.test(DEMO_HREF);
 // Internal demo page hosting the consent-gated Cal.com embed (demo-scheduler.md).
 export const DEMO_PAGE_HREF = "/demo";
 
-// Cal.com event slug the embed books against (e.g. "tablekit/15min"). Only read
-// by the /demo embed island; the link-out fallback still uses DEMO_HREF.
-export const CAL_LINK = process.env["NEXT_PUBLIC_CAL_LINK"] ?? "tablekit/15min";
+// Cal.com **EU region** config for the /demo embed (docs/specs/demo-scheduler.md
+// — EU data residency; booking page is https://cal.eu/<slug>, embed script on
+// the EU app subdomain). Origin + script URL are hardcoded, not env-driven,
+// because the region is a data-residency commitment that MUST stay in lockstep
+// with the /demo CSP in next.config.ts — switching region means changing both,
+// deliberately. Only the event slug varies per account, so that stays env-set.
+// Booking the (public) demo needs no API token — the embed just iframes the
+// public booking page.
+export const CAL_LINK = process.env["NEXT_PUBLIC_CAL_LINK"] ?? "tablekit/demo-call";
+export const CAL_ORIGIN = "https://cal.eu";
+export const CAL_EMBED_JS_URL = "https://app.cal.eu/embed/embed.js";
 
 // Master switch for the embedded scheduler. Off (unset / ≠ "1") ⇒ every demo
 // CTA behaves exactly as today: a link-out via DEMO_HREF, no /demo page in the

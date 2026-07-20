@@ -79,9 +79,16 @@ const ROWS: Row[] = [
     region: "Global",
     dpa: "Signed",
   },
+  {
+    name: "Cal.com",
+    purpose:
+      "Demo-booking scheduler embedded on the marketing site (prospect name / email / chosen slot only — no venue or guest data). Consent-gated: loads only if the visitor clicks to.",
+    region: "EU data region",
+    dpa: "Pending — sign before go-live",
+  },
 ];
 
-const LAST_UPDATED = "2026-06-19";
+const LAST_UPDATED = "2026-07-19";
 
 export default function SubProcessorsPage() {
   return (

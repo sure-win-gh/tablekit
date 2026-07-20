@@ -22,7 +22,8 @@ test.describe("consent-gated Cal.com embed", () => {
     // fulfil it with an empty stub so the click path doesn't depend on the
     // network (or leak a real third-party request from CI).
     const calRequests: string[] = [];
-    await page.route(/https:\/\/(app\.)?cal\.com\//, (route) => {
+    // EU region (cal.eu) — see lib/marketing/site.ts / the /demo CSP.
+    await page.route(/https:\/\/(app\.)?cal\.eu\//, (route) => {
       calRequests.push(route.request().url());
       return route.fulfill({ status: 200, contentType: "application/javascript", body: "" });
     });
