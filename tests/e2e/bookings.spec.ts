@@ -9,6 +9,7 @@
 import { Pool } from "pg";
 import { expect, test } from "@playwright/test";
 
+import { bookingDay } from "./support/booking-date";
 import {
   cleanupOwner,
   loginAsOwner,
@@ -19,9 +20,9 @@ import {
 
 const DATABASE_URL = process.env["DATABASE_URL"];
 
-// Pick a date far enough ahead that it won't drift into "yesterday"
-// overnight — same approach as the integration test.
-const DATE = "2026-06-15"; // Monday, BST
+// Computed, not fixed: the old constant had drifted five weeks into the past,
+// so the slot grid had nothing to offer and the "12:00" click timed out.
+const DATE = bookingDay().iso;
 
 test.describe.configure({ mode: "serial" });
 
@@ -95,8 +96,13 @@ test.describe("bookings flow", () => {
     await page.getByLabel("Date").fill(DATE);
     await page.getByLabel("Party size").fill("2");
 
-    // Pick a slot time — the grid renders buttons labelled "HH:MM".
-    await page.getByRole("button", { name: "12:00", exact: true }).click();
+    // Pick a slot time — the grid renders buttons labelled "HH:MM". Take the
+    // first the service offers rather than naming one: the seeded service runs
+    // 08:00–17:00 on 45-minute turns, which doesn't put a slot on 12:00.
+    await page
+      .getByRole("button", { name: /^[0-9]{2}:[0-9]{2}$/ })
+      .first()
+      .click();
 
     // Guest form — fill and submit.
     await page.getByLabel("First name").fill("Alice");

@@ -10,38 +10,10 @@
 import { Pool } from "pg";
 import { expect, test } from "@playwright/test";
 
+import { bookingDay } from "./support/booking-date";
 import { dismissCookieNotice } from "./support/cookie-notice";
 
 const DATABASE_URL = process.env["DATABASE_URL"];
-const VENUE_TZ = "Europe/London";
-
-/**
- * A bookable day a little ahead of "now" in the venue's timezone. Computed
- * rather than hard-coded: the previous fixed date silently fell into the past
- * and left the calendar with nothing selectable.
- */
-function targetDay(): { year: number; month: number; day: number; monthsAhead: number } {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: VENUE_TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value);
-
-  // Work in UTC purely as calendar arithmetic, then read the date back.
-  const today = new Date(Date.UTC(get("year"), get("month") - 1, get("day")));
-  const target = new Date(today.getTime() + 10 * 24 * 60 * 60 * 1000);
-
-  const year = target.getUTCFullYear();
-  const month = target.getUTCMonth() + 1;
-  return {
-    year,
-    month,
-    day: target.getUTCDate(),
-    monthsAhead: year * 12 + month - (get("year") * 12 + get("month")),
-  };
-}
 
 test.describe.configure({ mode: "serial" });
 
@@ -110,7 +82,7 @@ test.describe("widget flow", () => {
     // secret — the UI doesn't render a widget because the sitekey
     // is also a placeholder. Unsetting server-side is a dev task.)
 
-    const when = targetDay();
+    const when = bookingDay();
 
     await page.goto(`/book/${venueId!}`);
     await expect(page.getByRole("heading", { name: venueName })).toBeVisible();
