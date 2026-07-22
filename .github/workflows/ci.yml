@@ -20,6 +20,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so scripts/check-migration-safety.ts can diff new
+          # migrations against origin/main (the base branch).
+          fetch-depth: 0
 
       - name: Enable Corepack
         run: corepack enable
@@ -44,6 +48,14 @@ jobs:
 
       - name: Unit tests
         run: pnpm test
+
+      - name: Migration safety
+        # Blocks destructive / rewrite-unsafe DDL in NEW migrations so the
+        # previous release always runs against the current schema (keeps
+        # one-click rollback safe). See docs/specs/deployment-pipeline.md.
+        env:
+          MIGRATION_SAFETY_BASE: origin/${{ github.base_ref || 'main' }}
+        run: pnpm check:migrations
 
       - name: RLS check
         if: env.DATABASE_URL != ''
@@ -75,11 +87,46 @@ jobs:
           fi
           exit $code
 
+  migrate:
+    name: migrate ci database
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: checks
+    # Applies the latest Drizzle migrations to the shared CI database BEFORE
+    # the integration/e2e jobs run, so they always test against the current
+    # schema. Runs once here (not inside the parallel test jobs) so the two
+    # never race to migrate an empty database. Forward-only + tracked in
+    # __drizzle_migrations, so re-runs are no-ops.
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply migrations (skipped)
+        if: env.DATABASE_URL == ''
+        run: echo "::notice::DATABASE_URL secret not set — skipping pnpm db:migrate. Wire the Supabase secrets to enable the DB-backed jobs."
+
+      - name: Apply migrations
+        if: env.DATABASE_URL != ''
+        run: pnpm db:migrate
+
   integration:
     name: integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: checks
+    needs: [checks, migrate]
     # Step-level `if: env.DATABASE_URL != ''` handles the gating
     # inside the job — we'd rather emit an informative "skipped"
     # notice than silently not run.
@@ -116,7 +163,7 @@ jobs:
     name: e2e tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: checks
+    needs: [checks, migrate]
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
