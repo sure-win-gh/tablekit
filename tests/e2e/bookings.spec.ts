@@ -83,12 +83,9 @@ test.describe("bookings flow", () => {
     // Password sign-in plus the owner MFA challenge; see the helper.
     await loginAsOwner(page, owner!);
 
-    // Single-venue org → straight to the venue's floor plan.
-    await page.waitForURL(/\/dashboard\/venues\/[0-9a-f-]+\/floor-plan/, { timeout: 15_000 });
-
-    // --- navigate to bookings -------------------------------------
-    await page.getByRole("link", { name: "Bookings" }).click();
-    await page.waitForURL(/\/dashboard\/venues\/[0-9a-f-]+\/bookings$/, { timeout: 10_000 });
+    // Single-venue org → straight to that venue's bookings list; see the
+    // single-venue branch in app/(dashboard)/dashboard/page.tsx.
+    await page.waitForURL(/\/dashboard\/venues\/[0-9a-f-]+\/bookings$/, { timeout: 15_000 });
 
     // --- open the new-booking form --------------------------------
     await page.getByRole("link", { name: /New booking/ }).click();
