@@ -20,6 +20,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so scripts/check-migration-safety.ts can diff new
+          # migrations against origin/main (the base branch).
+          fetch-depth: 0
 
       - name: Enable Corepack
         run: corepack enable
@@ -44,6 +48,14 @@ jobs:
 
       - name: Unit tests
         run: pnpm test
+
+      - name: Migration safety
+        # Blocks destructive / rewrite-unsafe DDL in NEW migrations so the
+        # previous release always runs against the current schema (keeps
+        # one-click rollback safe). See docs/specs/deployment-pipeline.md.
+        env:
+          MIGRATION_SAFETY_BASE: origin/${{ github.base_ref || 'main' }}
+        run: pnpm check:migrations
 
       - name: RLS check
         if: env.DATABASE_URL != ''
