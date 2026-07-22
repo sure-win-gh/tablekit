@@ -120,8 +120,9 @@ test.describe("widget flow", () => {
     await dismissCookieNotice(page);
 
     // --- step 1: party size ----------------------------------------
+    // The wizard advances by URL, so every choice is a link, not a button.
     await expect(page.getByRole("heading", { name: "How many guests?" })).toBeVisible();
-    await page.getByRole("button", { name: "2", exact: true }).click();
+    await page.getByRole("link", { name: "2", exact: true }).click();
 
     // --- step 2: day -----------------------------------------------
     await expect(page.getByRole("heading", { name: "Which day?" })).toBeVisible();
@@ -139,7 +140,7 @@ test.describe("widget flow", () => {
     await expect(page.getByRole("heading", { name: "What time?" })).toBeVisible();
     // Take whichever slot the service actually offers rather than assuming one.
     await page
-      .getByRole("button", { name: /^[0-9]{2}:[0-9]{2}$/ })
+      .getByRole("link", { name: /^[0-9]{2}:[0-9]{2}$/ })
       .first()
       .click();
 
