@@ -64,19 +64,17 @@ test.describe("venues flow", () => {
     await page.waitForURL(/\/dashboard\/venues\/[0-9a-f-]+\/floor-plan/, { timeout: 15_000 });
     await expect(page.getByRole("heading", { name: venueName })).toBeVisible();
 
-    // "Inside" is the café template's single area. It's rendered as an
-    // editable text input, so the assertion targets the input's value
-    // rather than visible text.
-    const areaNameInput = page.locator("input[name='name']").first();
-    await expect(areaNameInput).toHaveValue("Inside");
+    // The floor plan is a canvas of table shapes, each exposed as
+    // role="button" labelled "Table <label>, <state>" (table-shape.tsx).
+    // The café template seeds six, T1–T6.
+    const tableShapes = page.getByRole("button", { name: /^Table T[0-9]+, / });
+    await expect(page.getByRole("button", { name: /^Table T1, / })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Table T6, / })).toBeVisible();
+    expect(await tableShapes.count()).toBeGreaterThanOrEqual(6);
 
-    // 6 tables from the template — each row has label, min, max etc.
-    // Count rows by looking at the "Delete" buttons (one per row).
-    // We don't assert an exact number because the layout could change;
-    // just that "several" tables are there.
-    const tableDeleteButtons = page.getByRole("button", { name: "Delete" });
-    await expect(tableDeleteButtons.first()).toBeVisible();
-    expect(await tableDeleteButtons.count()).toBeGreaterThanOrEqual(3);
+    // The template's single area ("Inside") is asserted through its tables:
+    // the canvas only renders the area switcher for venues with more than
+    // one area (canvas.tsx), so a one-area venue never shows its name.
 
     // --- services tab has the seeded service -----------------------
     await page.getByRole("link", { name: "Services" }).click();
