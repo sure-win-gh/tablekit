@@ -64,19 +64,26 @@ test.describe("venues flow", () => {
     await page.waitForURL(/\/dashboard\/venues\/[0-9a-f-]+\/floor-plan/, { timeout: 15_000 });
     await expect(page.getByRole("heading", { name: venueName })).toBeVisible();
 
-    // The floor plan is a canvas of table shapes, each exposed as
-    // role="button" labelled "Table <label>, <state>" (table-shape.tsx).
-    // The café template seeds six, T1–T6.
-    const tableShapes = page.getByRole("button", { name: /^Table T[0-9]+, / });
-    await expect(page.getByRole("button", { name: /^Table T1, / })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Table T6, / })).toBeVisible();
-    expect(await tableShapes.count()).toBeGreaterThanOrEqual(6);
+    // The floor plan is an SVG canvas; each table is a <g> carrying
+    // aria-label "Table <label>, <state>" (table-shape.tsx). Matched by
+    // attribute rather than getByRole: Chromium doesn't expose SVG groups
+    // as buttons in the accessibility tree, so the role query finds nothing
+    // even though the shapes are on screen. The café template seeds six.
+    await expect(page.locator('[aria-label^="Table T1,"]')).toBeVisible();
+    await expect(page.locator('[aria-label^="Table T6,"]')).toBeVisible();
+    expect(await page.locator('[aria-label^="Table T"]').count()).toBeGreaterThanOrEqual(6);
 
     // The template's single area ("Inside") is asserted through its tables:
     // the canvas only renders the area switcher for venues with more than
     // one area (canvas.tsx), so a one-area venue never shows its name.
 
-    // --- services tab has the seeded service -----------------------
+    // --- services page has the seeded service ----------------------
+    // Services moved under the collapsible "Settings" group in the sidebar
+    // (sidebar-shell.tsx), so the link is hidden until the group is opened.
+    const settingsGroup = page.getByRole("button", { name: "Settings" });
+    if ((await settingsGroup.getAttribute("aria-expanded")) === "false") {
+      await settingsGroup.click();
+    }
     await page.getByRole("link", { name: "Services" }).click();
     await page.waitForURL(/\/services/, { timeout: 10_000 });
 
