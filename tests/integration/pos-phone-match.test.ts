@@ -188,7 +188,9 @@ describe("backfillGuestPhoneHash", () => {
       .set({ phoneHash: null })
       .where(eq(schema.guests.id, ctx.guestId));
 
-    const result = await backfillGuestPhoneHash();
+    // Scoped to this test's org: the CI database is shared and long-lived, so
+    // an unrelated row with a malformed cipher would otherwise abort the sweep.
+    const result = await backfillGuestPhoneHash(500, ctx.orgId);
     expect(result.updated).toBeGreaterThanOrEqual(1);
 
     const [g] = await db
