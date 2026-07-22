@@ -131,6 +131,10 @@ jobs:
     # inside the job — we'd rather emit an informative "skipped"
     # notice than silently not run.
     env:
+      # Anything touching guest PII goes through lib/security/crypto.ts,
+      # which hard-fails without this. CI uses a throwaway key — it must
+      # never be the production one.
+      TABLEKIT_MASTER_KEY: ${{ secrets.TABLEKIT_MASTER_KEY }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
@@ -165,6 +169,9 @@ jobs:
     timeout-minutes: 20
     needs: [checks, migrate]
     env:
+      # See the integration job: the dev server boots app code that
+      # encrypts guest PII, so without this every DB-backed spec fails.
+      TABLEKIT_MASTER_KEY: ${{ secrets.TABLEKIT_MASTER_KEY }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
