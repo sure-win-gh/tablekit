@@ -50,8 +50,15 @@ const TZ = "Europe/London";
 const DAY_LOCAL = "2026-05-11"; // BST — UTC+1
 
 // Helpers for explicit UTC instants given a local wall-clock hh:mm in BST.
-const atBst = (ymd: string, hh: number, mm = 0) =>
-  new Date(`${ymd}T${String(hh - 1).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00Z`);
+// BST is UTC+1, so local hh:mm is (hh-1):mm UTC — which rolls into the
+// previous UTC day at local midnight and the next one at local 24:00. Build
+// from an epoch instant so those rollovers are arithmetic: doing it by
+// zero-padding `hh - 1` into the string produced "T-1:30:00Z" (an Invalid
+// Date) for local 00:30, which is exactly the boundary these cases probe.
+const atBst = (ymd: string, hh: number, mm = 0) => {
+  const [y, m, d] = ymd.split("-").map(Number) as [number, number, number];
+  return new Date(Date.UTC(y, m - 1, d, hh - 1, mm, 0));
+};
 
 type Ctx = {
   userAId: string;
