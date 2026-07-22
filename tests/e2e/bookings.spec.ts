@@ -7,17 +7,16 @@
 //   3. see the row on today's list and mark it seated → finished
 
 import { Pool } from "pg";
-import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
 
-import { installBadJwtRetry } from "../support/bad-jwt-retry";
+import {
+  cleanupOwner,
+  loginAsOwner,
+  ownerSeedConfigured,
+  seedOwnerWithTotp,
+  type SeededOwner,
+} from "./support/owner-session";
 
-// This spec seeds users through the Supabase admin API, which intermittently
-// rejects a valid request with 403 bad_jwt. See the helper.
-installBadJwtRetry();
-
-const SUPABASE_URL = process.env["NEXT_PUBLIC_SUPABASE_URL"];
-const SERVICE_ROLE_KEY = process.env["SUPABASE_SERVICE_ROLE_KEY"];
 const DATABASE_URL = process.env["DATABASE_URL"];
 
 // Pick a date far enough ahead that it won't drift into "yesterday"
@@ -28,44 +27,25 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("bookings flow", () => {
   const runId = Date.now().toString(36);
-  const email = `e2e-bookings-${runId}@tablekit.test`;
-  const password = "e2e-test-password-1234";
-  const fullName = `E2E Bookings ${runId}`;
-  const orgName = `E2E Bookings Org ${runId}`;
-  const orgSlug = `e2e-bookings-${runId}`;
   const venueName = `E2E Venue ${runId}`;
 
-  let userId: string | null = null;
-  let orgId: string | null = null;
+  let owner: SeededOwner | null = null;
   let venueId: string | null = null;
 
   test.beforeAll(async () => {
-    test.skip(!SUPABASE_URL || !SERVICE_ROLE_KEY || !DATABASE_URL, "Supabase/DB env not set");
+    test.skip(!ownerSeedConfigured(), "Supabase/DB env not set");
 
-    const admin = createClient(SUPABASE_URL!, SERVICE_ROLE_KEY!, {
-      auth: { autoRefreshToken: false, persistSession: false },
+    owner = await seedOwnerWithTotp({
+      label: "bookings",
+      runId,
+      orgName: `E2E Bookings Org ${runId}`,
     });
+    const orgId = owner.orgId;
 
-    const { data, error } = await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { full_name: fullName },
-    });
-    if (error || !data.user) throw error ?? new Error("createUser failed");
-    userId = data.user.id;
-
+    // Exactly one venue, so the dashboard's single-venue redirect is the
+    // state this spec exercises.
     const pool = new Pool({ connectionString: DATABASE_URL });
     try {
-      const { rows: orgRows } = await pool.query<{ id: string }>(
-        "insert into organisations (name, slug) values ($1, $2) returning id",
-        [orgName, orgSlug],
-      );
-      orgId = orgRows[0]!.id;
-      await pool.query(
-        "insert into memberships (user_id, organisation_id, role) values ($1, $2, 'owner')",
-        [userId, orgId],
-      );
       const { rows: venueRows } = await pool.query<{ id: string }>(
         "insert into venues (organisation_id, name, venue_type, timezone) values ($1, $2, 'cafe', 'Europe/London') returning id",
         [orgId, venueName],
@@ -93,29 +73,15 @@ test.describe("bookings flow", () => {
   });
 
   test.afterAll(async () => {
-    if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return;
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-    if (userId) await admin.auth.admin.deleteUser(userId).catch(() => undefined);
-    if (DATABASE_URL && orgId) {
-      const pool = new Pool({ connectionString: DATABASE_URL });
-      try {
-        await pool.query("delete from organisations where id = $1", [orgId]);
-      } finally {
-        await pool.end();
-      }
-    }
+    if (owner) await cleanupOwner(owner);
   });
 
   test("host creates a booking, sees it on the day list, seats + finishes it", async ({ page }) => {
     page.on("pageerror", (err) => console.error("[pageerror]", err.message));
 
     // --- log in ----------------------------------------------------
-    await page.goto("/login");
-    await page.getByLabel("Email").fill(email);
-    await page.getByLabel("Password").fill(password);
-    await page.getByRole("button", { name: "Sign in" }).click();
+    // Password sign-in plus the owner MFA challenge; see the helper.
+    await loginAsOwner(page, owner!);
 
     // Single-venue org → straight to the venue's floor plan.
     await page.waitForURL(/\/dashboard\/venues\/[0-9a-f-]+\/floor-plan/, { timeout: 15_000 });
