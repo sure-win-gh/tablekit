@@ -1,14 +1,47 @@
 // End-to-end smoke for the public widget flow.
 //
-// No login. Seeds a venue with one table + one service via admin API /
-// SQL, then drives the public /book/<venueId> page: pick a slot, fill
-// guest details, submit, see the success panel with the reference.
+// No login. Seeds its own org + venue with one table and one all-week
+// service, then walks the shipped four-step wizard on /book/<venueId>:
+// party size → day → time → details, and asserts the success panel.
+//
+// The wizard replaced a single form with Date/Party-size inputs; this spec
+// asserts each step's own landmark heading rather than those old labels.
 
 import { Pool } from "pg";
 import { expect, test } from "@playwright/test";
 
+import { dismissCookieNotice } from "./support/cookie-notice";
+
 const DATABASE_URL = process.env["DATABASE_URL"];
-const DATE = "2026-07-12"; // Sunday, BST
+const VENUE_TZ = "Europe/London";
+
+/**
+ * A bookable day a little ahead of "now" in the venue's timezone. Computed
+ * rather than hard-coded: the previous fixed date silently fell into the past
+ * and left the calendar with nothing selectable.
+ */
+function targetDay(): { year: number; month: number; day: number; monthsAhead: number } {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: VENUE_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value);
+
+  // Work in UTC purely as calendar arithmetic, then read the date back.
+  const today = new Date(Date.UTC(get("year"), get("month") - 1, get("day")));
+  const target = new Date(today.getTime() + 10 * 24 * 60 * 60 * 1000);
+
+  const year = target.getUTCFullYear();
+  const month = target.getUTCMonth() + 1;
+  return {
+    year,
+    month,
+    day: target.getUTCDate(),
+    monthsAhead: year * 12 + month - (get("year") * 12 + get("month")),
+  };
+}
 
 test.describe.configure({ mode: "serial" });
 
@@ -77,19 +110,43 @@ test.describe("widget flow", () => {
     // secret — the UI doesn't render a widget because the sitekey
     // is also a placeholder. Unsetting server-side is a dev task.)
 
+    const when = targetDay();
+
     await page.goto(`/book/${venueId!}`);
     await expect(page.getByRole("heading", { name: venueName })).toBeVisible();
 
-    // Set the date + party size
-    await page.getByLabel("Date").fill(DATE);
-    await page.getByLabel("Party size").fill("2");
+    // The notice floats over the bottom of the viewport and would otherwise
+    // intercept clicks on the wizard's later steps.
+    await dismissCookieNotice(page);
 
-    // Pick a slot
-    await page.getByRole("button", { name: "12:00", exact: true }).click();
+    // --- step 1: party size ----------------------------------------
+    await expect(page.getByRole("heading", { name: "How many guests?" })).toBeVisible();
+    await page.getByRole("button", { name: "2", exact: true }).click();
 
-    // Guest form
+    // --- step 2: day -----------------------------------------------
+    await expect(page.getByRole("heading", { name: "Which day?" })).toBeVisible();
+    for (let i = 0; i < when.monthsAhead; i++) {
+      await page.getByLabel("Previous month").waitFor({ state: "visible" });
+      await page.getByLabel("Next month").click();
+    }
+    // Day cells are labelled "<day>, <availability word>".
+    await page
+      .getByLabel(new RegExp(`^${when.day}, `))
+      .first()
+      .click();
+
+    // --- step 3: time ----------------------------------------------
+    await expect(page.getByRole("heading", { name: "What time?" })).toBeVisible();
+    // Take whichever slot the service actually offers rather than assuming one.
+    await page
+      .getByRole("button", { name: /^[0-9]{2}:[0-9]{2}$/ })
+      .first()
+      .click();
+
+    // --- step 4: details -------------------------------------------
+    await expect(page.getByRole("heading", { name: "Your details" })).toBeVisible();
     await page.getByLabel("First name").fill("Guest");
-    await page.getByLabel("Last name").fill("E2E");
+    await page.getByLabel(/^Last name/).fill("E2E");
     await page.getByLabel("Email").fill(`widget-${runId}@example.com`);
 
     await page.getByRole("button", { name: "Confirm booking" }).click();
