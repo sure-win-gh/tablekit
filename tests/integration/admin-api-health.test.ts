@@ -5,6 +5,8 @@
 // Asserts totals, error rates, latency percentiles, daily buckets,
 // and the failing-endpoint rollup.
 
+import { createHash } from "node:crypto";
+
 import { eq } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
@@ -21,6 +23,10 @@ const pool = new Pool({ connectionString: process.env["DATABASE_URL"] });
 const db: Db = drizzle(pool, { schema });
 
 const run = Date.now().toString(36);
+// api_keys carries shape constraints (0029): prefix ~ '^sk_live_[A-Za-z0-9_-]{4}$'
+// and hash ~ '^[0-9a-f]{64}$'. Seed values have to satisfy them.
+const keyPrefix = `sk_live_${run.slice(-4)}`;
+const keyHash = createHash("sha256").update(run).digest("hex");
 let orgId: string;
 
 beforeAll(async () => {
@@ -32,7 +38,7 @@ beforeAll(async () => {
 
   const [key] = await db
     .insert(schema.apiKeys)
-    .values({ organisationId: orgId, prefix: `tk_${run}`, hash: `h_${run}`, label: "t" })
+    .values({ organisationId: orgId, prefix: keyPrefix, hash: keyHash, label: "t" })
     .returning({ id: schema.apiKeys.id });
 
   await db.insert(schema.apiRequestLog).values([

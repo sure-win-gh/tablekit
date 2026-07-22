@@ -5,6 +5,8 @@
 // import job + one API key and asserts the feature-adoption snapshot
 // picks them all up.
 
+import { createHash } from "node:crypto";
+
 import { eq } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
@@ -125,8 +127,10 @@ beforeAll(async () => {
   });
   await db.insert(schema.apiKeys).values({
     organisationId: orgId,
-    prefix: `tk_${run}`,
-    hash: `hash_${run}`,
+    // Shape constraints from 0029: prefix ~ '^sk_live_[A-Za-z0-9_-]{4}$',
+    // hash ~ '^[0-9a-f]{64}$'.
+    prefix: `sk_live_${run.slice(-4)}`,
+    hash: createHash("sha256").update(run).digest("hex"),
     label: "test key",
   });
 });
