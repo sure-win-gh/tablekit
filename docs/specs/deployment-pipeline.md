@@ -1,9 +1,23 @@
 # Spec: Deployment pipeline — staging parity, gated CI/CD promotion, one-click rollback
 
-**Status:** planned
+**Status:** Phase 1 shipped (2026-07-22); Phases 2–4 planned
 **Owner:** Ben
 **Related:** `docs/playbooks/deploy.md`, `docs/playbooks/incident.md`, `.github/workflows/ci.yml`
 **Goal:** stop bugs reaching production by making every change pass through a production-mirroring staging path, promoting to production only on green tests, and making reversion a single action.
+
+---
+
+## Implementation status
+
+**Phase 1 — shipped 2026-07-22.** The CI safety floor is in place: PRs can no longer go green on typecheck/lint/unit alone, and unsafe migrations are blocked mechanically.
+
+- `scripts/check-migration-safety.ts` — migration-safety linter (2.5). Scans only migrations *added/changed* vs `origin/main` (history is grandfathered); blocks `DROP TABLE`/`DROP COLUMN`, `RENAME COLUMN`/`RENAME TABLE`, `SET NOT NULL`, and `ADD COLUMN … NOT NULL` without a default. Comments and dollar-quoted function bodies are stripped so they can't trip it. Escape hatch: a file-level `-- migration-safety-ack: <reason>` marker. Validated: 0 false positives across all 70 existing migrations.
+- `tests/unit/check-migration-safety.test.ts` — 14 unit tests over the detection logic (safe vs unsafe, comment/dollar-quote handling, statement splitting).
+- `package.json` — `check:migrations` script.
+- `.github/workflows/ci.yml` — `fetch-depth: 0` on the `checks` checkout (so the linter can diff against `origin/main`); a **Migration safety** step in `checks`; and a dedicated **`migrate`** job that applies migrations to the CI database before the `integration`/`e2e` jobs (which now `needs: [checks, migrate]`), keeping CI's schema in lockstep automatically.
+- CI infrastructure: a dedicated CI Supabase project with the five secrets wired in GitHub Actions (`DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SESSION_SIGNING_SECRET`). This lit up the previously-skipped RLS check, integration tests, and e2e job. Schema seeded via a one-time `pnpm db:migrate`; the CI `migrate` job maintains it thereafter.
+
+Outstanding verification: a throwaway PR adding a `DROP COLUMN` migration to confirm, in one run, that the linter blocks it *and* that the DB-backed jobs execute and pass against the CI database.
 
 ---
 
@@ -324,7 +338,7 @@ Residual caveats to document in `incident.md`: webhooks keep arriving during the
 
 | Phase | What ships | Effort | Risk retired |
 |-------|-----------|--------|--------------|
-| **1** | CI secrets wired (2.1); skipped jobs now run; migration-safety linter (2.5) | ~half a day | PRs can no longer go green without DB-touching tests; unsafe migrations blocked |
+| **1** ✅ | CI secrets wired (2.1); skipped jobs now run; migration-safety linter (2.5); CI `migrate` job keeps the CI DB in schema-sync | ~half a day | PRs can no longer go green without DB-touching tests; unsafe migrations blocked |
 | **2** | Staging parity: London Supabase, seed script, env-parity check, Cloudflare + noindex on staging (1.2–1.3); e2e vs preview URL (2.2) | ~1–2 days | "Works on my machine" gap between CI and deployed reality |
 | **3** | `staging-verify.yml` (2.3) + `promote.yml` (2.4) + branch protection + GitHub `production` environment | ~1 day | Untested code can no longer reach production; releases become boring |
 | **4** | `rollback.yml` + Instant Rollback documentation + first drill (WS 3); Supabase branching for per-PR databases (1.4) | ~1 day | Incident recovery drops from "minutes of CLI under stress" to one click; PR previews stop sharing state |
