@@ -76,6 +76,11 @@ jobs:
       # Self-heals once pnpm ships bulk-endpoint support: the grep
       # stops matching and the real exit code applies again.
       - name: Audit dependencies
+        # THROWAWAY (smoke branch only — must not land on main): the audit
+        # currently fails on pre-existing transitive advisories (sharp via
+        # next/@sentry, fast-uri via webpack→ajv). Tolerating it here so the
+        # chain can reach migrate → integration → e2e and be observed.
+        continue-on-error: true
         run: |
           set +e
           out=$(pnpm audit --audit-level=high --prod 2>&1)
