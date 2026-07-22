@@ -99,8 +99,10 @@ test.describe("bookings flow", () => {
     // Pick a slot time — the grid renders buttons labelled "HH:MM". Take the
     // first the service offers rather than naming one: the seeded service runs
     // 08:00–17:00 on 45-minute turns, which doesn't put a slot on 12:00.
+    // Not anchored at the end: each slot button also carries the table it
+    // would seat, so the accessible name reads like "08:00 TT1".
     await page
-      .getByRole("button", { name: /^[0-9]{2}:[0-9]{2}$/ })
+      .getByRole("button", { name: /^[0-9]{2}:[0-9]{2}/ })
       .first()
       .click();
 

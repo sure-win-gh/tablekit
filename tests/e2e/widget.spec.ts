@@ -98,8 +98,9 @@ test.describe("widget flow", () => {
 
     // --- step 2: day -----------------------------------------------
     await expect(page.getByRole("heading", { name: "Which day?" })).toBeVisible();
+    // "Previous month" is absent while the calendar sits on the current month
+    // (there's nothing bookable behind today), so don't wait on it.
     for (let i = 0; i < when.monthsAhead; i++) {
-      await page.getByLabel("Previous month").waitFor({ state: "visible" });
       await page.getByLabel("Next month").click();
     }
     // Day cells are labelled "<day>, <availability word>".
@@ -112,7 +113,7 @@ test.describe("widget flow", () => {
     await expect(page.getByRole("heading", { name: "What time?" })).toBeVisible();
     // Take whichever slot the service actually offers rather than assuming one.
     await page
-      .getByRole("link", { name: /^[0-9]{2}:[0-9]{2}$/ })
+      .getByRole("link", { name: /^[0-9]{2}:[0-9]{2}/ })
       .first()
       .click();
 
