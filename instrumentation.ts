@@ -10,6 +10,7 @@
 
 import * as Sentry from "@sentry/nextjs";
 
+import { isProdLike, missingRequiredEnv } from "@/lib/env-check";
 import { scrubEvent } from "@/lib/observability/sentry-scrub";
 
 export async function register(): Promise<void> {
@@ -23,6 +24,17 @@ export async function register(): Promise<void> {
     console.error(
       `[boot] CRITICAL: rate limiter fails OPEN — Upstash not configured (${upstashMissing.join(", ")}). Auth/abuse throttling is DISABLED.`,
     );
+  }
+
+  // Env parity tripwire (deployment-pipeline.md Phase 2): every required
+  // variable must be set and non-placeholder. Same posture as the Upstash
+  // check — loud log + Sentry page in prod-like envs, warn elsewhere; never
+  // crash the server over it. Node runtime only, so it fires once.
+  const envMissing = missingEnvParity();
+  if (envMissing.length > 0) {
+    const line = `[boot] ${isProdLike(process.env) ? "CRITICAL: " : ""}required env vars missing or placeholder: ${envMissing.join(", ")} (see .env.local.example)`;
+    if (isProdLike(process.env)) console.error(line);
+    else console.warn(line);
   }
 
   const dsn = process.env["SENTRY_DSN"];
@@ -52,6 +64,13 @@ export async function register(): Promise<void> {
         "fatal",
       );
     }
+    // …and on the env-parity misconfig, prod-like only.
+    if (envMissing.length > 0 && isProdLike(process.env)) {
+      Sentry.captureMessage(
+        `env parity: required vars missing or placeholder (${envMissing.join(", ")})`,
+        "fatal",
+      );
+    }
   }
   if (process.env["NEXT_RUNTIME"] === "edge") {
     Sentry.init(common);
@@ -67,6 +86,18 @@ export function missingUpstashInProd(): string[] {
   const runtime = process.env["NEXT_RUNTIME"];
   if (runtime && runtime !== "nodejs") return [];
   return ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"].filter((k) => !process.env[k]);
+}
+
+// Which required env vars (lib/env-check.ts tiers) are missing, gated to the
+// Node server runtime so the check fires once, not also on edge. The
+// production tier applies only in prod-like envs (Vercel production /
+// explicit staging) — NOT under bare NODE_ENV=production, so local
+// `pnpm start` and CI's e2e server stay quiet about live-only keys.
+// Exported for the unit test.
+export function missingEnvParity(): string[] {
+  const runtime = process.env["NEXT_RUNTIME"];
+  if (runtime && runtime !== "nodejs") return [];
+  return missingRequiredEnv(process.env, { prodLike: isProdLike(process.env) });
 }
 
 // Forwards React Server Component / route-handler errors to Sentry.
