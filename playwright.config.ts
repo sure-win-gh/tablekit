@@ -31,9 +31,7 @@ export default defineConfig({
   reporter: isCI ? [["github"], ["list"]] : "list",
   use: {
     baseURL,
-    // TEMPORARY: "on" so attempt 1 is captured for the auth.spec diagnosis.
-    // Reverted to "on-first-retry" once that's settled.
-    trace: "on",
+    trace: "on-first-retry",
     extraHTTPHeaders: { "x-real-ip": clientIp },
   },
   projects: [
