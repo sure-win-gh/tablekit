@@ -78,6 +78,11 @@ test.describe("bookings flow", () => {
   });
 
   test("host creates a booking, sees it on the day list, seats + finishes it", async ({ page }) => {
+    // The longest flow in the suite, and every step waits on a server
+    // round-trip through the dev server. On a cold route in CI the first
+    // compile alone can eat most of Playwright's 30s default, which left the
+    // hydration retry below no budget to succeed in.
+    test.setTimeout(120_000);
     page.on("pageerror", (err) => console.error("[pageerror]", err.message));
 
     // --- log in ----------------------------------------------------
