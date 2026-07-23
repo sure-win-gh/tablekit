@@ -92,8 +92,20 @@ test.describe("bookings flow", () => {
     await page.getByRole("link", { name: /New booking/ }).click();
     await page.waitForURL(/\/dashboard\/venues\/[0-9a-f-]+\/bookings\/new/, { timeout: 10_000 });
 
-    // Choose our fixed future date + party size 2.
-    await page.getByLabel("Date").fill(DATE);
+    // The date field is controlled: its value comes from the server via
+    // searchParams and its onChange pushes a new URL (new/forms.tsx). Filling
+    // it before hydration sets the DOM value, then React's first render puts
+    // the server value straight back — the trace for run 29961633113 caught
+    // exactly that, with the input still showing today. Retry fill-and-verify
+    // until it sticks, then wait for the navigation the change triggers so the
+    // slot grid below belongs to the date we asked for.
+    const dateInput = page.getByLabel("Date");
+    await expect(async () => {
+      await dateInput.fill(DATE);
+      await expect(dateInput).toHaveValue(DATE, { timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
+    await page.waitForURL(new RegExp(`date=${DATE}`), { timeout: 15_000 });
+
     await page.getByLabel("Party size").fill("2");
 
     // Pick a slot time — the grid renders buttons labelled "HH:MM". Take the
@@ -105,6 +117,10 @@ test.describe("bookings flow", () => {
       .getByRole("button", { name: /^[0-9]{2}:[0-9]{2}/ })
       .first()
       .click();
+
+    // Choosing a slot navigates with the service and time; the guest form
+    // only renders once that round-trip lands.
+    await page.waitForURL(/wallStart=/, { timeout: 15_000 });
 
     // Guest form — fill and submit.
     await page.getByLabel("First name").fill("Alice");
