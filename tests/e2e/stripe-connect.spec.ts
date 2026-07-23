@@ -14,6 +14,12 @@ import { Pool } from "pg";
 import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
 
+import { installBadJwtRetry } from "../support/bad-jwt-retry";
+
+// This spec seeds users through the Supabase admin API, which intermittently
+// rejects a valid request with 403 bad_jwt. See the helper.
+installBadJwtRetry();
+
 const SUPABASE_URL = process.env["NEXT_PUBLIC_SUPABASE_URL"];
 const SERVICE_ROLE_KEY = process.env["SUPABASE_SERVICE_ROLE_KEY"];
 const DATABASE_URL = process.env["DATABASE_URL"];

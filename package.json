@@ -20,6 +20,7 @@
     "db:studio": "drizzle-kit studio",
     "db:backfill-phone-hash": "tsx --conditions=react-server scripts/backfill-phone-hash.ts",
     "check:rls": "tsx scripts/check-rls.ts",
+    "check:migrations": "tsx scripts/check-migration-safety.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run --config tests/integration/vitest.config.ts",
@@ -40,7 +41,7 @@
     "date-fns-tz": "3.2.0",
     "drizzle-orm": "0.45.2",
     "lucide-react": "1.11.0",
-    "next": "16.2.6",
+    "next": "16.2.11",
     "papaparse": "5",
     "postcss": "8.5.16",
     "react": "19.2.4",
@@ -68,6 +69,7 @@
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.4",
+    "otplib": "13.4.1",
     "pg": "8.20.0",
     "prettier": "3.8.3",
     "prettier-plugin-tailwindcss": "0.6.14",
@@ -92,9 +94,12 @@
     },
     "overrides": {
       "fast-xml-builder": ">=1.1.7",
-      "axios": "^1.16.0",
+      "axios": "^1.18.0",
       "ws": ">=8.21.0",
-      "form-data": ">=4.0.6"
+      "form-data": ">=4.0.6",
+      "brace-expansion@>=3.0.0 <5.0.7": ">=5.0.7",
+      "fast-uri": "^3.1.4",
+      "sharp": ">=0.35.0"
     }
   }
 }

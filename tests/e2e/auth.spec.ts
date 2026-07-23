@@ -14,97 +14,47 @@
 // in tests/integration/rls-cross-tenant.test.ts; a full-stack UI
 // signup e2e lands when we've wired a programmatic mailbox.
 
-import { Pool } from "pg";
-import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
 
-const SUPABASE_URL = process.env["NEXT_PUBLIC_SUPABASE_URL"];
-const SERVICE_ROLE_KEY = process.env["SUPABASE_SERVICE_ROLE_KEY"];
-const DATABASE_URL = process.env["DATABASE_URL"];
+import {
+  cleanupOwner,
+  loginAsOwner,
+  ownerSeedConfigured,
+  seedOwnerWithTotp,
+  type SeededOwner,
+} from "./support/owner-session";
 
 test.describe.configure({ mode: "serial" });
 
 test.describe("auth flow", () => {
   const runId = Date.now().toString(36);
-  const email = `e2e-login-${runId}@tablekit.test`;
-  const password = "e2e-test-password-1234";
-  const fullName = `E2E User ${runId}`;
-  const orgName = `E2E Test ${runId}`;
-  const orgSlug = `e2e-test-${runId}`;
 
-  let userId: string | null = null;
+  let owner: SeededOwner | null = null;
 
   test.beforeAll(async () => {
-    test.skip(!SUPABASE_URL || !SERVICE_ROLE_KEY || !DATABASE_URL, "Supabase/DB env not set");
-
-    const admin = createClient(SUPABASE_URL!, SERVICE_ROLE_KEY!, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
-    const { data, error } = await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { full_name: fullName },
-    });
-    if (error || !data.user) {
-      throw error ?? new Error("createUser failed");
-    }
-    userId = data.user.id;
-
-    const pool = new Pool({ connectionString: DATABASE_URL });
-    try {
-      const inserted = await pool.query<{ id: string }>(
-        "insert into organisations (name, slug) values ($1, $2) returning id",
-        [orgName, orgSlug],
-      );
-      const orgId = inserted.rows[0]?.id;
-      if (!orgId) throw new Error("org insert returned no row");
-      await pool.query(
-        "insert into memberships (user_id, organisation_id, role) values ($1, $2, 'owner')",
-        [userId, orgId],
-      );
-    } finally {
-      await pool.end();
-    }
+    test.skip(!ownerSeedConfigured(), "Supabase/DB env not set");
+    owner = await seedOwnerWithTotp({ label: "login", runId, orgName: `E2E Test ${runId}` });
   });
 
   test.afterAll(async () => {
-    if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !userId) return;
-
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-    await admin.auth.admin.deleteUser(userId).catch(() => undefined);
-
-    if (DATABASE_URL) {
-      const pool = new Pool({ connectionString: DATABASE_URL });
-      try {
-        await pool.query("delete from organisations where slug = $1", [orgSlug]);
-      } finally {
-        await pool.end();
-      }
-    }
+    if (owner) await cleanupOwner(owner);
   });
 
   test("login + dashboard + sign out", async ({ page }) => {
     page.on("pageerror", (err) => console.error("[pageerror]", err.message));
 
+    const seeded = owner!;
+
     // --- login ---------------------------------------------------------
-    await page.goto("/login");
-    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
-
-    await page.getByLabel("Email").fill(email);
-    await page.getByLabel("Password").fill(password);
-    await page.getByRole("button", { name: "Sign in" }).click();
-
+    // Covers password sign-in plus the owner MFA challenge; see the helper.
+    await loginAsOwner(page, seeded);
     await page.waitForURL("**/dashboard", { timeout: 15_000 });
 
     // --- dashboard ----------------------------------------------------
     // h1 is the active org name; header shows full_name (dashboard
     // prefers fullName over email).
-    await expect(page.getByRole("heading", { name: orgName })).toBeVisible();
-    await expect(page.getByText(fullName)).toBeVisible();
+    await expect(page.getByRole("heading", { name: seeded.orgName })).toBeVisible();
+    await expect(page.getByText(seeded.fullName)).toBeVisible();
 
     // --- sign out -----------------------------------------------------
     // Cookies live on the test's browser context, so this completes

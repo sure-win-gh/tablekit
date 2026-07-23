@@ -14,9 +14,25 @@ import { Pool } from "pg";
 import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
 
+import { installBadJwtRetry } from "../support/bad-jwt-retry";
+
+// This spec seeds users through the Supabase admin API, which intermittently
+// rejects a valid request with 403 bad_jwt. See the helper.
+installBadJwtRetry();
+
 const SUPABASE_URL = process.env["NEXT_PUBLIC_SUPABASE_URL"];
 const SERVICE_ROLE_KEY = process.env["SUPABASE_SERVICE_ROLE_KEY"];
 const DATABASE_URL = process.env["DATABASE_URL"];
+const RESEND_KEY = process.env["RESEND_API_KEY"];
+
+// Both paths dispatch a real email through Resend — without a live key the
+// action fails with "provider-error" and the flow never reaches the
+// reset screen. Same shape as stripeConfigured() in stripe-connect.spec.ts.
+function resendConfigured(): boolean {
+  if (!RESEND_KEY) return false;
+  if (RESEND_KEY.includes("YOUR_")) return false;
+  return RESEND_KEY.startsWith("re_");
+}
 
 test.describe.configure({ mode: "serial" });
 
@@ -34,6 +50,11 @@ test.describe("password reset", () => {
 
   test.beforeAll(async () => {
     test.skip(!SUPABASE_URL || !SERVICE_ROLE_KEY || !DATABASE_URL, "Supabase/DB env not set");
+    test.skip(
+      !resendConfigured(),
+      "RESEND_API_KEY not configured (missing or placeholder) — set a live re_… key " +
+        "in the CI secrets to enable the password-reset e2e flow",
+    );
 
     const admin = createClient(SUPABASE_URL!, SERVICE_ROLE_KEY!, {
       auth: { autoRefreshToken: false, persistSession: false },

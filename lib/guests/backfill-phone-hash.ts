@@ -18,7 +18,13 @@ import { decryptPii, hashForLookup, type Ciphertext } from "@/lib/security/crypt
 
 export type BackfillResult = { scanned: number; updated: number };
 
-export async function backfillGuestPhoneHash(batchSize = 500): Promise<BackfillResult> {
+// `organisationId` narrows the sweep to one org. Production runs leave it
+// unset and sweep everything; the integration test scopes to its own org so
+// unrelated rows in the shared CI database can't fail an unrelated assertion.
+export async function backfillGuestPhoneHash(
+  batchSize = 500,
+  organisationId?: string,
+): Promise<BackfillResult> {
   const db = adminDb();
   let scanned = 0;
   let updated = 0;
@@ -33,7 +39,13 @@ export async function backfillGuestPhoneHash(batchSize = 500): Promise<BackfillR
         phoneCipher: guests.phoneCipher,
       })
       .from(guests)
-      .where(and(isNotNull(guests.phoneCipher), isNull(guests.phoneHash)))
+      .where(
+        and(
+          isNotNull(guests.phoneCipher),
+          isNull(guests.phoneHash),
+          organisationId ? eq(guests.organisationId, organisationId) : undefined,
+        ),
+      )
       .limit(batchSize);
 
     if (rows.length === 0) break;

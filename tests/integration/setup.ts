@@ -5,5 +5,10 @@
 import { config as loadEnv } from "dotenv";
 import { resolve } from "node:path";
 
+import { installBadJwtRetry } from "../support/bad-jwt-retry";
+
 loadEnv({ path: resolve(process.cwd(), ".env.local") });
 loadEnv({ path: resolve(process.cwd(), ".env") });
+
+// Suites seed users through the Supabase admin API; see the helper for why.
+installBadJwtRetry();

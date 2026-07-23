@@ -1,14 +1,19 @@
 // End-to-end smoke for the public widget flow.
 //
-// No login. Seeds a venue with one table + one service via admin API /
-// SQL, then drives the public /book/<venueId> page: pick a slot, fill
-// guest details, submit, see the success panel with the reference.
+// No login. Seeds its own org + venue with one table and one all-week
+// service, then walks the shipped four-step wizard on /book/<venueId>:
+// party size → day → time → details, and asserts the success panel.
+//
+// The wizard replaced a single form with Date/Party-size inputs; this spec
+// asserts each step's own landmark heading rather than those old labels.
 
 import { Pool } from "pg";
 import { expect, test } from "@playwright/test";
 
+import { bookingDay } from "./support/booking-date";
+import { dismissCookieNotice } from "./support/cookie-notice";
+
 const DATABASE_URL = process.env["DATABASE_URL"];
-const DATE = "2026-07-12"; // Sunday, BST
 
 test.describe.configure({ mode: "serial" });
 
@@ -77,19 +82,45 @@ test.describe("widget flow", () => {
     // secret — the UI doesn't render a widget because the sitekey
     // is also a placeholder. Unsetting server-side is a dev task.)
 
+    const when = bookingDay();
+
     await page.goto(`/book/${venueId!}`);
     await expect(page.getByRole("heading", { name: venueName })).toBeVisible();
 
-    // Set the date + party size
-    await page.getByLabel("Date").fill(DATE);
-    await page.getByLabel("Party size").fill("2");
+    // The notice floats over the bottom of the viewport and would otherwise
+    // intercept clicks on the wizard's later steps.
+    await dismissCookieNotice(page);
 
-    // Pick a slot
-    await page.getByRole("button", { name: "12:00", exact: true }).click();
+    // --- step 1: party size ----------------------------------------
+    // The wizard advances by URL, so every choice is a link, not a button.
+    await expect(page.getByRole("heading", { name: "How many guests?" })).toBeVisible();
+    await page.getByRole("link", { name: "2", exact: true }).click();
 
-    // Guest form
+    // --- step 2: day -----------------------------------------------
+    await expect(page.getByRole("heading", { name: "Which day?" })).toBeVisible();
+    // "Previous month" is absent while the calendar sits on the current month
+    // (there's nothing bookable behind today), so don't wait on it.
+    for (let i = 0; i < when.monthsAhead; i++) {
+      await page.getByLabel("Next month").click();
+    }
+    // Day cells are labelled "<day>, <availability word>".
+    await page
+      .getByLabel(new RegExp(`^${when.day}, `))
+      .first()
+      .click();
+
+    // --- step 3: time ----------------------------------------------
+    await expect(page.getByRole("heading", { name: "What time?" })).toBeVisible();
+    // Take whichever slot the service actually offers rather than assuming one.
+    await page
+      .getByRole("link", { name: /^[0-9]{2}:[0-9]{2}/ })
+      .first()
+      .click();
+
+    // --- step 4: details -------------------------------------------
+    await expect(page.getByRole("heading", { name: "Your details" })).toBeVisible();
     await page.getByLabel("First name").fill("Guest");
-    await page.getByLabel("Last name").fill("E2E");
+    await page.getByLabel(/^Last name/).fill("E2E");
     await page.getByLabel("Email").fill(`widget-${runId}@example.com`);
 
     await page.getByRole("button", { name: "Confirm booking" }).click();
