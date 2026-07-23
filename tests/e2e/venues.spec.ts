@@ -11,9 +11,9 @@ import { expect, test } from "@playwright/test";
 
 import {
   cleanupOwner,
-  loginAsOwner,
   ownerSeedConfigured,
   seedOwnerWithTotp,
+  startAuthenticated,
   type SeededOwner,
 } from "./support/owner-session";
 
@@ -40,12 +40,17 @@ test.describe("venues flow", () => {
     if (owner) await cleanupOwner(owner);
   });
 
-  test("create a café, template seeds, services and floor plan populated", async ({ page }) => {
+  test("create a café, template seeds, services and floor plan populated", async ({
+    page,
+    context,
+  }) => {
     page.on("pageerror", (err) => console.error("[pageerror]", err.message));
 
-    // --- log in ----------------------------------------------------
-    // Password sign-in plus the owner MFA challenge; see the helper.
-    await loginAsOwner(page, owner!);
+    // --- start signed in -------------------------------------------
+    // Session established programmatically; the login UI is auth.spec's job
+    // and its rate limit is not this spec's to spend. See the helper.
+    await startAuthenticated(context, owner!);
+    await page.goto("/dashboard");
 
     // Zero-venue dashboard → "Create venue" CTA visible.
     await page.waitForURL("**/dashboard", { timeout: 15_000 });

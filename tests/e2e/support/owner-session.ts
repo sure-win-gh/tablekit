@@ -19,7 +19,10 @@
 // Every spec gets its own user and org, so nothing here assumes an empty
 // database.
 
-import type { Page } from "@playwright/test";
+import { createHmac } from "node:crypto";
+
+import type { BrowserContext, Cookie, Page } from "@playwright/test";
+import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { generateSync } from "otplib";
 import { Pool } from "pg";
@@ -30,6 +33,7 @@ const SUPABASE_URL = process.env["NEXT_PUBLIC_SUPABASE_URL"];
 const ANON_KEY = process.env["NEXT_PUBLIC_SUPABASE_ANON_KEY"];
 const ADMIN_KEY = process.env["SUPABASE_SERVICE_ROLE_KEY"];
 const DATABASE_URL = process.env["DATABASE_URL"];
+const APP_BASE_URL = process.env["PLAYWRIGHT_BASE_URL"] ?? "http://localhost:3000";
 
 export const OWNER_PASSWORD = "e2e-test-password-1234";
 const TOTP_STEP_SECONDS = 30;
@@ -45,6 +49,8 @@ export type SeededOwner = {
   totpSecret: string;
   /** The code already spent; never replayed (see freshTotpCode). */
   lastCode: string;
+  /** aal2 session cookies, ready for BrowserContext.addCookies. */
+  sessionCookies: Cookie[];
 };
 
 /** True when every secret the owner helpers need is present. */
@@ -56,6 +62,46 @@ function adminClient() {
   return createClient(SUPABASE_URL!, ADMIN_KEY!, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+}
+
+type SetCookie = { name: string; value: string; options?: Record<string, unknown> };
+
+/**
+ * Minimal cookie store for the @supabase/ssr server client: it reads back
+ * what it wrote (so the MFA calls see the session from sign-in) and keeps the
+ * final state for handing to a browser context.
+ */
+class CookieJar {
+  private readonly store = new Map<string, SetCookie>();
+
+  getAll(): { name: string; value: string }[] {
+    return [...this.store.values()].map(({ name, value }) => ({ name, value }));
+  }
+
+  setAll(list: SetCookie[]): void {
+    for (const cookie of list) {
+      // An empty value is the library expiring a chunk; drop it rather than
+      // handing the browser a cookie that unsets the session.
+      if (cookie.value === "") this.store.delete(cookie.name);
+      else this.store.set(cookie.name, cookie);
+    }
+  }
+
+  toPlaywrightCookies(): Cookie[] {
+    return [...this.store.values()].map(({ name, value, options }) => {
+      const sameSite = String(options?.["sameSite"] ?? "lax").toLowerCase();
+      return {
+        name,
+        value,
+        domain: new URL(APP_BASE_URL).hostname,
+        path: String(options?.["path"] ?? "/"),
+        expires: -1,
+        httpOnly: false,
+        secure: false,
+        sameSite: sameSite === "strict" ? "Strict" : sameSite === "none" ? "None" : "Lax",
+      } satisfies Cookie;
+    });
+  }
 }
 
 /**
@@ -119,10 +165,19 @@ export async function seedOwnerWithTotp(opts: {
     await pool.end();
   }
 
-  // Enrol through the user's own session — the same calls the browser makes.
-  const user = createClient(SUPABASE_URL!, ANON_KEY!, {
-    auth: { autoRefreshToken: false, persistSession: false },
+  // Enrol through the user's own session — the same calls the browser makes —
+  // but drive it with @supabase/ssr's server client over a capturing cookie
+  // jar. That way the session cookies are produced by the library itself, in
+  // exactly the name, encoding and chunking the app reads back, rather than
+  // being hand-encoded here.
+  const jar = new CookieJar();
+  const user = createServerClient(SUPABASE_URL!, ANON_KEY!, {
+    cookies: {
+      getAll: () => jar.getAll(),
+      setAll: (list) => jar.setAll(list),
+    },
   });
+
   const signIn = await user.auth.signInWithPassword({ email, password: OWNER_PASSWORD });
   if (signIn.error) throw signIn.error;
 
@@ -142,7 +197,10 @@ export async function seedOwnerWithTotp(opts: {
   });
   if (verified.error) throw verified.error;
 
-  await user.auth.signOut();
+  // Verifying upgrades the session to aal2, so the cookies now in the jar
+  // satisfy the MFA wall as well as the auth check. Deliberately no signOut:
+  // that would clear the very cookies we want to hand to the browser.
+  const sessionCookies = jar.toPlaywrightCookies();
 
   return {
     userId,
@@ -154,6 +212,51 @@ export async function seedOwnerWithTotp(opts: {
     fullName,
     totpSecret,
     lastCode,
+    sessionCookies,
+  };
+}
+
+/**
+ * Start the browser already signed in, without touching /login.
+ *
+ * The login server action rate-limits to 5 attempts per IP per 15 minutes
+ * (app/(marketing)/login/actions.ts, per docs/playbooks/security.md). Every
+ * spec in CI shares one runner IP, and with retries a full run blew straight
+ * through that budget — the trace for run 29992404446 shows "Too many
+ * attempts" on the login page. The limiter is correct and stays untouched;
+ * the specs simply stop spending attempts on setup they aren't testing.
+ *
+ * The cookies come from @supabase/ssr itself during seeding, so this is the
+ * same session the app would have minted — including aal2, so the MFA wall is
+ * satisfied. auth.spec.ts deliberately does not use this: driving the real
+ * login and challenge UI is the surface it exists to cover, and one UI login
+ * per run sits well inside the limit.
+ */
+export async function startAuthenticated(context: BrowserContext, owner: SeededOwner) {
+  await context.addCookies([...owner.sessionCookies, activeOrgCookie(owner.orgId)]);
+}
+
+/**
+ * The dashboard also needs an active organisation — the login action sets an
+ * HMAC-signed tk_active_org cookie, and without it /dashboard bounces to
+ * /login?error=no_active_org. Mint it the same way setActiveOrg does
+ * (lib/auth/active-org.ts) using the secret the test env already holds.
+ */
+function activeOrgCookie(orgId: string): Cookie {
+  const secret = process.env["SESSION_SIGNING_SECRET"];
+  if (!secret) throw new Error("startAuthenticated: SESSION_SIGNING_SECRET is not set");
+  const sig = createHmac("sha256", secret).update(orgId).digest("base64url");
+
+  return {
+    name: "tk_active_org",
+    value: `${orgId}.${sig}`,
+    domain: new URL(APP_BASE_URL).hostname,
+    path: "/",
+    expires: -1,
+    // Mirrors setActiveOrg: httpOnly, and only secure over HTTPS.
+    httpOnly: true,
+    secure: APP_BASE_URL.startsWith("https://"),
+    sameSite: "Lax",
   };
 }
 

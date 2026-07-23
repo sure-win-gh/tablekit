@@ -12,9 +12,9 @@ import { expect, test } from "@playwright/test";
 import { bookingDay } from "./support/booking-date";
 import {
   cleanupOwner,
-  loginAsOwner,
   ownerSeedConfigured,
   seedOwnerWithTotp,
+  startAuthenticated,
   type SeededOwner,
 } from "./support/owner-session";
 
@@ -77,17 +77,21 @@ test.describe("bookings flow", () => {
     if (owner) await cleanupOwner(owner);
   });
 
-  test("host creates a booking, sees it on the day list, seats + finishes it", async ({ page }) => {
+  test("host creates a booking, sees it on the day list, seats + finishes it", async ({
+    page,
+    context,
+  }) => {
     // The longest flow in the suite, and every step waits on a server
-    // round-trip through the dev server. On a cold route in CI the first
-    // compile alone can eat most of Playwright's 30s default, which left the
-    // hydration retry below no budget to succeed in.
+    // round-trip. Kept generous while we confirm the production-server run;
+    // drop back to the default once it passes comfortably.
     test.setTimeout(120_000);
     page.on("pageerror", (err) => console.error("[pageerror]", err.message));
 
-    // --- log in ----------------------------------------------------
-    // Password sign-in plus the owner MFA challenge; see the helper.
-    await loginAsOwner(page, owner!);
+    // --- start signed in -------------------------------------------
+    // Session established programmatically; the login UI is auth.spec's job
+    // and its rate limit is not this spec's to spend. See the helper.
+    await startAuthenticated(context, owner!);
+    await page.goto("/dashboard");
 
     // Single-venue org → straight to that venue's bookings list; see the
     // single-venue branch in app/(dashboard)/dashboard/page.tsx.
