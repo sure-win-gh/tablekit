@@ -172,6 +172,12 @@ jobs:
       # See the integration job: the dev server boots app code that
       # encrypts guest PII, so without this every DB-backed spec fails.
       TABLEKIT_MASTER_KEY: ${{ secrets.TABLEKIT_MASTER_KEY }}
+      # `pnpm start` runs with NODE_ENV=production, where lib/public/rate-limit.ts
+      # requires a real Upstash instance and fails closed without one — which
+      # rejected every login, not just any over budget. With these the limiter
+      # runs for real against the CI Redis, exactly as it does in production.
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
