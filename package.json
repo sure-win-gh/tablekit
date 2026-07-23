@@ -21,6 +21,7 @@
     "db:backfill-phone-hash": "tsx --conditions=react-server scripts/backfill-phone-hash.ts",
     "check:rls": "tsx scripts/check-rls.ts",
     "check:migrations": "tsx scripts/check-migration-safety.ts",
+    "check:env": "tsx scripts/check-env-parity.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run --config tests/integration/vitest.config.ts",
