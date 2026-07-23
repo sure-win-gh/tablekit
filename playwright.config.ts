@@ -28,7 +28,13 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm dev",
+    // CI serves a production build. Under `next dev` every route compiles on
+    // first request and hydration lands late, which the bookings spec hit
+    // head-on: the page rendered but never became interactive inside the test,
+    // so the date input's onChange never fired. The e2e job builds first (see
+    // .github/workflows/ci.yml), and this also puts e2e closer to what ships.
+    // Locally it stays `pnpm dev`, reusing a server you already have running.
+    command: isCI ? "pnpm start" : "pnpm dev",
     url: baseURL,
     reuseExistingServer: !isCI,
     timeout: 120_000,

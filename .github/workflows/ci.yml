@@ -196,6 +196,13 @@ jobs:
         if: env.DATABASE_URL == ''
         run: echo "::notice::Supabase secrets not set — skipping pnpm test:e2e. Wire them to enable."
 
+      # Playwright serves this build in CI (see playwright.config.ts) rather
+      # than `next dev`, so routes are compiled up front instead of on first
+      # request — and e2e exercises what actually ships.
+      - name: Build
+        if: env.DATABASE_URL != ''
+        run: pnpm build
+
       - name: Cache Playwright browsers
         if: env.DATABASE_URL != ''
         uses: actions/cache@v4
