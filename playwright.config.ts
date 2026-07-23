@@ -10,6 +10,18 @@ loadEnv({ path: ".env" });
 const baseURL = process.env["PLAYWRIGHT_BASE_URL"] ?? "http://localhost:3000";
 const isCI = Boolean(process.env["CI"]);
 
+// Production always sits behind infrastructure that supplies a client IP
+// header; hitting localhost directly supplies none, so ipFromHeaders() falls
+// back to "unknown" and every login in every run and retry shares the single
+// `login:ip:unknown` bucket — 5 attempts per 15 minutes for the whole of CI.
+// Send a realistic per-run address instead. TEST-NET-3 (RFC 5737) is reserved
+// for documentation and can never be a real client.
+const runNumber = Number(process.env["GITHUB_RUN_NUMBER"]);
+const clientIpOctet = Number.isFinite(runNumber)
+  ? runNumber % 250
+  : Math.floor(Math.random() * 250);
+const clientIp = `203.0.113.${clientIpOctet}`;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: true,
@@ -20,6 +32,7 @@ export default defineConfig({
   use: {
     baseURL,
     trace: "on-first-retry",
+    extraHTTPHeaders: { "x-real-ip": clientIp },
   },
   projects: [
     {
