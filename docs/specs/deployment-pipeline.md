@@ -1,23 +1,9 @@
 # Spec: Deployment pipeline — staging parity, gated CI/CD promotion, one-click rollback
 
-**Status:** Phase 1 shipped (2026-07-22); Phases 2–4 planned
+**Status:** Phase 1 shipped — merged to `main` 2026-07-23 (PR #131, merge `9cf14bf`). Phases 2–4 planned; Phase 2 execution plan below.
 **Owner:** Ben
 **Related:** `docs/playbooks/deploy.md`, `docs/playbooks/incident.md`, `.github/workflows/ci.yml`
 **Goal:** stop bugs reaching production by making every change pass through a production-mirroring staging path, promoting to production only on green tests, and making reversion a single action.
-
----
-
-## Implementation status
-
-**Phase 1 — shipped 2026-07-22.** The CI safety floor is in place: PRs can no longer go green on typecheck/lint/unit alone, and unsafe migrations are blocked mechanically.
-
-- `scripts/check-migration-safety.ts` — migration-safety linter (2.5). Scans only migrations *added/changed* vs `origin/main` (history is grandfathered); blocks `DROP TABLE`/`DROP COLUMN`, `RENAME COLUMN`/`RENAME TABLE`, `SET NOT NULL`, and `ADD COLUMN … NOT NULL` without a default. Comments and dollar-quoted function bodies are stripped so they can't trip it. Escape hatch: a file-level `-- migration-safety-ack: <reason>` marker. Validated: 0 false positives across all 70 existing migrations.
-- `tests/unit/check-migration-safety.test.ts` — 14 unit tests over the detection logic (safe vs unsafe, comment/dollar-quote handling, statement splitting).
-- `package.json` — `check:migrations` script.
-- `.github/workflows/ci.yml` — `fetch-depth: 0` on the `checks` checkout (so the linter can diff against `origin/main`); a **Migration safety** step in `checks`; and a dedicated **`migrate`** job that applies migrations to the CI database before the `integration`/`e2e` jobs (which now `needs: [checks, migrate]`), keeping CI's schema in lockstep automatically.
-- CI infrastructure: a dedicated CI Supabase project with the five secrets wired in GitHub Actions (`DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SESSION_SIGNING_SECRET`). This lit up the previously-skipped RLS check, integration tests, and e2e job. Schema seeded via a one-time `pnpm db:migrate`; the CI `migrate` job maintains it thereafter.
-
-Outstanding verification: a throwaway PR adding a `DROP COLUMN` migration to confirm, in one run, that the linter blocks it *and* that the DB-backed jobs execute and pass against the CI database.
 
 ---
 
@@ -33,6 +19,30 @@ The repo already has good bones, but there are gaps between what `deploy.md` des
 6. **Preview deployments share one database.** All PR previews point at a single shared preview Supabase, so two open PRs with conflicting migrations corrupt each other, and preview state drifts from the schema in `drizzle/`.
 
 The plan below fixes these in four phases. Each phase is independently shippable and useful on its own — do them in order, but nothing blocks on a later phase.
+
+---
+
+## Implementation record — Phase 1 (shipped 2026-07-23, PR #131)
+
+Green run: `30003259912` — checks, migrate, integration (94 files / 518 tests), e2e (10 passed, 5 skipped), all on their own merits. Thirty commits, merged unsquashed (`9cf14bf`) so the investigation history survives.
+
+**What shipped (core scope):** the migration-safety linter (`scripts/check-migration-safety.ts`, 14 unit tests, `check:migrations` script) blocking destructive/rewrite-unsafe DDL in *new* migrations only, with a `-- migration-safety-ack:` escape hatch; CI wiring (`fetch-depth: 0`, Migration safety step in `checks`); a `migrate` job applying Drizzle migrations to the CI database before the DB-backed jobs; the five Supabase secrets plus `TABLEKIT_MASTER_KEY` wired, lighting up the RLS check, integration, and e2e jobs for the first time.
+
+**What shipped beyond scope (pulled forward from Phase 2 by necessity):** e2e now runs against a **production build** (`pnpm build` + `pnpm start` in CI; local dev unchanged); per-spec isolation — every e2e spec seeds its own user/org/venues, enrols a real TOTP factor (`otplib`, dev-only), and starts from a programmatically established session (`tests/e2e/support/owner-session.ts` builds `@supabase/ssr` cookies via the library's own cookie jar plus the HMAC-signed `tk_active_org` cookie); only `auth.spec.ts` drives the login + MFA UI, keeping it inside the login rate limit; CI browsers send a per-run TEST-NET-3 `x-real-ip` so the limiter keys realistic per-client buckets; a CI Upstash Redis backs the limiter for real.
+
+**Fixed because the suites finally ran:** nine high advisories (five via narrowly-scoped `pnpm.overrides` — `sharp`, `fast-uri` held in-major for ajv, `brace-expansion` range-scoped so minimatch@3 keeps 1.x, `axios` — and four in `next`, patched to 16.2.11); broken `api_keys` fixtures violating the 0029 shape constraints; `backfillGuestPhoneHash` gained an optional org scope (production sweep unchanged); the `atBst` test helper produced Invalid Dates at day rollover; a set of e2e specs stale against shipped UI (widget four-step wizard, dashboard redirect target, floor-plan canvas).
+
+**Parked, explicitly:** `bookings.spec.ts` full-flow is `test.fixme` — the flow itself was proven end-to-end (run `29995374414`); the failure mode is runner-load-dependent hydration latency under local `pnpm start` + Chromium. **Un-fixme when Phase 2 moves e2e to Vercel preview deployments.** `password-reset` and `stripe-connect` skip loudly when their provider keys are unset (repo convention).
+
+**CI infrastructure now load-bearing** (record these wherever you track infra): a dedicated CI Supabase project (throwaway data; schema maintained by the `migrate` job) and a CI Upstash Redis (`tablekit-ci`) backing the rate limiter. Neither is shared with staging or production, ever. Operational fact that cost a cycle: **GitHub Actions resolves secrets at job start** — a job already running does not see newly-set secrets; re-run the job.
+
+### Watch-items & follow-ups (from Phase 1's findings)
+
+1. **Supabase `bad_jwt` platform transient.** Auth admin API rejects ~7% of requests with 403 `bad_jwt` ("unrecognized JWT kid <nil> for algorithm ES256") using a key that serves every other request — reproduced with curl against two projects including a fresh one, so platform-side; the rejected call creates nothing. Shim: `tests/support/bad-jwt-retry.ts` (installed from integration setup + the e2e seeding specs) retries only 403 + `bad_jwt` (both `code` and `error_code` shapes), ≤5 attempts with backoff; a genuinely bad key still fails on attempt one. Test-harness only; production auth path confirmed unaffected. Worth a Supabase support ticket.
+2. **CI pooler `EMAXCONNSESSION`.** The CI Supabase session-mode pooler caps at `pool_size: 15`; exceeding it surfaces as an unrelated-looking query error (`max clients reached in session mode`) — resource exhaustion, load-dependent, not random. Seen once (2026-07-22), not since. If it recurs: raise `pool_size` or trim concurrently-open pools; don't retry the test.
+3. **`login:ip:unknown` shared bucket** (→ `security.md`). `ipFromHeaders()` falls back to `"unknown"` when no `cf-connecting-ip`/`x-real-ip`/`x-forwarded-for` is present, so any direct caller population shares one 5-per-15-min bucket — and Redis-backed budgets persist across processes. E2E now supplies a per-run RFC 5737 address, mirroring what real infrastructure always provides. Remember for any future non-browser caller.
+4. **The limiter fails closed *silently*** (product follow-up, small + high-value). `rateLimit()` with `failOpen: false` returns "limited" on any Upstash problem — non-2xx, network error, or the 1500 ms timeout — and `outageResult()` logs nothing on that path, so an unreachable Redis is indistinguishable from a genuine lockout at the UI. It cost a full diagnostic cycle in CI; in production it would look like "users can't log in" with clean logs. Add a log line / Sentry breadcrumb on the outage path. (`incident.md` documents *that* auth fails closed; this makes it *observable*.)
+5. **SlotPicker date-input hydration gap** (UX papercut, follow-up PR). `bookings/new/forms.tsx` renders the date as a controlled input with no local state — value from server `searchParams`, every change a router round-trip. A date picked pre-hydration is discarded on reconcile; post-hydration the field lags the server round-trip, reading as "ignored" on slow connections, and a second change mid-flight can drop. Re-entry not corruption. Fix shape: optimistic local state while the push is in flight.
 
 ---
 
@@ -338,13 +348,28 @@ Residual caveats to document in `incident.md`: webhooks keep arriving during the
 
 | Phase | What ships | Effort | Risk retired |
 |-------|-----------|--------|--------------|
-| **1** ✅ | CI secrets wired (2.1); skipped jobs now run; migration-safety linter (2.5); CI `migrate` job keeps the CI DB in schema-sync | ~half a day | PRs can no longer go green without DB-touching tests; unsafe migrations blocked |
+| **1** ✅ | Shipped 2026-07-23 (PR #131) — see Implementation record above. Scope grew in flight: prod-build e2e, per-spec isolation + TOTP + session injection, Upstash-backed limiter in CI all landed early | ~half a day planned; ~2 days actual | PRs can no longer go green without DB-touching tests; unsafe migrations blocked; 9 advisories fixed |
 | **2** | Staging parity: London Supabase, seed script, env-parity check, Cloudflare + noindex on staging (1.2–1.3); e2e vs preview URL (2.2) | ~1–2 days | "Works on my machine" gap between CI and deployed reality |
 | **3** | `staging-verify.yml` (2.3) + `promote.yml` (2.4) + branch protection + GitHub `production` environment | ~1 day | Untested code can no longer reach production; releases become boring |
 | **4** | `rollback.yml` + Instant Rollback documentation + first drill (WS 3); Supabase branching for per-PR databases (1.4) | ~1 day | Incident recovery drops from "minutes of CLI under stress" to one click; PR previews stop sharing state |
 
 Order rationale: Phase 1 is an hour of secrets configuration for the single biggest safety gain available. Per-PR database branching is deliberately last — it's the most valuable *convenience* but the least urgent *safety* item, and the shared preview DB is tolerable for a solo founder for a few more weeks.
 
-## Follow-ups once this lands
+## Phase 2 — execution plan (next)
 
-Update `deploy.md` §Release flow and `incident.md` §Rollback procedure to point at the workflows instead of manual CLI steps; add the rollback drill and staging-parity checks to the pre-launch checklist; consider a lightweight canary step in `promote.yml` later (route a single pilot venue's traffic first) once there are enough venues to warrant it.
+Goal: close the gap between "green in CI" and "behaves in production" — staging that actually mirrors prod (Workstreams 1.1–1.3), and e2e pointed at real Vercel preview deployments (2.2). Explicitly deferred to Phase 4: per-PR isolated databases (1.4). Phase 1 already banked some of this ground: e2e runs a production build, per-spec isolation and the TOTP/session helper exist and carry over unchanged to preview-URL testing.
+
+| Step | Work | Depends on | Effort |
+|------|------|-----------|--------|
+| 1 | `scripts/check-env-parity.ts` + `instrumentation.ts` boot wiring + unit test: parse `.env.local.example` for required names, fail a staging/prod boot on missing/placeholder values, warn locally. One judgement call: curate the prod-required list against how production actually boots before enabling the hard failure | nothing — pure code | ~half day |
+| 2 | London staging Supabase: new project in eu-west-2 (matching prod), same Postgres major + extensions, "Confirm email" ON, session-pooler URL; retire the EU-central project | — | ~half day |
+| 3 | Staging seed: adopt `scripts/seed-mock-data.ts` as `seed:staging` — make idempotent, cover the shapes that matter (multi-venue, deposits, free-tier cap, cancelled/no-show, waitlist), schedule weekly, and hard-guard against ever targeting a prod `DATABASE_URL` | step 2 | ~half–1 day |
+| 4 | Staging Vercel env: `staging.tablekitapp.com` domain pinned to `main`, branch-scoped Preview env vars carrying production's *names* with staging *values* (Stripe test keys, own `CRON_SECRET`, own Upstash — the CI one stays CI-only), Sentry `environment: "staging"` tag | step 2 | ~half day |
+| 5 | Edge + privacy: orange-cloud staging DNS with the `infra/cloudflare/ruleset.ts` rules, `X-Robots-Tag: noindex` for non-production `VERCEL_ENV`, Vercel Deployment Protection on previews + staging | step 4 | ~half day |
+| 6 | e2e vs preview deployments: resolve the PR's preview URL in CI → `PLAYWRIGHT_BASE_URL` (config already reads it; skip `webServer` when external), pass the protection-bypass header, **un-fixme `bookings.spec.ts`**, and expect login-limiter behaviour behind Cloudflare/Vercel to key on real client IPs (the `x-real-ip` injection becomes unnecessary for preview runs) | step 5 | ~half day |
+
+Phase 1 lessons that apply directly: preview deployments get real infrastructure (client IPs, fast hydration, no dev overlay), which is precisely what the parked bookings spec and the limiter workarounds are waiting for; and any new environment needs its secrets verified with a probe *before* the first CI run that depends on them — the silent fail-closed limiter (watch-item 4) turns a pasted trailing slash into an unexplained lockout.
+
+## Follow-ups once the full plan lands
+
+Update `deploy.md` §Release flow and `incident.md` §Rollback procedure to point at the workflows instead of manual CLI steps; add the rollback drill and staging-parity checks to the pre-launch checklist; consider a lightweight canary step in `promote.yml` later (route a single pilot venue's traffic first) once there are enough venues to warrant it. From Phase 1's ledger: the `outageResult()` log line (watch-item 4) and the SlotPicker optimistic-state fix (watch-item 5) are small standalone PRs that shouldn't wait for a phase.
