@@ -49,6 +49,7 @@ async function main(): Promise<void> {
   // Plan once for the summary (the write path re-plans internally; the shapes
   // match, only the random draw differs).
   const planned = planBookings({
+    seed: `${VENUE_ID}:${todayYMD}`,
     todayYMD,
     now: inputs.now,
     timezone,

@@ -8,6 +8,11 @@
 // realistic status mix (finished / no_show in the past, confirmed / requested
 // in the future, plus a few cancelled), with deposits on a subset — the same
 // shapes the dashboard's Service Summary and reports read.
+//
+// Randomness is from a SEEDED RNG, not Math.random: the same `seed` reproduces
+// the same plan. Callers seed by (venue, day) so a reseed on the same day
+// yields identical bookings (idempotent double-run), while different days still
+// vary.
 
 import { dayKeyInZone, zonedWallToUtc, type DayKey } from "@/lib/bookings/time";
 
@@ -84,6 +89,8 @@ export type PlannedBooking = {
 };
 
 export type PlanInput = {
+  /** Seeds the RNG — same seed ⇒ same plan. Callers use `${venueId}:${todayYMD}`. */
+  seed: string;
   todayYMD: string;
   now: Date;
   timezone: string;
@@ -94,17 +101,25 @@ export type PlanInput = {
   config?: Partial<PlannerConfig>;
 };
 
-// --- Small RNG helpers (Math.random is fine for mock data) -------------------
+// --- Seeded RNG (xmur3 hash → mulberry32) ------------------------------------
 
-export function pickInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+export function makeRng(seed: string): () => number {
+  let h = 1779033703 ^ seed.length;
+  for (let i = 0; i < seed.length; i++) {
+    h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  let a = (h ^= h >>> 16) >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
-export function pickOne<T>(arr: readonly T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]!;
-}
-export function chance(p: number): boolean {
-  return Math.random() < p;
-}
+
+// --- Pure string/number helpers (exported; used by callers too) --------------
+
 export function pad(n: number): string {
   return n.toString().padStart(2, "0");
 }
@@ -124,23 +139,26 @@ export function addDays(ymd: string, n: number): string {
   return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
 }
 
-function partySizeFor(remaining: number): number {
-  const draw = pickOne([2, 2, 2, 3, 3, 4, 4]);
-  if (remaining <= 2) return 2;
-  return Math.min(draw, Math.max(2, remaining));
-}
-
-function pickStatus(isPast: boolean): BookingStatus {
-  if (isPast) return chance(0.15) ? "no_show" : "finished";
-  return chance(0.15) ? "requested" : "confirmed";
-}
-
 // --- Planner -----------------------------------------------------------------
 
 export function planBookings(input: PlanInput): PlannedBooking[] {
   const cfg = { ...DEFAULT_PLANNER_CONFIG, ...input.config };
   const { todayYMD, now, timezone, capacity, servicesList, tables } = input;
+  const rng = makeRng(input.seed);
   const plans: PlannedBooking[] = [];
+
+  const pickInt = (min: number, max: number) => Math.floor(rng() * (max - min + 1)) + min;
+  const pickOne = <T>(arr: readonly T[]): T => arr[Math.floor(rng() * arr.length)]!;
+  const chance = (p: number) => rng() < p;
+  const partySizeFor = (remaining: number): number => {
+    const draw = pickOne([2, 2, 2, 3, 3, 4, 4]);
+    if (remaining <= 2) return 2;
+    return Math.min(draw, Math.max(2, remaining));
+  };
+  const pickStatus = (isPast: boolean): BookingStatus => {
+    if (isPast) return chance(0.15) ? "no_show" : "finished";
+    return chance(0.15) ? "requested" : "confirmed";
+  };
 
   // Per-table occupied intervals across the whole window — the gist EXCLUDE
   // constraint forbids overlapping [start,end) on the same table. Seeded with
@@ -155,7 +173,8 @@ export function planBookings(input: PlanInput): PlannedBooking[] {
   function findFreeTable(start: Date, end: Date): TableRow | null {
     const s = start.getTime();
     const e = end.getTime();
-    for (const t of [...tables].sort(() => Math.random() - 0.5)) {
+    // Deterministic shuffle from the seeded RNG (no Math.random).
+    for (const t of [...tables].sort(() => rng() - 0.5)) {
       const intervals = occupancy.get(t.id) ?? [];
       if (intervals.some(([is, ie]) => s < ie && e > is)) continue;
       intervals.push([s, e]);

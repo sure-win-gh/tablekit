@@ -296,6 +296,8 @@ export async function seedVenueBookings(db: Db, opts: SeedVenueOptions): Promise
   const orgId = inputs.orgId;
 
   const planned = planBookings({
+    // Deterministic per venue+day so a same-day reseed reproduces the plan.
+    seed: `${opts.venueId}:${inputs.todayYMD}`,
     todayYMD: inputs.todayYMD,
     now: inputs.now,
     timezone: inputs.timezone,
