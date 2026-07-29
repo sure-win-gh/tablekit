@@ -58,6 +58,14 @@ if (
   !file.includes("lib/server/admin/") &&
   !file.includes("tests/integration/") &&
   !file.includes("tests/e2e/") &&
+  // The staging seeder legitimately creates owner auth users through the
+  // Supabase admin API — the same service-role use the test helpers above
+  // make. Scoped to this one script, not all of scripts/.
+  !file.endsWith("scripts/seed-staging.ts") &&
+  // Workflow YAML names the secret env var (e.g. SUPABASE_SERVICE_ROLE_KEY);
+  // it can't instantiate a client, so this rule doesn't apply. ci.yml already
+  // references it.
+  !file.includes(".github/workflows/") &&
   !file.includes(".claude/hooks/") &&
   !file.endsWith(".md")
 ) {
