@@ -29,7 +29,7 @@ loadEnv({ path: resolve(process.cwd(), ".env.local") });
 loadEnv({ path: resolve(process.cwd(), ".env") });
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
 
 import { zonedWallToUtc } from "@/lib/bookings/time";
 import {
@@ -40,6 +40,7 @@ import {
   guests,
   memberships,
   organisations,
+  payments,
   services,
   users,
   venues,
@@ -409,33 +410,35 @@ async function seedExactMonthlyBookings(
 
 // --- Row-count snapshot (for the double-run diff) ----------------------------
 
+// Every table below carries organisation_id, so counts scope cleanly to the
+// seeded orgs. Structural tables (venues/areas/tables/services/memberships/
+// deposit_rules) are upserted by natural key and should be byte-identical
+// across runs; the reseeded tables (guests/bookings/booking_tables/payments/
+// waitlists) are cleaned + reinserted, so their counts vary within a band but
+// never accumulate — a doubling would mean the cleanup marker missed rows.
+const COUNT_TABLES = {
+  venues,
+  areas,
+  tables: venueTables,
+  services,
+  guests,
+  bookings,
+  booking_tables: bookingTables,
+  payments,
+  deposit_rules: depositRules,
+  waitlists,
+  memberships,
+} as const;
+
 async function rowCounts(db: Db, orgIds: string[]): Promise<Record<string, number>> {
-  const scope = sql`in (${sql.join(
-    orgIds.map((id) => sql`${id}`),
-    sql`, `,
-  )})`;
-  const one = async (table: string): Promise<number> => {
-    const rows = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from ${sql.raw(table)} where organisation_id ${scope}`,
-    );
-    const first = (rows as unknown as Array<{ n: number }>)[0];
-    return Number(first?.n ?? 0);
-  };
-  const tables = [
-    "venues",
-    "areas",
-    "tables",
-    "services",
-    "guests",
-    "bookings",
-    "booking_tables",
-    "payments",
-    "deposit_rules",
-    "waitlists",
-    "memberships",
-  ];
   const out: Record<string, number> = {};
-  for (const t of tables) out[t] = await one(t);
+  for (const [label, table] of Object.entries(COUNT_TABLES)) {
+    const [row] = await db
+      .select({ n: count() })
+      .from(table)
+      .where(inArray(table.organisationId, orgIds));
+    out[label] = Number(row?.n ?? 0);
+  }
   return out;
 }
 
