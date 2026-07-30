@@ -128,6 +128,10 @@ async function upsertOrg(db: Db, spec: OrgSpec): Promise<string> {
 
 type OwnerResult = { address: string; password: string | null; status: string };
 
+function strongPassword(): string {
+  return `Stg-${randomBytes(12).toString("base64url")}`;
+}
+
 /** Create (or reuse) the org's owner auth user + membership. */
 async function ensureOwner(
   admin: SupabaseClient,
@@ -135,6 +139,7 @@ async function ensureOwner(
   addressToId: Map<string, string>,
   spec: OrgSpec,
   orgId: string,
+  rotatePasswords: boolean,
 ): Promise<OwnerResult> {
   const address = ownerAddress(spec.slug);
   const fullName = `${spec.name} Owner`;
@@ -144,9 +149,16 @@ async function ensureOwner(
   let status: string;
 
   if (userId) {
-    status = "existing (password unchanged)";
+    if (rotatePasswords) {
+      password = strongPassword();
+      const { error } = await admin.auth.admin.updateUserById(userId, { password });
+      if (error) throw error;
+      status = "rotated";
+    } else {
+      status = "existing (password unchanged)";
+    }
   } else {
-    password = `Stg-${randomBytes(9).toString("base64url")}`;
+    password = strongPassword();
     const { data, error } = await admin.auth.admin.createUser({
       email: address,
       password,
@@ -480,8 +492,6 @@ async function main(): Promise<void> {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  const db = adminDb();
-
   // Prefetch existing auth users so owner creation is idempotent by address.
   const addressToId = new Map<string, string>();
   for (let page = 1; page <= 20; page++) {
@@ -490,6 +500,37 @@ async function main(): Promise<void> {
     for (const u of data.users) if (u.email) addressToId.set(u.email.toLowerCase(), u.id);
     if (data.users.length < 200) break;
   }
+
+  // Targeted one-off: `--rotate-owner <address>` rotates exactly that owner's
+  // password and exits — touches nothing else, seeds nothing. Guard above has
+  // already confirmed we're on staging.
+  const rotateIdx = process.argv.indexOf("--rotate-owner");
+  if (rotateIdx !== -1) {
+    const target = process.argv[rotateIdx + 1];
+    if (!target || !target.includes("@")) {
+      console.error(
+        `${MARKER} --rotate-owner needs an owner address, e.g. --rotate-owner owner.staging-bistro@example.invalid`,
+      );
+      process.exit(2);
+    }
+    const userId = addressToId.get(target.toLowerCase());
+    if (!userId) {
+      console.error(`${MARKER} no auth user found for ${target}`);
+      process.exit(1);
+    }
+    const password = strongPassword();
+    const { error } = await admin.auth.admin.updateUserById(userId, { password });
+    if (error) throw error;
+    const line = `  ${target.padEnd(38)} ${password}`;
+    console.log("\n=== Rotated password (store once, then clear this output) ===");
+    console.log(line);
+    return;
+  }
+
+  const db = adminDb();
+  const rotateOwnerPasswords =
+    process.argv.includes("--rotate-owner-passwords") ||
+    process.env["SEED_ROTATE_OWNER_PASSWORDS"] === "1";
 
   // Reset: fully delete the seed orgs so they're recreated with fresh DEKs
   // under the CURRENT master key. Needed when a prior run wrapped their DEK
@@ -518,7 +559,7 @@ async function main(): Promise<void> {
   for (const spec of ORGS) {
     const orgId = await upsertOrg(db, spec);
     orgIds.push(orgId);
-    owners.push(await ensureOwner(admin, db, addressToId, spec, orgId));
+    owners.push(await ensureOwner(admin, db, addressToId, spec, orgId, rotateOwnerPasswords));
 
     const venueIds: string[] = [];
     for (const v of spec.venues) {
