@@ -265,12 +265,36 @@ async function ensureDepositRule(db: Db, orgId: string, venueId: string): Promis
   });
 }
 
-/** One 'waiting' waitlist entry, tagged for idempotent cleanup. */
-async function ensureWaitlistEntry(db: Db, orgId: string, venueId: string): Promise<void> {
+/**
+ * Delete every seed row this org owns, in FK order, so the run starts from a
+ * clean slate. Bookings + waitlists are removed by marker (leaving any
+ * human-created demo rows untouched); guests are then removed if orphaned —
+ * which, once the seed bookings/waitlists are gone, is exactly the seed guests
+ * (a demo guest stays referenced by its unmarked booking). Orphan-based rather
+ * than tag-based so it also clears untagged guests left by earlier seeder
+ * versions, and catches pool guests a prior run never referenced — the source
+ * of the (org, email_hash) unique-index collisions.
+ */
+async function sweepOrgSeedRows(db: Db, orgId: string): Promise<void> {
+  await db
+    .delete(bookings)
+    .where(and(eq(bookings.organisationId, orgId), eq(bookings.notes, MARKER)));
   await db
     .delete(waitlists)
-    .where(and(eq(waitlists.venueId, venueId), eq(waitlists.notes, MARKER)));
+    .where(and(eq(waitlists.organisationId, orgId), eq(waitlists.notes, MARKER)));
+  await db
+    .delete(guests)
+    .where(
+      and(
+        eq(guests.organisationId, orgId),
+        sql`not exists (select 1 from bookings b where b.guest_id = ${guests.id})`,
+        sql`not exists (select 1 from waitlists w where w.guest_id = ${guests.id})`,
+      ),
+    );
+}
 
+/** One 'waiting' waitlist entry (insert-only; the per-org sweep clears priors). */
+async function ensureWaitlistEntry(db: Db, orgId: string, venueId: string): Promise<void> {
   const g = buildGuestPool(1, `wl-${venueId.slice(0, 8)}`)[0]!;
   const [guest] = await db
     .insert(guests)
@@ -331,25 +355,8 @@ async function seedExactMonthlyBookings(
 
   const pool = buildGuestPool(10, `cafe-${venueId.slice(0, 8)}`);
 
+  // Prior cap-seed rows are cleared by the per-org sweep before this runs.
   await db.transaction(async (tx) => {
-    // Idempotent: clear this venue's prior cap-seed rows first.
-    const prior = await tx
-      .selectDistinct({ guestId: bookings.guestId })
-      .from(bookings)
-      .where(and(eq(bookings.venueId, venueId), eq(bookings.notes, MARKER)));
-    await tx.delete(bookings).where(and(eq(bookings.venueId, venueId), eq(bookings.notes, MARKER)));
-    if (prior.length > 0) {
-      await tx.delete(guests).where(
-        and(
-          sql`${guests.id} in (${sql.join(
-            prior.map((r) => sql`${r.guestId}`),
-            sql`, `,
-          )})`,
-          sql`not exists (select 1 from bookings b where b.guest_id = ${guests.id})`,
-        ),
-      );
-    }
-
     const guestIds: string[] = [];
     for (const g of pool) {
       const [row] = await tx
@@ -501,6 +508,12 @@ async function main(): Promise<void> {
       venueIds.push(venueId);
     }
 
+    // One clean sweep of the org's seed rows up front — then every seed step
+    // below is insert-only. Doing it per-org (not per-venue) is what clears an
+    // unreferenced pool guest a prior run left behind before it can collide on
+    // the (org, email_hash) unique index.
+    await sweepOrgSeedRows(db, orgId);
+
     // Bookings: cap org gets exactly N this month; the rest get the planner's
     // utilisation shapes (past/future fill, deposits, cancels, no-shows).
     let bookingTotal = 0;
@@ -513,6 +526,7 @@ async function main(): Promise<void> {
           marker: MARKER,
           depositAmountMinor: 1000,
           guestPrefix: `v${i}-${venueId.slice(0, 8)}`,
+          cleanup: false, // the per-org sweep above already cleared priors
         });
         bookingTotal += c.bookings;
       }
@@ -550,6 +564,28 @@ async function main(): Promise<void> {
 main()
   .then(() => process.exit(0))
   .catch((err: unknown) => {
-    console.error(`${MARKER} failed:`, err instanceof Error ? err.message : "unknown");
+    // Surface the underlying Postgres error too — drizzle's top-level message
+    // is just "Failed query: …" and hides the real cause (constraint, code).
+    const e = err as { message?: string; cause?: unknown; code?: string; detail?: string };
+    const cause = (e?.cause ?? err) as {
+      message?: string;
+      code?: string;
+      detail?: string;
+      constraint?: string;
+    };
+    console.error(`${MARKER} failed:`, e?.message ?? "unknown");
+    if (cause && cause !== e) {
+      console.error(
+        `${MARKER} cause:`,
+        [
+          cause.code && `code=${cause.code}`,
+          cause.constraint && `constraint=${cause.constraint}`,
+          cause.detail,
+          cause.message,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+    }
     process.exit(1);
   });

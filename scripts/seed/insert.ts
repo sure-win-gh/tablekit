@@ -55,6 +55,14 @@ export type SeedVenueOptions = {
   /** Unique prefix for guest emails so venues don't collide on emailHash. */
   guestPrefix?: string;
   config?: Partial<PlannerConfig>;
+  /**
+   * Whether to delete prior marker rows before inserting (default true). Set
+   * false when the caller does its own broader cleanup first — e.g. the
+   * staging seeder sweeps a whole org up front, which also clears guests this
+   * per-venue pass would miss (an unreferenced pool guest from a prior run
+   * would otherwise collide on the (org, email_hash) unique index).
+   */
+  cleanup?: boolean;
 };
 
 export type SeedCounts = {
@@ -311,7 +319,7 @@ export async function seedVenueBookings(db: Db, opts: SeedVenueOptions): Promise
   const pool = buildGuestPool(guestPoolSize, opts.guestPrefix);
 
   await db.transaction(async (tx) => {
-    await cleanupSeedRows(tx, opts.venueId, opts.marker);
+    if (opts.cleanup !== false) await cleanupSeedRows(tx, opts.venueId, opts.marker);
     const guestIds = await insertGuestPool(tx, orgId, pool);
     for (const p of planned) {
       await insertPlannedBooking(
