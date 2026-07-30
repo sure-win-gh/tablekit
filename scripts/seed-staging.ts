@@ -47,7 +47,7 @@ import {
   venueTables,
   waitlists,
 } from "@/lib/db/schema";
-import { encryptPii, hashForLookup } from "@/lib/security/crypto";
+import { decryptPii, encryptPii, hashForLookup, type Ciphertext } from "@/lib/security/crypto";
 import { adminDb } from "@/lib/server/admin/db";
 import { templates, type VenueType } from "@/lib/venues/templates";
 
@@ -491,6 +491,26 @@ async function main(): Promise<void> {
     if (data.users.length < 200) break;
   }
 
+  // Reset: fully delete the seed orgs so they're recreated with fresh DEKs
+  // under the CURRENT master key. Needed when a prior run wrapped their DEK
+  // under a different key — encryptPii would otherwise fail to unwrap. The
+  // cascade removes all org data (auth users are untouched and get reused).
+  const reset = process.env["SEED_RESET"] === "1" || process.argv.includes("--reset");
+  if (reset) {
+    const deleted = await db
+      .delete(organisations)
+      .where(
+        inArray(
+          organisations.slug,
+          ORGS.map((o) => o.slug),
+        ),
+      )
+      .returning({ id: organisations.id });
+    console.log(
+      `${MARKER} reset: deleted ${deleted.length} seed org(s) — DEKs will be reprovisioned under the current master key.\n`,
+    );
+  }
+
   const orgIds: string[] = [];
   const owners: OwnerResult[] = [];
   const perOrg: Array<{ org: string; venues: number; bookings: number }> = [];
@@ -545,6 +565,28 @@ async function main(): Promise<void> {
   console.log("");
   for (const p of perOrg) {
     console.log(`  ${p.org.padEnd(18)} ${p.venues} venue(s), ${p.bookings} seeded booking(s)`);
+  }
+
+  // Crypto round-trip check: read one seeded guest per org back through the
+  // app's decryptPii (NOT raw SQL) and confirm the plaintext is recovered.
+  // Proves the org's DEK unwraps under the current master key. Only pass/fail
+  // is logged — never the decrypted PII.
+  console.log("\nCrypto round-trip (decryptPii under the current master key):");
+  for (const orgId of orgIds) {
+    const [g] = await db
+      .select({ email: guests.emailCipher, last: guests.lastNameCipher })
+      .from(guests)
+      .where(eq(guests.organisationId, orgId))
+      .limit(1);
+    if (!g) {
+      console.log(`  ${orgId}  (no guests to check)`);
+      continue;
+    }
+    const email = String(await decryptPii(orgId, g.email as Ciphertext));
+    const last = String(await decryptPii(orgId, g.last as Ciphertext));
+    const ok = email.endsWith("@example.invalid") && last.length > 0;
+    if (!ok) throw new Error(`crypto round-trip FAILED for org ${orgId}`);
+    console.log(`  ${orgId}  OK`);
   }
 
   // Credentials summary — printed ONCE, at the end, for the password manager.

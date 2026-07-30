@@ -10,7 +10,12 @@ on:
   schedule:
     # Mondays 04:00 UTC — quiet hours, well before anyone demos against staging.
     - cron: "0 4 * * 1"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      reset:
+        description: "Fully delete + recreate the seed orgs (use after a master-key change so DEKs are reprovisioned)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -54,4 +59,8 @@ jobs:
 
       - name: Seed staging
         if: env.DATABASE_URL != ''
+        env:
+          # `reset` deletes + recreates the seed orgs so their DEKs are
+          # reprovisioned under the current STAGING_TABLEKIT_MASTER_KEY.
+          SEED_RESET: ${{ inputs.reset && '1' || '' }}
         run: pnpm seed:staging
