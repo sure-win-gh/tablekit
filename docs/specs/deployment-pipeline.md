@@ -36,13 +36,17 @@ Green run: `30003259912` — checks, migrate, integration (94 files / 518 tests)
 
 **CI infrastructure now load-bearing** (record these wherever you track infra): a dedicated CI Supabase project (throwaway data; schema maintained by the `migrate` job) and a CI Upstash Redis (`tablekit-ci`) backing the rate limiter. Neither is shared with staging or production, ever. Operational fact that cost a cycle: **GitHub Actions resolves secrets at job start** — a job already running does not see newly-set secrets; re-run the job.
 
-### Watch-items & follow-ups (from Phase 1's findings)
+### Watch-items & follow-ups
 
 1. **Supabase `bad_jwt` platform transient.** Auth admin API rejects ~7% of requests with 403 `bad_jwt` ("unrecognized JWT kid <nil> for algorithm ES256") using a key that serves every other request — reproduced with curl against two projects including a fresh one, so platform-side; the rejected call creates nothing. Shim: `tests/support/bad-jwt-retry.ts` (installed from integration setup + the e2e seeding specs) retries only 403 + `bad_jwt` (both `code` and `error_code` shapes), ≤5 attempts with backoff; a genuinely bad key still fails on attempt one. Test-harness only; production auth path confirmed unaffected. Worth a Supabase support ticket.
 2. **CI pooler `EMAXCONNSESSION`.** The CI Supabase session-mode pooler caps at `pool_size: 15`; exceeding it surfaces as an unrelated-looking query error (`max clients reached in session mode`) — resource exhaustion, load-dependent, not random. Seen once (2026-07-22), not since. If it recurs: raise `pool_size` or trim concurrently-open pools; don't retry the test.
 3. **`login:ip:unknown` shared bucket** (→ `security.md`). `ipFromHeaders()` falls back to `"unknown"` when no `cf-connecting-ip`/`x-real-ip`/`x-forwarded-for` is present, so any direct caller population shares one 5-per-15-min bucket — and Redis-backed budgets persist across processes. E2E now supplies a per-run RFC 5737 address, mirroring what real infrastructure always provides. Remember for any future non-browser caller.
 4. **The limiter fails closed *silently*** (product follow-up, small + high-value). `rateLimit()` with `failOpen: false` returns "limited" on any Upstash problem — non-2xx, network error, or the 1500 ms timeout — and `outageResult()` logs nothing on that path, so an unreachable Redis is indistinguishable from a genuine lockout at the UI. It cost a full diagnostic cycle in CI; in production it would look like "users can't log in" with clean logs. Add a log line / Sentry breadcrumb on the outage path. (`incident.md` documents *that* auth fails closed; this makes it *observable*.)
 5. **SlotPicker date-input hydration gap** (UX papercut, follow-up PR). `bookings/new/forms.tsx` renders the date as a controlled input with no local state — value from server `searchParams`, every change a router round-trip. A date picked pre-hydration is discarded on reconcile; post-hydration the field lags the server round-trip, reading as "ignored" on slow connections, and a second change mid-flight can drop. Re-entry not corruption. Fix shape: optimistic local state while the push is in flight.
+6. **Vercel "Production and Preview" env scoping leaks prod config into previews** (from the 2026-07-31 rehearsal). Preview deployments were building with Production-scoped env values until the scoping was split to Production-only vs Preview-only. Any env var set to "Production and Preview" silently pushes production config into every PR preview. Audit the scope when adding an env var.
+7. **A Vercel custom domain stays parked on the last build of its assigned branch until that branch builds again.** Re-pointing a domain at a branch does nothing on its own — it needs a fresh build of that branch to move. This is what left `staging.tablekitapp.com` serving production for two days. After any domain↔branch change, trigger a build of the branch and confirm the flip.
+8. **Staging is behind Vercel SSO (it's a Preview deployment).** SSO's `all_except_custom_domains` exemption applies to *production* custom domains, not to a Preview deployment, so anonymous access to `staging.tablekitapp.com` 302s to `vercel.com/sso`. An *authenticated* Vercel API fetch works. Open question for step 2.2 (CI e2e against the preview): a protection-bypass token (`x-vercel-protection-bypass`) vs accepting login-required staging — decide, don't work around it at the app layer.
+9. **Staging emits CSP `report-uri` violations for `vercel.live`** (frame-src, script-src-elem) from the Vercel toolbar — harmless but noisy. Decide whether to allow `vercel.live` in the non-production CSP or suppress those reports.
 
 ---
 
@@ -345,6 +349,32 @@ Residual caveats to document in `incident.md`: webhooks keep arriving during the
 **Drill it.** A rollback mechanism that's never been used is a hypothesis. Once `rollback.yml` lands: promote a trivial change to staging's equivalent flow, roll it back, time it. Repeat quarterly and after any change to the promote workflow. Add both to the pre-launch checklist in `deploy.md`.
 
 ---
+
+## Promote/rollback rehearsal (2026-07-31)
+
+Ran the full **promote → rollback → roll-forward** loop end to end against production, before relying on it — presentation-layer only, no migration. Canary: `/api/health` now returns the build's `commit` (PR #136), so "what's live" is a curl, not a dashboard guess. The pre-canary production build had **no `commit` field at all**, which made every flip unmistakable.
+
+**Deployments involved**
+
+| Role | Deployment | Commit | Notes |
+|---|---|---|---|
+| Old production / rollback target | `dpl_4xTRMmFBFYu5cuWBnxXzopL2i9zq` | `076ed39` (#133) | built 2026-07-29; stayed READY throughout — rollback needs the target warm |
+| Promoted build (the canary) | `dpl_35YKSCiQrvLmENNHiN6dzKdMN6eq` | `7f7ed39` (#136) | `target=production`, all five prod aliases |
+| Staging Preview of `main` | `dpl_BEZpziWNnzt3F9jFY4DcZwGGJaEY` | `7f7ed39` (#136) | staging alias auto-flipped to it, no manual re-point |
+
+**Timeline (UTC)**
+
+- **Promote.** `git push origin main:production` at 12:05:16 → a `target=production` deployment was auto-created at 12:05:19 (**+3s — the Git integration builds the `production` branch with no intervention; confirming this was the single most important goal of the rehearsal**) → READY 12:07:31 (+2m15s) → production aliases flipped to the new build between 12:07:31 and 12:08:30 (old still serving at 12:07:13, new by 12:08:30).
+- **Rollback** (Instant Rollback → `dpl_4x`, driven in the dashboard). Trigger **not recorded** (est. ~12:55:30 ±30s). Observed by polling `/api/health` every 5s: last poll on the new build 12:55:15, first poll on the old build 12:55:21 — production reverted **by 12:55:21**, inside a single 5-second interval. All five aliases moved back together (`www` via its 301 → apex).
+- **Roll-forward** (Promote to Production → `dpl_35YK`). Confirmed serving `7f7ed39` again at 13:11:34 — rollback is not a one-way door. The flip itself wasn't polled (checked after the fact).
+
+**Measured recovery / roll-forward times.** Both are **sub-minute alias swaps** — no rebuild, the target build was already warm. Exact elapsed figures could **not** be computed: neither dashboard trigger was timestamped, and the rollback estimate (~12:55:30) actually falls *after* the observed old-serving (12:55:21), i.e. it's inconsistent with the poll data. The trustworthy bound is the serving-flip resolution (≤6s), not the trigger. **Fix for a real drill: `rollback.yml`/`promote.yml` (Click Path B) must log the trigger time** — the `commit` canary already makes the serving-flip precisely observable, so a workflow-driven path would capture both ends automatically.
+
+**What surprised us**
+
+- **Roll-forward is a PROMOTE, not a rollback.** Instant Rollback only offers the *previous* deployment; to move forward again you use "Promote to Production" on the target deployment. Different control, different menu — the runbook must say so, or someone will hunt for a "roll forward" button that doesn't exist.
+- **Vercel's `get_deployment.alias` is stale / eventually-consistent.** After the promote, the *old* deployment's metadata still *listed* the production domains (and `staging.`). The authoritative "what's live" signal is the `/api/health` `commit` curl, never the alias array — which is exactly why the canary earns its keep.
+- **Rollback is genuinely a warm alias swap** — no rebuild, seconds, old build untouched — matching the Workstream 3 claim. The staging alias auto-flipping on the new Preview build (no re-point) confirms the branch-rebuild behaviour from watch-item 7 works in the healthy direction too.
 
 ## Phasing & effort
 
