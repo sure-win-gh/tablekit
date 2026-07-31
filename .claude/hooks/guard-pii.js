@@ -62,10 +62,12 @@ if (
   // Supabase admin API — the same service-role use the test helpers above
   // make. Scoped to this one script, not all of scripts/.
   !file.endsWith("scripts/seed-staging.ts") &&
-  // Workflow YAML names the secret env var (e.g. SUPABASE_SERVICE_ROLE_KEY);
-  // it can't instantiate a client, so this rule doesn't apply. ci.yml already
-  // references it.
-  !file.includes(".github/workflows/") &&
+  // These two workflow YAMLs name the secret env var (SUPABASE_SERVICE_ROLE_KEY)
+  // — config, not a client, so the rule doesn't apply. Pinned to the specific
+  // files rather than the whole directory, so a future workflow can't silently
+  // escape the hook.
+  !file.endsWith(".github/workflows/ci.yml") &&
+  !file.endsWith(".github/workflows/staging-seed.yml") &&
   !file.includes(".claude/hooks/") &&
   !file.endsWith(".md")
 ) {
