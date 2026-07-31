@@ -28,6 +28,9 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       service: "tablekit",
+      // The build's git SHA — Vercel injects VERCEL_GIT_COMMIT_SHA at build
+      // time. Doubles as the promote/rollback canary ("which build is live?").
+      commit: process.env["VERCEL_GIT_COMMIT_SHA"] ?? "unknown",
       checks: { database: "ok" },
       latencyMs: Date.now() - startedAt,
       ts: new Date().toISOString(),
