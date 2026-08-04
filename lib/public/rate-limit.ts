@@ -2,8 +2,9 @@
 //
 // Upstash exposes a REST API (no node-redis needed). We talk to it via
 // `fetch` so the edge runtime can use the same helper. The window is
-// implemented as a sorted set keyed by `rl:<bucket>` — one entry per
-// request with its timestamp as the score.
+// implemented as a sorted set keyed by `rl:<env>:<bucket>` — one entry per
+// request with its timestamp as the score. The `<env>` segment (see
+// rlKeyPrefix) namespaces staging and production apart in a shared database.
 //
 // Degraded-mode posture:
 //   • Missing Upstash env in PRODUCTION fails closed (blocked, one-time
@@ -37,6 +38,17 @@ export type RateLimitOptions = {
 function isProduction(): boolean {
   return (process.env["VERCEL_ENV"] ?? process.env["NODE_ENV"]) === "production";
 }
+
+// Key namespace. Prefix every bucket key with the environment so staging and
+// production can share ONE Upstash database without sharing buckets (Upstash
+// bills per database, so a shared database with a split keyspace is the
+// free-tier-friendly shape). `login:ip:1.2.3.4` under staging and under
+// production become two distinct sorted sets. Exported so the "different env ⇒
+// different key" property is unit-testable.
+export function rlKeyPrefix(env: Record<string, string | undefined> = process.env): string {
+  return `rl:${env["TABLEKIT_ENV"] ?? env["VERCEL_ENV"] ?? "dev"}:`;
+}
+const KEY_PREFIX = rlKeyPrefix();
 
 // One alert per lambda instance, not one per request.
 let misconfigReported = false;
@@ -85,7 +97,7 @@ export async function rateLimit(
 
   const now = Date.now();
   const windowStart = now - windowSec * 1000;
-  const key = `rl:${bucket}`;
+  const key = `${KEY_PREFIX}${bucket}`;
   const member = `${now}:${Math.random().toString(36).slice(2, 8)}`;
 
   // Upstash pipeline: drop expired entries, add this one, count, set TTL.
@@ -156,7 +168,7 @@ export async function peekRateLimit(
   }
 
   const windowStart = Date.now() - windowSec * 1000;
-  const key = `rl:${bucket}`;
+  const key = `${KEY_PREFIX}${bucket}`;
   const pipeline = [
     ["ZREMRANGEBYSCORE", key, "0", String(windowStart)],
     ["ZCARD", key],
