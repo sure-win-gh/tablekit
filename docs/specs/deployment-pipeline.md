@@ -286,11 +286,11 @@ Add `scripts/check-migration-safety.ts` to the CI `checks` job: scan any new SQL
 
 ## Workstream 3 — One-click rollback
 
-Two clicks available, both reaching the same mechanism — Vercel's alias swap back to a previous, still-warm production deployment. No rebuild, no server intervention; takes effect in seconds.
+Both paths reach the same mechanism — Vercel's alias swap back to a previous, still-warm production deployment. No rebuild, no server intervention; takes effect in seconds. **The GitHub Actions workflow (Click Path B) is the primary path; the dashboard button (Click Path A) is break-glass.** This ordering is deliberate and must not be "simplified" back to clicking: the workflow leaves an audit trail — who triggered it, when, against which target, and the health verification — whereas a dashboard click leaves nothing a human stopwatch didn't catch. The 2026-07-31 rehearsal is the standing evidence (see "Promote/rollback rehearsal"): the dashboard rollback worked, but with no logged trigger its recovery time was uncomputable — the estimate even landed after the observed flip.
 
-**Click path A — Vercel dashboard, Instant Rollback.** Project → Deployments → current production deployment → "Instant Rollback". Restores the previous production deployment. Fastest option when you're at a machine with the dashboard open. Document it in `incident.md` as the primary move for "the new release broke something".
+**Click path A — Vercel dashboard, Instant Rollback (break-glass).** Project → Deployments → current production deployment → "Instant Rollback". Restores the previous production deployment. The fastest move when you're at a machine with the dashboard open and the workflow is somehow unavailable — but it records no trigger time, so note the wall-clock yourself. Document it in `incident.md` as the break-glass fallback for "the new release broke something".
 
-**Click path B — GitHub Actions `rollback.yml` (works from a phone).** A `workflow_dispatch` workflow — one button in the Actions tab, with an optional input to target a specific release rather than just the previous one:
+**Click path B — GitHub Actions `rollback.yml`, the primary path (works from a phone).** A `workflow_dispatch` workflow — one button in the Actions tab, with an optional input to target a specific release rather than just the previous one. **Acceptance criterion: the workflow MUST emit its own trigger timestamp as its first log line, so recovery time is computable from CI logs alone — no human stopwatch.** The `/api/health` `commit` canary already pins the serving-flip end of the measurement (Instant Rollback swaps to a build whose `commit` differs); the workflow's trigger timestamp is the missing other end. Together they make recovery time a log query, not a guess.
 
 ```yaml
 # .github/workflows/rollback.yml
@@ -313,6 +313,11 @@ jobs:
     timeout-minutes: 10
     environment: production
     steps:
+      - name: Record trigger timestamp
+        # Acceptance criterion: recovery time must be computable from logs
+        # alone. This is the trigger end of the measurement; the /api/health
+        # `commit` canary is the serving-flip end.
+        run: echo "rollback triggered at $(date -u +%FT%TZ) — target=${{ inputs.target || 'previous deployment' }}"
       - name: Roll back
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
