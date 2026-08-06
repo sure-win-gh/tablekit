@@ -163,6 +163,15 @@ jobs:
           VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
         run: |
           set -euo pipefail
+          # Departure baseline: what the edge (/api/health) serves RIGHT NOW,
+          # before we promote. Absence of the commit field is a valid baseline
+          # value ("<none>", for pre-#136 builds), not an error. No extra Vercel
+          # call — the serving layer's own prior state is the correct baseline,
+          # and the serving check below waits for the edge to move OFF it.
+          pre=$(curl -sS --max-time 10 https://my.tablekitapp.com/api/health || true)
+          PRE_COMMIT=$(printf '%s' "$pre" | jq -r 'if has("commit") then (.commit // "<none>") else "<none>" end' 2>/dev/null || echo "<none>")
+          echo "PRE_COMMIT=$PRE_COMMIT" >> "$GITHUB_ENV"
+          echo "pre-promote edge commit (departure baseline): $PRE_COMMIT"
           echo "production is serving ${BEFORE_SHA:-unknown}; promoting $TARGET_ID (sha $TARGET_SHA)"
           code=$(curl -sS -o /tmp/promote.json -w '%{http_code}' -X POST \
             -H "Authorization: Bearer $VERCEL_TOKEN" \
@@ -256,42 +265,93 @@ jobs:
             "BEFORE re-running this workflow."
           exit 1
 
-      # Secondary check: the now-live build is actually serving. Assert 200 +
-      # ok + database. Assert commit equality ONLY when the response carries a
-      # `commit` field — targets older than the #136 canary have none, and their
-      # absence is a pass (liveness was already proven above), not a failure.
+      # Secondary check: the EDGE (/api/health on the custom domain) is actually
+      # serving the promoted build. Keyed off DEPARTURE from the pre-promote
+      # snapshot, not arrival of a specific commit — the Vercel production-target
+      # flip leads the Cloudflare edge by seconds to minutes, and a pre-#136
+      # target emits no commit to "arrive" on. Confirmation is either the target
+      # sha appearing (positive) or the edge leaving PRE_COMMIT, absence included
+      # (negative: the old build is gone). This is why the earlier eager single
+      # GET caught the outgoing build mid-propagation and mismatched on it.
       - name: Verify the live build is serving via /api/health
         run: |
           set -uo pipefail
-          code=$(curl -sS --max-time 10 --retry 3 --retry-delay 2 --retry-all-errors \
-            -o /tmp/health.json -w '%{http_code}' https://my.tablekitapp.com/api/health || echo "000")
-          echo "health HTTP $code"
-          echo "--- response body ---"
-          cat /tmp/health.json 2>/dev/null || true
-          echo
-          echo "---------------------"
-          ok=$(jq -r '.ok // empty' /tmp/health.json 2>/dev/null || true)
-          db=$(jq -r '.checks.database // empty' /tmp/health.json 2>/dev/null || true)
-          has_commit=$(jq 'has("commit")' /tmp/health.json 2>/dev/null || echo false)
-          commit=$(jq -r '.commit // empty' /tmp/health.json 2>/dev/null || true)
-
-          fail=""
-          [ "$code" = "200" ] || { echo "::error::health expected HTTP 200, got $code"; fail=1; }
-          [ "$ok" = "true" ] || { echo "::error::health expected ok=true, got '${ok:-<none>}'"; fail=1; }
-          [ "$db" = "ok" ] || { echo "::error::health expected checks.database=ok, got '${db:-<none>}'"; fail=1; }
-          if [ "$has_commit" = "true" ]; then
-            if [ "$commit" != "$TARGET_SHA" ]; then
-              echo "::error::health commit '$commit' does not match the promoted target $TARGET_SHA"
-              fail=1
+          echo "polling /api/health until it departs PRE_COMMIT='$PRE_COMMIT' or serves $TARGET_SHA (every 3s, cap 180s)"
+          deadline=$(( $(date +%s) + 180 ))
+          # Each reachable poll classifies the served value into exactly one of
+          # three confirming/­non-confirming cases (a fourth is unobservable):
+          #   1. served == TARGET_SHA                       -> confirmed (arrival)
+          #   2. served absent AND PRE_COMMIT was concrete  -> confirmed (old build
+          #      gone; the target is pre-#136 so nothing can "arrive" with a sha)
+          #   3. served is a concrete sha that is neither   -> NOT confirmed; an
+          #      unexpected build (e.g. a manual redeploy) — keep polling, red at
+          #      the deadline naming the sha
+          #   (served absent with PRE_COMMIT also absent    -> unobservable)
+          confirmed=""; laststate="indeterminate"; cur="<none>"; unexpected=""; ok=""; db=""
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            code=$(curl -sS --max-time 10 -o /tmp/health.json -w '%{http_code}' https://my.tablekitapp.com/api/health || echo "000")
+            if [ "$code" = "200" ]; then
+              ok=$(jq -r '.ok // empty' /tmp/health.json 2>/dev/null || true)
+              db=$(jq -r '.checks.database // empty' /tmp/health.json 2>/dev/null || true)
+              if [ "$(jq 'has("commit")' /tmp/health.json 2>/dev/null || echo false)" = "true" ]; then
+                cur=$(jq -r '.commit // "<none>"' /tmp/health.json 2>/dev/null || echo "<none>")
+              else
+                cur="<none>"
+              fi
+              if [ -n "$TARGET_SHA" ] && [ "$cur" = "$TARGET_SHA" ]; then
+                confirmed="target"; break            # case 1
+              elif [ "$cur" = "<none>" ]; then
+                if [ "$PRE_COMMIT" != "<none>" ]; then
+                  confirmed="departed"; break         # case 2
+                else
+                  laststate="indeterminate"           # <none> over <none>: unobservable
+                fi
+              elif [ "$cur" = "$PRE_COMMIT" ]; then
+                laststate="serving-pre"               # still the outgoing build
+              else
+                laststate="serving-unexpected"        # case 3
+                unexpected="$cur"
+              fi
             else
-              echo "health commit matches the promoted target ($commit)"
+              laststate="indeterminate"
             fi
-          else
-            echo "target predates the health commit canary (#136) — verified via Vercel production target instead"
+            sleep 3
+          done
+          now_ms=$(date +%s%3N)
+          settle=$(awk "BEGIN{printf \"%.1f\", ($now_ms - $TRIGGER_MS)/1000}")
+
+          if [ -n "$confirmed" ]; then
+            # The promoted build is the one now being served — assert it is healthy.
+            if [ "$ok" != "true" ] || [ "$db" != "ok" ]; then
+              echo "::error::the promoted build is live at the edge (serving '$cur') but not healthy — ok='${ok:-<none>}' checks.database='${db:-<none>}'"
+              echo "rollback FAILED (serving unhealthy) after ${ELAPSED_S}s — before=$BEFORE_SHA target=$TARGET_SHA"
+              exit 1
+            fi
+            if [ "$confirmed" = "target" ]; then
+              echo "edge now serving the promoted commit $cur (positive confirmation)"
+            else
+              echo "edge departed the pre-promote build (was '$PRE_COMMIT', now serves no commit field); target $TARGET_SHA predates the #136 canary — confirmed by departure"
+            fi
+            echo "rollback complete in ${ELAPSED_S}s (edge settled ~${settle}s from trigger) — before=$BEFORE_SHA after=$TARGET_SHA"
+            exit 0
           fi
 
-          if [ -n "$fail" ]; then
-            echo "rollback FAILED (serving check) after ${ELAPSED_S}s — before=$BEFORE_SHA target=$TARGET_SHA"
+          # Deadline without confirmation.
+          if [ "$laststate" = "serving-pre" ]; then
+            echo "::error::EDGE STALE — the Vercel promote succeeded but the edge has not moved after 180s"
+            printf '%s\n' \
+              "The promote succeeded at the Vercel layer (production target = $TARGET_ID, sha $TARGET_SHA), but https://my.tablekitapp.com/api/health is STILL serving the pre-promote build ('$PRE_COMMIT') 180s later." \
+              "Do NOT re-run this workflow — the rollback already took at the Vercel layer; the edge is stale." \
+              "Check the Cloudflare cache and DNS for my.tablekitapp.com."
             exit 1
           fi
-          echo "rollback complete in ${ELAPSED_S}s — before=$BEFORE_SHA after=$TARGET_SHA"
+          if [ "$laststate" = "serving-unexpected" ]; then
+            echo "::error::EDGE SERVING AN UNEXPECTED BUILD — neither the promoted target nor the pre-promote build"
+            printf '%s\n' \
+              "https://my.tablekitapp.com/api/health is serving commit '$unexpected' 180s after the promote — that is neither the promoted target ($TARGET_SHA) nor the pre-promote build ('$PRE_COMMIT')." \
+              "The Vercel promote itself succeeded (production target = $TARGET_ID), so do NOT re-run this workflow." \
+              "Check the Vercel dashboard for a manual redeploy or a competing promotion of my.tablekitapp.com."
+            exit 1
+          fi
+          echo "::warning::could not confirm the edge serving state within 180s (edge unreachable, or the departure is not observable — a pre-#136 build replacing another emits no commit either side). Primary verification already confirmed the Vercel production target flipped to $TARGET_ID — treating the edge as not-yet-observable, not failed."
+          echo "rollback complete at the Vercel layer in ${ELAPSED_S}s — edge serving state unconfirmed — before=$BEFORE_SHA after=$TARGET_SHA"
