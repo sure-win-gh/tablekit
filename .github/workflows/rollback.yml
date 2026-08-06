@@ -278,7 +278,16 @@ jobs:
           set -uo pipefail
           echo "polling /api/health until it departs PRE_COMMIT='$PRE_COMMIT' or serves $TARGET_SHA (every 3s, cap 180s)"
           deadline=$(( $(date +%s) + 180 ))
-          confirmed=""; laststate="indeterminate"; cur="<none>"; ok=""; db=""
+          # Each reachable poll classifies the served value into exactly one of
+          # three confirming/­non-confirming cases (a fourth is unobservable):
+          #   1. served == TARGET_SHA                       -> confirmed (arrival)
+          #   2. served absent AND PRE_COMMIT was concrete  -> confirmed (old build
+          #      gone; the target is pre-#136 so nothing can "arrive" with a sha)
+          #   3. served is a concrete sha that is neither   -> NOT confirmed; an
+          #      unexpected build (e.g. a manual redeploy) — keep polling, red at
+          #      the deadline naming the sha
+          #   (served absent with PRE_COMMIT also absent    -> unobservable)
+          confirmed=""; laststate="indeterminate"; cur="<none>"; unexpected=""; ok=""; db=""
           while [ "$(date +%s)" -lt "$deadline" ]; do
             code=$(curl -sS --max-time 10 -o /tmp/health.json -w '%{http_code}' https://my.tablekitapp.com/api/health || echo "000")
             if [ "$code" = "200" ]; then
@@ -289,12 +298,20 @@ jobs:
               else
                 cur="<none>"
               fi
-              # Positive: the target emits its own sha. Negative: the edge is no
-              # longer serving the pre-promote build (departure, absence counts).
-              if { [ -n "$TARGET_SHA" ] && [ "$cur" = "$TARGET_SHA" ]; } || [ "$cur" != "$PRE_COMMIT" ]; then
-                confirmed=1; break
+              if [ -n "$TARGET_SHA" ] && [ "$cur" = "$TARGET_SHA" ]; then
+                confirmed="target"; break            # case 1
+              elif [ "$cur" = "<none>" ]; then
+                if [ "$PRE_COMMIT" != "<none>" ]; then
+                  confirmed="departed"; break         # case 2
+                else
+                  laststate="indeterminate"           # <none> over <none>: unobservable
+                fi
+              elif [ "$cur" = "$PRE_COMMIT" ]; then
+                laststate="serving-pre"               # still the outgoing build
+              else
+                laststate="serving-unexpected"        # case 3
+                unexpected="$cur"
               fi
-              laststate="serving-pre"
             else
               laststate="indeterminate"
             fi
@@ -310,21 +327,17 @@ jobs:
               echo "rollback FAILED (serving unhealthy) after ${ELAPSED_S}s — before=$BEFORE_SHA target=$TARGET_SHA"
               exit 1
             fi
-            if [ "$cur" = "$TARGET_SHA" ]; then
+            if [ "$confirmed" = "target" ]; then
               echo "edge now serving the promoted commit $cur (positive confirmation)"
             else
-              echo "edge departed the pre-promote build (was '$PRE_COMMIT', now '$cur'); target $TARGET_SHA emits no commit field — confirmed by departure"
+              echo "edge departed the pre-promote build (was '$PRE_COMMIT', now serves no commit field); target $TARGET_SHA predates the #136 canary — confirmed by departure"
             fi
             echo "rollback complete in ${ELAPSED_S}s (edge settled ~${settle}s from trigger) — before=$BEFORE_SHA after=$TARGET_SHA"
             exit 0
           fi
 
-          # Deadline reached without confirmation — two outcomes.
-          # RED only when departure is OBSERVABLE and definitely hasn't happened:
-          # the edge is reachable, still serving PRE_COMMIT, and PRE_COMMIT is a
-          # concrete sha (if PRE_COMMIT is <none> a commitless new build would be
-          # indistinguishable, so that case is indeterminate, not stale).
-          if [ "$laststate" = "serving-pre" ] && [ "$PRE_COMMIT" != "<none>" ]; then
+          # Deadline without confirmation.
+          if [ "$laststate" = "serving-pre" ]; then
             echo "::error::EDGE STALE — the Vercel promote succeeded but the edge has not moved after 180s"
             printf '%s\n' \
               "The promote succeeded at the Vercel layer (production target = $TARGET_ID, sha $TARGET_SHA), but https://my.tablekitapp.com/api/health is STILL serving the pre-promote build ('$PRE_COMMIT') 180s later." \
@@ -332,5 +345,13 @@ jobs:
               "Check the Cloudflare cache and DNS for my.tablekitapp.com."
             exit 1
           fi
-          echo "::warning::could not confirm the edge serving state within 180s (edge unreachable, or the departure is not observable via the health commit — e.g. a pre-#136 build replacing another). Primary verification already confirmed the Vercel production target flipped to $TARGET_ID — treating the edge as not-yet-observable, not failed."
+          if [ "$laststate" = "serving-unexpected" ]; then
+            echo "::error::EDGE SERVING AN UNEXPECTED BUILD — neither the promoted target nor the pre-promote build"
+            printf '%s\n' \
+              "https://my.tablekitapp.com/api/health is serving commit '$unexpected' 180s after the promote — that is neither the promoted target ($TARGET_SHA) nor the pre-promote build ('$PRE_COMMIT')." \
+              "The Vercel promote itself succeeded (production target = $TARGET_ID), so do NOT re-run this workflow." \
+              "Check the Vercel dashboard for a manual redeploy or a competing promotion of my.tablekitapp.com."
+            exit 1
+          fi
+          echo "::warning::could not confirm the edge serving state within 180s (edge unreachable, or the departure is not observable — a pre-#136 build replacing another emits no commit either side). Primary verification already confirmed the Vercel production target flipped to $TARGET_ID — treating the edge as not-yet-observable, not failed."
           echo "rollback complete at the Vercel layer in ${ELAPSED_S}s — edge serving state unconfirmed — before=$BEFORE_SHA after=$TARGET_SHA"
