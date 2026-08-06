@@ -1,0 +1,93 @@
+name: staging-verify
+
+# After every push to main, prove staging actually flipped to THIS commit.
+# /api/health `commit` is ground truth — deployment alias metadata goes stale,
+# so a commit mismatch means the staging alias did not move. That is the exact
+# failure this workflow exists to catch. See docs/specs/deployment-pipeline.md
+# — Workstream 2.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-verify-${{ github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+      BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      SHA: ${{ github.sha }}
+    steps:
+      # Match staging-seed.yml: a secret-less run (forks) skips green, not red.
+      - name: Skip when unconfigured
+        if: env.VERCEL_TOKEN == ''
+        run: echo "::notice::VERCEL_TOKEN not set — skipping staging-verify (forks / secret-less runs stay green)."
+
+      - name: Wait for the staging preview of this commit to be READY
+        if: env.VERCEL_TOKEN != ''
+        run: |
+          set -uo pipefail
+          echo "waiting for the preview deployment of $SHA to reach READY (cap 10m)"
+          deadline=$(( $(date +%s) + 600 ))
+          state=""; dep_id=""
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            list=$(curl -sS --max-time 10 -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_TEAM_ID&limit=30" || true)
+            row=$(echo "$list" | jq -c --arg sha "$SHA" '
+              .deployments // []
+              | map(select(.meta.githubCommitSha == $sha and .target != "production"))
+              | sort_by(.created) | reverse | .[0] // empty' 2>/dev/null || true)
+            dep_id=$(echo "$row" | jq -r '.uid // empty' 2>/dev/null || true)
+            state=$(echo "$row" | jq -r '.state // empty' 2>/dev/null || true)
+            if [ "$state" = "READY" ]; then
+              echo "preview $dep_id is READY"
+              break
+            fi
+            if [ "$state" = "ERROR" ] || [ "$state" = "CANCELED" ]; then
+              echo "::error::staging preview of $SHA is $state (deployment $dep_id)"
+              exit 1
+            fi
+            sleep 10
+          done
+          if [ "$state" != "READY" ]; then
+            echo "::error::no READY staging preview for $SHA within 10m (last state '${state:-<none>}')"
+            exit 1
+          fi
+
+      - name: Assert staging health matches this commit
+        if: env.VERCEL_TOKEN != ''
+        run: |
+          set -uo pipefail
+          code=$(curl -sS --max-time 10 -o /tmp/health.json -w '%{http_code}' \
+            -H "x-vercel-protection-bypass: $BYPASS" \
+            https://staging.tablekitapp.com/api/health || true)
+          echo "HTTP $code"
+          echo "--- response body ---"
+          cat /tmp/health.json 2>/dev/null || true
+          echo
+          echo "---------------------"
+          ok=$(jq -r '.ok // empty' /tmp/health.json 2>/dev/null || true)
+          db=$(jq -r '.checks.database // empty' /tmp/health.json 2>/dev/null || true)
+          commit=$(jq -r '.commit // empty' /tmp/health.json 2>/dev/null || true)
+
+          fail=""
+          [ "$code" = "200" ] || { echo "::error::expected HTTP 200, got $code"; fail=1; }
+          [ "$ok" = "true" ] || { echo "::error::expected ok=true, got '${ok:-<none>}'"; fail=1; }
+          [ "$db" = "ok" ] || { echo "::error::expected checks.database=ok, got '${db:-<none>}'"; fail=1; }
+          if [ "$commit" != "$SHA" ]; then
+            echo "::error::commit mismatch — staging is serving '${commit:-<none>}', expected $SHA. The staging alias did not flip to this build."
+            fail=1
+          fi
+          [ -z "$fail" ] || exit 1
+          echo "staging OK — HTTP 200, ok=true, database=ok, commit=$SHA"

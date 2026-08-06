@@ -355,6 +355,15 @@ Residual caveats to document in `incident.md`: webhooks keep arriving during the
 
 **Drill it.** A rollback mechanism that's never been used is a hypothesis. Once `rollback.yml` lands: promote a trivial change to staging's equivalent flow, roll it back, time it. Repeat quarterly and after any change to the promote workflow. Add both to the pre-launch checklist in `deploy.md`.
 
+### Built — 2026-08-04 (deploy-control workflows)
+
+`.github/workflows/rollback.yml` and `.github/workflows/staging-verify.yml` now exist — `curl` + `jq` only, no new deps, no migrations.
+
+- **`rollback.yml` is the primary rollback path; the Vercel dashboard's Instant Rollback is break-glass.** `workflow_dispatch` with a **required `reason`** (the audit trail, and the only friction — no approval environment or confirmation input on top of it) and an optional `deployment` id. When `deployment` is blank the target defaults to the **second-most-recent READY `target=production` deployment — the one currently behind live** (jq filters READY+production, orders by `created` desc, takes `[1]`). It refuses to run unless the resolved target is `READY` and `target=production`, promotes via `POST /v10/projects/{projectId}/promote/{deploymentId}`, then polls `my.tablekitapp.com/api/health` every 2s (cap 180s) until `commit` equals the target's sha — alias metadata is never trusted.
+- **Roll-forward needs no `promote.yml`, and one was deliberately not built.** Rollback and roll-forward are the same operation — promote an existing READY deployment — and the Vercel *API* (unlike the dashboard's Instant Rollback, which only offers the immediately-previous deployment) can promote *any* deployment. So `rollback.yml`'s `deployment` input covers roll-forward, which supersedes the "rollback registry (promote.yml)" invariant sketched above: rolling back to a specific prior deployment is that id typed into `deployment`, not a separate workflow. Routine promotion stays git-driven (`git push origin main:production`).
+- **The trigger-timestamp acceptance criterion is met.** `rollback.yml`'s first step's first log line is the trigger timestamp in UTC ISO-8601 with milliseconds, emitted before any API call / checkout / setup; the final line reports elapsed seconds from that timestamp to the observed health flip, with before/after shas. The rehearsal gap — recovery time unmeasurable because the dashboard doesn't timestamp the click — is closed for the workflow path.
+- **`staging-verify.yml`** runs on push to `main` (plus dispatch): waits for the preview deployment whose `githubCommitSha == GITHUB_SHA` to reach READY (poll, cap 10m), then GETs staging `/api/health` through the `x-vercel-protection-bypass` header (`VERCEL_AUTOMATION_BYPASS_SECRET`) and asserts HTTP 200, `ok === true`, `checks.database === "ok"`, and `commit === GITHUB_SHA`, printing the full body on any mismatch. A commit mismatch means the staging alias didn't flip — the failure it exists to catch. Skips with an `::notice::` (stays green) when `VERCEL_TOKEN` is unset, matching `staging-seed.yml`.
+
 ---
 
 ## Promote/rollback rehearsal (2026-07-31)
