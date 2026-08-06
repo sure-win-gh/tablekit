@@ -168,6 +168,7 @@ jobs:
             -H "Authorization: Bearer $VERCEL_TOKEN" \
             "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/promote/$TARGET_ID?teamId=$VERCEL_TEAM_ID")
           echo "promote HTTP $code"
+          echo "PROMOTE_CODE=$code" >> "$GITHUB_ENV"
           cat /tmp/promote.json 2>/dev/null || true
           echo
           if [ "$code" -ge 300 ]; then
@@ -178,7 +179,11 @@ jobs:
       # Primary assertion: the Vercel production target actually became the
       # promoted deployment. This is what "the rollback worked" means and it
       # holds for every deployment regardless of age. Elapsed is measured from
-      # the trigger timestamp to this observed flip.
+      # the trigger timestamp to this observed flip. If the Vercel API is
+      # unreachable during the poll, the health `commit` is used as a SECONDARY
+      # confirmation (only when it can positively confirm); if neither signal can
+      # confirm, the run fails with an explicitly inconclusive message — because
+      # the promote was already issued and may well have succeeded.
       - name: Verify the flip via the Vercel production target
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -188,23 +193,68 @@ jobs:
           set -uo pipefail
           echo "polling GET /v9/projects for targets.production.id == $TARGET_ID (every 2s, cap 180s)"
           deadline=$(( $(date +%s) + 180 ))
-          live_id=""; flipped=""
+          live_id=""; flipped=""; api_reachable=""; last_code=""
           while [ "$(date +%s)" -lt "$deadline" ]; do
-            proj=$(curl -sS --max-time 10 -H "Authorization: Bearer $VERCEL_TOKEN" \
-              "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_TEAM_ID" || true)
-            live_id=$(echo "$proj" | jq -r '.targets.production.id // .targets.production.uid // empty' 2>/dev/null || true)
-            if [ "$live_id" = "$TARGET_ID" ]; then flipped=1; break; fi
+            pcode=$(curl -sS --max-time 10 -o /tmp/vproj.json -w '%{http_code}' \
+              -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_TEAM_ID" || echo "000")
+            last_code="$pcode"
+            case "$pcode" in
+              2*)
+                api_reachable=1
+                live_id=$(jq -r '.targets.production.id // .targets.production.uid // empty' /tmp/vproj.json 2>/dev/null || true)
+                if [ "$live_id" = "$TARGET_ID" ]; then flipped=1; break; fi
+                ;;
+            esac
             sleep 2
           done
           now_ms=$(date +%s%3N)
           elapsed=$(awk "BEGIN{printf \"%.1f\", ($now_ms - $TRIGGER_MS)/1000}")
           echo "ELAPSED_S=$elapsed" >> "$GITHUB_ENV"
-          if [ -z "$flipped" ]; then
-            echo "::error::Vercel production target did not become $TARGET_ID within 180s (last saw '${live_id:-<none>}')"
-            echo "rollback FAILED after ${elapsed}s — before=$BEFORE_SHA target=$TARGET_SHA"
-            exit 1
+
+          if [ -n "$flipped" ]; then
+            echo "production target flipped to $TARGET_ID in ${elapsed}s"
+            exit 0
           fi
-          echo "production target flipped to $TARGET_ID in ${elapsed}s"
+
+          # Primary signal did not confirm — capture why, for the message below.
+          if [ -z "$api_reachable" ]; then
+            reason="the Vercel project API was unreachable during verification (last HTTP $last_code)"
+          else
+            reason="the Vercel production target did not become $TARGET_ID within 180s (last saw '${live_id:-<none>}')"
+          fi
+          echo "primary verification did not confirm: $reason"
+
+          # Secondary signal: the health commit, but only when it can POSITIVELY
+          # confirm the promoted sha. Absent field / down endpoint / mismatch all
+          # fall through to the inconclusive failure below.
+          echo "attempting health-commit fallback"
+          hbody=$(curl -sS --max-time 10 --retry 2 --retry-delay 2 --retry-all-errors https://my.tablekitapp.com/api/health || true)
+          hhas=$(echo "$hbody" | jq 'has("commit")' 2>/dev/null || echo false)
+          hcommit=$(echo "$hbody" | jq -r '.commit // empty' 2>/dev/null || true)
+          if [ -n "$TARGET_SHA" ] && [ "$hhas" = "true" ] && [ "$hcommit" = "$TARGET_SHA" ]; then
+            echo "::warning::primary verification signal (Vercel production target) was unavailable — confirmed instead via /api/health commit=$hcommit"
+            echo "production target flipped to $TARGET_ID (confirmed via health-commit fallback) in ${elapsed}s"
+            exit 0
+          fi
+
+          # Neither signal could confirm. The promote WAS issued and may have
+          # succeeded — say so, so this does not read as "the rollback failed".
+          if [ "$hhas" = "true" ]; then
+            why="$reason, and /api/health reports commit='${hcommit:-<none>}', not $TARGET_SHA"
+          elif [ -n "$hbody" ]; then
+            why="$reason, and /api/health carries no commit field (the target may predate the #136 canary)"
+          else
+            why="$reason, and /api/health is also unreachable"
+          fi
+          echo "::error::PROMOTE ISSUED, VERIFICATION INCONCLUSIVE — production may already be on $TARGET_ID; check before re-running"
+          printf '%s\n' \
+            "PROMOTE ISSUED, VERIFICATION INCONCLUSIVE" \
+            "The promote call returned ${PROMOTE_CODE:-<unknown>}. Production may already be on $TARGET_ID (sha $TARGET_SHA)." \
+            "Verification could not confirm because ${why}." \
+            "Check https://my.tablekitapp.com/api/health and the Vercel dashboard" \
+            "BEFORE re-running this workflow."
+          exit 1
 
       # Secondary check: the now-live build is actually serving. Assert 200 +
       # ok + database. Assert commit equality ONLY when the response carries a
