@@ -1,5 +1,6 @@
 // Unit tests for the Upstash boot tripwire in instrumentation.ts. The rate
-// limiter fails open when Upstash is unset, so production boot must flag it.
+// limiter fails closed when Upstash is unset in production — every rate-limited
+// route returns 429 — so production boot must flag it.
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 

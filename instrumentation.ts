@@ -14,15 +14,17 @@ import { isProdLike, missingRequiredEnv } from "@/lib/env-check";
 import { scrubEvent } from "@/lib/observability/sentry-scrub";
 
 export async function register(): Promise<void> {
-  // Boot tripwire: the rate limiter (lib/public/rate-limit.ts) fails OPEN if
-  // Upstash isn't configured, silently disabling all auth/abuse throttling.
-  // In production that's a serious misconfiguration — surface it loudly in
-  // logs (and to Sentry below once it's initialised) rather than degrade
-  // silently. See docs/playbooks/{security,deploy}.md.
+  // Boot tripwire: the rate limiter (lib/public/rate-limit.ts) fails CLOSED
+  // when Upstash isn't configured in production — missingConfigResult() returns
+  // ok:false for every caller, so each rate-limited route answers 429 with
+  // retry-after set to that bucket's window. This is not a silent degradation:
+  // it takes down the booking flow and every credential endpoint outright.
+  // Surface it loudly in logs (and to Sentry below once it's initialised) so
+  // it's diagnosed in seconds. See docs/playbooks/{security,deploy}.md.
   const upstashMissing = missingUpstashInProdLike();
   if (upstashMissing.length > 0) {
     console.error(
-      `[boot] CRITICAL: rate limiter fails OPEN — Upstash not configured (${upstashMissing.join(", ")}). Auth/abuse throttling is DISABLED.`,
+      `[boot] CRITICAL: Upstash not configured (${upstashMissing.join(", ")}) — rate limiter fails CLOSED: bookings, availability, events/purchase, login, signup, password reset, api-key auth and enquiries all return 429 until this is set.`,
     );
   }
 
@@ -60,7 +62,7 @@ export async function register(): Promise<void> {
     // Now that Sentry is up, also page on the Upstash misconfig.
     if (upstashMissing.length > 0) {
       Sentry.captureMessage(
-        `rate limiter fails open: Upstash not configured in production (${upstashMissing.join(", ")})`,
+        `rate limiter fails closed: Upstash not configured in production (${upstashMissing.join(", ")}) — every rate-limited route is returning 429`,
         "fatal",
       );
     }
