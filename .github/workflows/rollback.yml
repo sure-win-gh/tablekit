@@ -1,0 +1,357 @@
+name: rollback-production
+
+# Primary, audited rollback / roll-forward path: promote an existing READY
+# production deployment back to live. The Vercel dashboard's Instant Rollback is
+# break-glass only. Rolls FORWARD too — pass a newer deployment id in `deployment`
+# (the Vercel API, unlike Instant Rollback, can promote any deployment, not just
+# the previous one). See docs/specs/deployment-pipeline.md — Workstream 3.
+#
+# Liveness is the Vercel production target, not the /api/health `commit` field:
+# that field is an app-level canary that only exists on builds from PR #136
+# onward, so it cannot answer "what is live" for older deployments. Health is a
+# secondary "is it serving" check, and its commit is asserted only when present.
+#
+# Routine promotion is NOT this workflow: it stays git-driven
+# (`git push origin main:production`).
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment:
+        description: "Vercel deployment ID to promote (blank = the READY production deployment currently behind live)"
+        required: false
+        type: string
+      reason:
+        description: "Why — recorded in the log. This is the audit trail and the only friction guarding the change."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-control
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Acceptance criterion (spec Workstream 3): the trigger timestamp is the
+      # FIRST log line, emitted before any API call / checkout / setup. The
+      # rehearsal could not compute recovery time because the dashboard does not
+      # timestamp the click — TRIGGER_MS anchors the elapsed measurement below.
+      - name: Trigger timestamp
+        env:
+          REASON: ${{ inputs.reason }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          TRIGGER_ISO="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+          echo "$TRIGGER_ISO"
+          printf 'trigger=rollback actor=%s reason=%s\n' "$ACTOR" "$REASON"
+          {
+            echo "TRIGGER_ISO=$TRIGGER_ISO"
+            echo "TRIGGER_MS=$(date +%s%3N)"
+          } >> "$GITHUB_ENV"
+
+      - name: Resolve and validate target
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+          INPUT_DEPLOYMENT: ${{ inputs.deployment }}
+        run: |
+          set -euo pipefail
+
+          # WHY LIVENESS IS THE VERCEL PRODUCTION TARGET, NOT CREATION ORDER OR
+          # THE HEALTH COMMIT — DO NOT "SIMPLIFY" EITHER BACK.
+          # Promoting an older deployment (a rollback) changes which deployment
+          # is LIVE without changing creation order, so sort_by(.created)|.[1] can
+          # resolve to the deployment that is ALREADY live. And the /api/health
+          # `commit` canary only exists on builds from PR #136 onward, so it
+          # cannot identify liveness for older targets. The project's production
+          # target answers both authoritatively: its id is the live deployment,
+          # its createdAt orders "before live", and its meta carries the outgoing
+          # sha — all present regardless of a build's age.
+          pcode=$(curl -sS --max-time 15 -o /tmp/proj.json -w '%{http_code}' \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_TEAM_ID" || echo "000")
+          PROJ_OK=""
+          case "$pcode" in 2*) PROJ_OK=1 ;; esac
+          LIVE_ID=""; LIVE_CREATED=""; BEFORE_SHA="unknown"
+          if [ -n "$PROJ_OK" ]; then
+            LIVE_ID=$(jq -r '.targets.production.id // .targets.production.uid // empty' /tmp/proj.json)
+            LIVE_CREATED=$(jq -r '.targets.production.createdAt // .targets.production.created // empty' /tmp/proj.json)
+            BEFORE_SHA=$(jq -r '.targets.production.meta.githubCommitSha // "unknown"' /tmp/proj.json)
+            echo "live production target: ${LIVE_ID:-<none>} created=${LIVE_CREATED:-<none>} sha=$BEFORE_SHA"
+          else
+            echo "::warning::Vercel project API returned HTTP $pcode — cannot read the live production target"
+          fi
+          echo "BEFORE_SHA=$BEFORE_SHA" >> "$GITHUB_ENV"
+          # Only a clean integer is safe to hand jq --argjson below.
+          case "${LIVE_CREATED:-}" in "" | *[!0-9]*) LIVE_CREATED="" ;; esac
+
+          if [ -n "$INPUT_DEPLOYMENT" ]; then
+            TARGET_ID="$INPUT_DEPLOYMENT"
+            echo "target from input: $TARGET_ID"
+          else
+            # Default target needs the authoritative live target. If the project
+            # API is unavailable we cannot safely pick one — fail and ask for an
+            # explicit id rather than guess from creation order.
+            if [ -z "$PROJ_OK" ] || [ -z "$LIVE_ID" ] || [ -z "$LIVE_CREATED" ]; then
+              echo "::error::cannot resolve a default rollback target without the live production target (project API HTTP $pcode). Pass an explicit deployment input."
+              exit 1
+            fi
+            list=$(curl -sS --max-time 15 -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_TEAM_ID&target=production&state=READY&limit=20")
+            # Most recent READY production deployment that is neither the live one
+            # (by id) nor created at-or-after it.
+            TARGET_ID=$(echo "$list" | jq -r --arg live "$LIVE_ID" --argjson created "$LIVE_CREATED" '
+              [.deployments[]
+               | select(.state == "READY" and .target == "production"
+                        and .uid != $live and .created < $created)]
+              | max_by(.created) | .uid // empty')
+            if [ -z "$TARGET_ID" ]; then
+              echo "::error::no READY production deployment older than the live one to roll back to. Pass an explicit deployment input."
+              exit 1
+            fi
+            echo "target (default = most recent before live): $TARGET_ID"
+          fi
+
+          dep=$(curl -sS --max-time 15 -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v13/deployments/$TARGET_ID?teamId=$VERCEL_TEAM_ID")
+          STATE=$(echo "$dep" | jq -r '.readyState // .state // empty')
+          TARGET=$(echo "$dep" | jq -r '.target // empty')
+          SHA=$(echo "$dep" | jq -r '.meta.githubCommitSha // empty')
+          echo "resolved target=$TARGET_ID sha=$SHA readyState=$STATE target=$TARGET"
+
+          if [ "$STATE" != "READY" ]; then
+            echo "::error::target $TARGET_ID is not READY (state=$STATE) — refusing to promote"
+            exit 1
+          fi
+          if [ "$TARGET" != "production" ]; then
+            echo "::error::target $TARGET_ID is not a production deployment (target=$TARGET) — refusing to promote"
+            exit 1
+          fi
+          if [ -z "$SHA" ]; then
+            echo "::error::target $TARGET_ID has no meta.githubCommitSha — cannot verify the flip"
+            exit 1
+          fi
+
+          # Load-bearing guard, independent of the resolver and applied to an
+          # explicit input too: never promote the deployment that is already
+          # live — that is the silent-no-op bug. Compare deployment IDs (always
+          # present, and unambiguous when two deployments share a sha), NOT
+          # commit shas and NOT the health canary. Degrade to a warning and
+          # proceed ONLY when the project API call itself failed (network / auth
+          # / non-2xx) so a real API outage cannot block emergency recovery. An
+          # absent field is data, not an outage, and never triggers the bypass.
+          if [ -z "$PROJ_OK" ]; then
+            echo "::warning::could not read the live production target from the Vercel API (HTTP $pcode) — skipping the already-live guard so an API outage can't block emergency recovery"
+          elif [ -n "$LIVE_ID" ] && [ "$TARGET_ID" = "$LIVE_ID" ]; then
+            echo "::error::target $TARGET_ID is already the live production deployment — promoting it would be a no-op. To force a specific promote, pass a different deployment id as the 'deployment' input."
+            exit 1
+          fi
+
+          { echo "TARGET_ID=$TARGET_ID"; echo "TARGET_SHA=$SHA"; } >> "$GITHUB_ENV"
+
+      - name: Promote target to production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          # Departure baseline: what the edge (/api/health) serves RIGHT NOW,
+          # before we promote. Absence of the commit field is a valid baseline
+          # value ("<none>", for pre-#136 builds), not an error. No extra Vercel
+          # call — the serving layer's own prior state is the correct baseline,
+          # and the serving check below waits for the edge to move OFF it.
+          pre=$(curl -sS --max-time 10 https://my.tablekitapp.com/api/health || true)
+          PRE_COMMIT=$(printf '%s' "$pre" | jq -r 'if has("commit") then (.commit // "<none>") else "<none>" end' 2>/dev/null || echo "<none>")
+          echo "PRE_COMMIT=$PRE_COMMIT" >> "$GITHUB_ENV"
+          echo "pre-promote edge commit (departure baseline): $PRE_COMMIT"
+          echo "production is serving ${BEFORE_SHA:-unknown}; promoting $TARGET_ID (sha $TARGET_SHA)"
+          code=$(curl -sS -o /tmp/promote.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/promote/$TARGET_ID?teamId=$VERCEL_TEAM_ID")
+          echo "promote HTTP $code"
+          echo "PROMOTE_CODE=$code" >> "$GITHUB_ENV"
+          cat /tmp/promote.json 2>/dev/null || true
+          echo
+          if [ "$code" -ge 300 ]; then
+            echo "::error::promote API returned HTTP $code"
+            exit 1
+          fi
+
+      # Primary assertion: the Vercel production target actually became the
+      # promoted deployment. This is what "the rollback worked" means and it
+      # holds for every deployment regardless of age. Elapsed is measured from
+      # the trigger timestamp to this observed flip. If the Vercel API is
+      # unreachable during the poll, the health `commit` is used as a SECONDARY
+      # confirmation (only when it can positively confirm); if neither signal can
+      # confirm, the run fails with an explicitly inconclusive message — because
+      # the promote was already issued and may well have succeeded.
+      - name: Verify the flip via the Vercel production target
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+        run: |
+          set -uo pipefail
+          echo "polling GET /v9/projects for targets.production.id == $TARGET_ID (every 2s, cap 180s)"
+          deadline=$(( $(date +%s) + 180 ))
+          live_id=""; flipped=""; api_reachable=""; last_code=""
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            pcode=$(curl -sS --max-time 10 -o /tmp/vproj.json -w '%{http_code}' \
+              -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_TEAM_ID" || echo "000")
+            last_code="$pcode"
+            case "$pcode" in
+              2*)
+                api_reachable=1
+                live_id=$(jq -r '.targets.production.id // .targets.production.uid // empty' /tmp/vproj.json 2>/dev/null || true)
+                if [ "$live_id" = "$TARGET_ID" ]; then flipped=1; break; fi
+                ;;
+            esac
+            sleep 2
+          done
+          now_ms=$(date +%s%3N)
+          elapsed=$(awk "BEGIN{printf \"%.1f\", ($now_ms - $TRIGGER_MS)/1000}")
+          echo "ELAPSED_S=$elapsed" >> "$GITHUB_ENV"
+
+          if [ -n "$flipped" ]; then
+            echo "production target flipped to $TARGET_ID in ${elapsed}s"
+            exit 0
+          fi
+
+          # Primary signal did not confirm — capture why, for the message below.
+          if [ -z "$api_reachable" ]; then
+            reason="the Vercel project API was unreachable during verification (last HTTP $last_code)"
+          else
+            reason="the Vercel production target did not become $TARGET_ID within 180s (last saw '${live_id:-<none>}')"
+          fi
+          echo "primary verification did not confirm: $reason"
+
+          # Secondary signal: the health commit, but only when it can POSITIVELY
+          # confirm the promoted sha. Absent field / down endpoint / mismatch all
+          # fall through to the inconclusive failure below.
+          echo "attempting health-commit fallback"
+          hbody=$(curl -sS --max-time 10 --retry 2 --retry-delay 2 --retry-all-errors https://my.tablekitapp.com/api/health || true)
+          hhas=$(echo "$hbody" | jq 'has("commit")' 2>/dev/null || echo false)
+          hcommit=$(echo "$hbody" | jq -r '.commit // empty' 2>/dev/null || true)
+          if [ -n "$TARGET_SHA" ] && [ "$hhas" = "true" ] && [ "$hcommit" = "$TARGET_SHA" ]; then
+            echo "::warning::primary verification signal (Vercel production target) was unavailable — confirmed instead via /api/health commit=$hcommit"
+            echo "production target flipped to $TARGET_ID (confirmed via health-commit fallback) in ${elapsed}s"
+            exit 0
+          fi
+
+          # Neither signal could confirm. The promote WAS issued and may have
+          # succeeded — say so, so this does not read as "the rollback failed".
+          if [ "$hhas" = "true" ]; then
+            why="$reason, and /api/health reports commit='${hcommit:-<none>}', not $TARGET_SHA"
+          elif [ -n "$hbody" ]; then
+            why="$reason, and /api/health carries no commit field (the target may predate the #136 canary)"
+          else
+            why="$reason, and /api/health is also unreachable"
+          fi
+          echo "::error::PROMOTE ISSUED, VERIFICATION INCONCLUSIVE — production may already be on $TARGET_ID; check before re-running"
+          printf '%s\n' \
+            "PROMOTE ISSUED, VERIFICATION INCONCLUSIVE" \
+            "The promote call returned ${PROMOTE_CODE:-<unknown>}. Production may already be on $TARGET_ID (sha $TARGET_SHA)." \
+            "Verification could not confirm because ${why}." \
+            "Check https://my.tablekitapp.com/api/health and the Vercel dashboard" \
+            "BEFORE re-running this workflow."
+          exit 1
+
+      # Secondary check: the EDGE (/api/health on the custom domain) is actually
+      # serving the promoted build. Keyed off DEPARTURE from the pre-promote
+      # snapshot, not arrival of a specific commit — the Vercel production-target
+      # flip leads the Cloudflare edge by seconds to minutes, and a pre-#136
+      # target emits no commit to "arrive" on. Confirmation is either the target
+      # sha appearing (positive) or the edge leaving PRE_COMMIT, absence included
+      # (negative: the old build is gone). This is why the earlier eager single
+      # GET caught the outgoing build mid-propagation and mismatched on it.
+      - name: Verify the live build is serving via /api/health
+        run: |
+          set -uo pipefail
+          echo "polling /api/health until it departs PRE_COMMIT='$PRE_COMMIT' or serves $TARGET_SHA (every 3s, cap 180s)"
+          deadline=$(( $(date +%s) + 180 ))
+          # Each reachable poll classifies the served value into exactly one of
+          # three confirming/­non-confirming cases (a fourth is unobservable):
+          #   1. served == TARGET_SHA                       -> confirmed (arrival)
+          #   2. served absent AND PRE_COMMIT was concrete  -> confirmed (old build
+          #      gone; the target is pre-#136 so nothing can "arrive" with a sha)
+          #   3. served is a concrete sha that is neither   -> NOT confirmed; an
+          #      unexpected build (e.g. a manual redeploy) — keep polling, red at
+          #      the deadline naming the sha
+          #   (served absent with PRE_COMMIT also absent    -> unobservable)
+          confirmed=""; laststate="indeterminate"; cur="<none>"; unexpected=""; ok=""; db=""
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            code=$(curl -sS --max-time 10 -o /tmp/health.json -w '%{http_code}' https://my.tablekitapp.com/api/health || echo "000")
+            if [ "$code" = "200" ]; then
+              ok=$(jq -r '.ok // empty' /tmp/health.json 2>/dev/null || true)
+              db=$(jq -r '.checks.database // empty' /tmp/health.json 2>/dev/null || true)
+              if [ "$(jq 'has("commit")' /tmp/health.json 2>/dev/null || echo false)" = "true" ]; then
+                cur=$(jq -r '.commit // "<none>"' /tmp/health.json 2>/dev/null || echo "<none>")
+              else
+                cur="<none>"
+              fi
+              if [ -n "$TARGET_SHA" ] && [ "$cur" = "$TARGET_SHA" ]; then
+                confirmed="target"; break            # case 1
+              elif [ "$cur" = "<none>" ]; then
+                if [ "$PRE_COMMIT" != "<none>" ]; then
+                  confirmed="departed"; break         # case 2
+                else
+                  laststate="indeterminate"           # <none> over <none>: unobservable
+                fi
+              elif [ "$cur" = "$PRE_COMMIT" ]; then
+                laststate="serving-pre"               # still the outgoing build
+              else
+                laststate="serving-unexpected"        # case 3
+                unexpected="$cur"
+              fi
+            else
+              laststate="indeterminate"
+            fi
+            sleep 3
+          done
+          now_ms=$(date +%s%3N)
+          settle=$(awk "BEGIN{printf \"%.1f\", ($now_ms - $TRIGGER_MS)/1000}")
+
+          if [ -n "$confirmed" ]; then
+            # The promoted build is the one now being served — assert it is healthy.
+            if [ "$ok" != "true" ] || [ "$db" != "ok" ]; then
+              echo "::error::the promoted build is live at the edge (serving '$cur') but not healthy — ok='${ok:-<none>}' checks.database='${db:-<none>}'"
+              echo "rollback FAILED (serving unhealthy) after ${ELAPSED_S}s — before=$BEFORE_SHA target=$TARGET_SHA"
+              exit 1
+            fi
+            if [ "$confirmed" = "target" ]; then
+              echo "edge now serving the promoted commit $cur (positive confirmation)"
+            else
+              echo "edge departed the pre-promote build (was '$PRE_COMMIT', now serves no commit field); target $TARGET_SHA predates the #136 canary — confirmed by departure"
+            fi
+            echo "rollback complete in ${ELAPSED_S}s (edge settled ~${settle}s from trigger) — before=$BEFORE_SHA after=$TARGET_SHA"
+            exit 0
+          fi
+
+          # Deadline without confirmation.
+          if [ "$laststate" = "serving-pre" ]; then
+            echo "::error::EDGE STALE — the Vercel promote succeeded but the edge has not moved after 180s"
+            printf '%s\n' \
+              "The promote succeeded at the Vercel layer (production target = $TARGET_ID, sha $TARGET_SHA), but https://my.tablekitapp.com/api/health is STILL serving the pre-promote build ('$PRE_COMMIT') 180s later." \
+              "Do NOT re-run this workflow — the rollback already took at the Vercel layer; the edge is stale." \
+              "Check the Cloudflare cache and DNS for my.tablekitapp.com."
+            exit 1
+          fi
+          if [ "$laststate" = "serving-unexpected" ]; then
+            echo "::error::EDGE SERVING AN UNEXPECTED BUILD — neither the promoted target nor the pre-promote build"
+            printf '%s\n' \
+              "https://my.tablekitapp.com/api/health is serving commit '$unexpected' 180s after the promote — that is neither the promoted target ($TARGET_SHA) nor the pre-promote build ('$PRE_COMMIT')." \
+              "The Vercel promote itself succeeded (production target = $TARGET_ID), so do NOT re-run this workflow." \
+              "Check the Vercel dashboard for a manual redeploy or a competing promotion of my.tablekitapp.com."
+            exit 1
+          fi
+          echo "::warning::could not confirm the edge serving state within 180s (edge unreachable, or the departure is not observable — a pre-#136 build replacing another emits no commit either side). Primary verification already confirmed the Vercel production target flipped to $TARGET_ID — treating the edge as not-yet-observable, not failed."
+          echo "rollback complete at the Vercel layer in ${ELAPSED_S}s — edge serving state unconfirmed — before=$BEFORE_SHA after=$TARGET_SHA"

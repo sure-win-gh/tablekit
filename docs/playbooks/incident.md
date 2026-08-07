@@ -45,6 +45,16 @@ over permanent IP bans — attackers rotate IPs and real users share them.
   outage as P1, mitigate at the Cloudflare edge if abuse is the concern, and
   communicate "log in later" rather than disabling the posture ad hoc. The
   booking widget and public availability stay up (fail-open buckets).
+- **"Too many attempts" in a manual test login is the rate limiter, not a
+  credential failure — suspect it first.** The login IP bucket
+  (`login:ip:…`, 5 per 15 min, `lib/public/rate-limit.ts`) — and its silent
+  fail-closed path when Upstash is unreachable (see deployment-pipeline
+  watch-item 4) — both surface as **"Too many attempts. Please wait a few
+  minutes and try again."** A genuine credential problem instead returns
+  **"Invalid email or password"** (or advances to the MFA prompt). So on
+  "Too many attempts", don't chase an auth bug: wait ~15 minutes or switch
+  IP/network first. This has derailed three separate debugging sessions
+  (each spent hunting a non-existent auth failure).
 
 ## Kill switches (implement these before launch)
 

@@ -36,13 +36,17 @@ Green run: `30003259912` — checks, migrate, integration (94 files / 518 tests)
 
 **CI infrastructure now load-bearing** (record these wherever you track infra): a dedicated CI Supabase project (throwaway data; schema maintained by the `migrate` job) and a CI Upstash Redis (`tablekit-ci`) backing the rate limiter. Neither is shared with staging or production, ever. Operational fact that cost a cycle: **GitHub Actions resolves secrets at job start** — a job already running does not see newly-set secrets; re-run the job.
 
-### Watch-items & follow-ups (from Phase 1's findings)
+### Watch-items & follow-ups
 
 1. **Supabase `bad_jwt` platform transient.** Auth admin API rejects ~7% of requests with 403 `bad_jwt` ("unrecognized JWT kid <nil> for algorithm ES256") using a key that serves every other request — reproduced with curl against two projects including a fresh one, so platform-side; the rejected call creates nothing. Shim: `tests/support/bad-jwt-retry.ts` (installed from integration setup + the e2e seeding specs) retries only 403 + `bad_jwt` (both `code` and `error_code` shapes), ≤5 attempts with backoff; a genuinely bad key still fails on attempt one. Test-harness only; production auth path confirmed unaffected. Worth a Supabase support ticket.
 2. **CI pooler `EMAXCONNSESSION`.** The CI Supabase session-mode pooler caps at `pool_size: 15`; exceeding it surfaces as an unrelated-looking query error (`max clients reached in session mode`) — resource exhaustion, load-dependent, not random. Seen once (2026-07-22), not since. If it recurs: raise `pool_size` or trim concurrently-open pools; don't retry the test.
 3. **`login:ip:unknown` shared bucket** (→ `security.md`). `ipFromHeaders()` falls back to `"unknown"` when no `cf-connecting-ip`/`x-real-ip`/`x-forwarded-for` is present, so any direct caller population shares one 5-per-15-min bucket — and Redis-backed budgets persist across processes. E2E now supplies a per-run RFC 5737 address, mirroring what real infrastructure always provides. Remember for any future non-browser caller.
 4. **The limiter fails closed *silently*** (product follow-up, small + high-value). `rateLimit()` with `failOpen: false` returns "limited" on any Upstash problem — non-2xx, network error, or the 1500 ms timeout — and `outageResult()` logs nothing on that path, so an unreachable Redis is indistinguishable from a genuine lockout at the UI. It cost a full diagnostic cycle in CI; in production it would look like "users can't log in" with clean logs. Add a log line / Sentry breadcrumb on the outage path. (`incident.md` documents *that* auth fails closed; this makes it *observable*.)
 5. **SlotPicker date-input hydration gap** (UX papercut, follow-up PR). `bookings/new/forms.tsx` renders the date as a controlled input with no local state — value from server `searchParams`, every change a router round-trip. A date picked pre-hydration is discarded on reconcile; post-hydration the field lags the server round-trip, reading as "ignored" on slow connections, and a second change mid-flight can drop. Re-entry not corruption. Fix shape: optimistic local state while the push is in flight.
+6. **Vercel "Production and Preview" env scoping leaks prod config into previews** (from the 2026-07-31 rehearsal). Preview deployments were building with Production-scoped env values until the scoping was split to Production-only vs Preview-only. Any env var set to "Production and Preview" silently pushes production config into every PR preview. Audit the scope when adding an env var.
+7. **A Vercel custom domain stays parked on the last build of its assigned branch until that branch builds again.** Re-pointing a domain at a branch does nothing on its own — it needs a fresh build of that branch to move. This is what left `staging.tablekitapp.com` serving production for two days. After any domain↔branch change, trigger a build of the branch and confirm the flip.
+8. **Staging is behind Vercel SSO (it's a Preview deployment).** SSO's `all_except_custom_domains` exemption applies to *production* custom domains, not to a Preview deployment, so anonymous access to `staging.tablekitapp.com` 302s to `vercel.com/sso`. An *authenticated* Vercel API fetch works. Open question for step 2.2 (CI e2e against the preview): a protection-bypass token (`x-vercel-protection-bypass`) vs accepting login-required staging — decide, don't work around it at the app layer.
+9. **Staging emits CSP `report-uri` violations for `vercel.live`** (frame-src, script-src-elem) from the Vercel toolbar — harmless but noisy. Decide whether to allow `vercel.live` in the non-production CSP or suppress those reports.
 
 ---
 
@@ -71,7 +75,9 @@ Data parity comes from seeding, never from copying production. Rule 5 (encrypted
 
 ### 1.3 Environment variable parity
 
-`.env.local.example` is already the canonical list of names. Enforce it: add `scripts/check-env-parity.ts`, which parses the example file for required (non-optional) names and fails if the current environment is missing any. Wire it into `instrumentation.ts`'s existing boot check pattern so a staging or production deploy with a missing variable fails loudly at boot, not at 2am when the code path is first hit. Staging carries the same **names** as production with staging **values**: Stripe test keys, a separate staging webhook signing secret, staging Twilio/Resend credentials, its own `CRON_SECRET`, its own Upstash database, and `SENTRY_DSN` shared with prod but with `environment: "staging"` tagging so alerts are distinguishable.
+`.env.local.example` is already the canonical list of names. Enforce it: add `scripts/check-env-parity.ts`, which parses the example file for required (non-optional) names and fails if the current environment is missing any. Wire it into `instrumentation.ts`'s existing boot check pattern so a staging or production deploy with a missing variable fails loudly at boot, not at 2am when the code path is first hit. Staging carries the same **names** as production with staging **values**: Stripe test keys, a separate staging webhook signing secret, staging Twilio/Resend credentials, its own `CRON_SECRET`, a Preview-scoped Upstash that points at *production's* database (one database, keyspace split by environment prefix via `rlKeyPrefix` in `lib/public/rate-limit.ts`, so buckets never collide — Upstash bills per database, so a shared DB with a split keyspace is the free-tier-friendly shape), and `SENTRY_DSN` shared with prod but with `environment: "staging"` tagging so alerts are distinguishable.
+
+**Enablement ordering — set `TABLEKIT_ENV=staging` LAST.** `isProdLike()` gates both boot tripwires (env-parity *and* the Upstash check), and it returns true for `TABLEKIT_ENV=staging` — so the instant that value is set, staging enforces the full `REQUIRED_PRODUCTION` tier at boot. Wire staging's secrets *first*: the Preview-scoped Upstash creds, `CRON_SECRET`, the Vercel Protection-Bypass automation secret, then the Stripe/Resend/Twilio test keys and `SENTRY_DSN`. Set `TABLEKIT_ENV=staging` only once they are all present — setting it early trips the tripwire (loud boot log + Sentry page) on staging before those integrations exist.
 
 Edge parity: put `staging.tablekitapp.com` behind Cloudflare (orange-cloud) with the same ruleset that `infra/cloudflare/ruleset.ts` applies to production, so WAF and rate-limit behaviour is exercised on staging too. Add `X-Robots-Tag: noindex` and Vercel Deployment Protection (password or Vercel auth) on staging and previews.
 
@@ -280,11 +286,11 @@ Add `scripts/check-migration-safety.ts` to the CI `checks` job: scan any new SQL
 
 ## Workstream 3 — One-click rollback
 
-Two clicks available, both reaching the same mechanism — Vercel's alias swap back to a previous, still-warm production deployment. No rebuild, no server intervention; takes effect in seconds.
+Both paths reach the same mechanism — Vercel's alias swap back to a previous, still-warm production deployment. No rebuild, no server intervention; takes effect in seconds. **The GitHub Actions workflow (Click Path B) is the primary path; the dashboard button (Click Path A) is break-glass.** This ordering is deliberate and must not be "simplified" back to clicking: the workflow leaves an audit trail — who triggered it, when, against which target, and the health verification — whereas a dashboard click leaves nothing a human stopwatch didn't catch. The 2026-07-31 rehearsal is the standing evidence (see "Promote/rollback rehearsal"): the dashboard rollback worked, but with no logged trigger its recovery time was uncomputable — the estimate even landed after the observed flip.
 
-**Click path A — Vercel dashboard, Instant Rollback.** Project → Deployments → current production deployment → "Instant Rollback". Restores the previous production deployment. Fastest option when you're at a machine with the dashboard open. Document it in `incident.md` as the primary move for "the new release broke something".
+**Click path A — Vercel dashboard, Instant Rollback (break-glass).** Project → Deployments → current production deployment → "Instant Rollback". Restores the previous production deployment. The fastest move when you're at a machine with the dashboard open and the workflow is somehow unavailable — but it records no trigger time, so note the wall-clock yourself. Document it in `incident.md` as the break-glass fallback for "the new release broke something".
 
-**Click path B — GitHub Actions `rollback.yml` (works from a phone).** A `workflow_dispatch` workflow — one button in the Actions tab, with an optional input to target a specific release rather than just the previous one:
+**Click path B — GitHub Actions `rollback.yml`, the primary path (works from a phone).** A `workflow_dispatch` workflow — one button in the Actions tab, with an optional input to target a specific release rather than just the previous one. **Acceptance criterion: the workflow MUST emit its own trigger timestamp as its first log line, so recovery time is computable from CI logs alone — no human stopwatch.** The `/api/health` `commit` canary already pins the serving-flip end of the measurement (Instant Rollback swaps to a build whose `commit` differs); the workflow's trigger timestamp is the missing other end. Together they make recovery time a log query, not a guess.
 
 ```yaml
 # .github/workflows/rollback.yml
@@ -307,6 +313,11 @@ jobs:
     timeout-minutes: 10
     environment: production
     steps:
+      - name: Record trigger timestamp
+        # Acceptance criterion: recovery time must be computable from logs
+        # alone. This is the trigger end of the measurement; the /api/health
+        # `commit` canary is the serving-flip end.
+        run: echo "rollback triggered at $(date -u +%FT%TZ) — target=${{ inputs.target || 'previous deployment' }}"
       - name: Roll back
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -337,14 +348,70 @@ jobs:
 **What makes this safe rather than merely fast** — three standing invariants, two of which this plan adds:
 
 1. **Schema compatibility (Workstream 2.5).** Forward-only migrations plus the migration-safety linter mean the previous app version always runs against the current schema. Rollback never touches the database. If the *migration itself* is the bug, the fix is a new compensating migration rolled forward — never a down-migration — exactly as `incident.md` already states.
-2. **Rollback registry (promote.yml).** Every promotion records its tag → deployment URL mapping as a GitHub Release, so "last known stable" is a lookup, not archaeology, and rolling back to any specific prior release is the same one click with a tag typed in.
+2. **Explicit target selection (rollback.yml).** There is no promote.yml and no release registry. `rollback.yml` promotes an existing READY production deployment: rolling back to a *specific* prior deployment is its id passed as the `deployment` input, and the default target is derived from the *live* deployment (the project's production target), never from creation order. "Last known stable" is a deployment id read from the Vercel dashboard or API, not a GitHub Release.
 3. **Baked-env integrity.** Because production deployments are always built with production env vars (2.4), any previous production deployment is safe to re-alias. (This is also why kill switches stay: an env-var flip + redeploy handles "turn the feature off" cases where the deployed code is fine — rollback and kill switches are complementary, per `incident.md`.)
 
 Residual caveats to document in `incident.md`: webhooks keep arriving during the swap (Stripe retries for 3 days — already noted there); Vercel Cron runs against whatever production is aliased to, so a rollback also rolls back cron behaviour (desired); if a rollback crosses a `vercel.json` cron-schedule change, re-check the cron list in the dashboard.
 
 **Drill it.** A rollback mechanism that's never been used is a hypothesis. Once `rollback.yml` lands: promote a trivial change to staging's equivalent flow, roll it back, time it. Repeat quarterly and after any change to the promote workflow. Add both to the pre-launch checklist in `deploy.md`.
 
+### Built — 2026-08-04 (deploy-control workflows)
+
+`.github/workflows/rollback.yml` and `.github/workflows/staging-verify.yml` now exist — `curl` + `jq` only, no new deps, no migrations.
+
+- **`rollback.yml` is the primary rollback path; the Vercel dashboard's Instant Rollback is break-glass.** `workflow_dispatch` with a **required `reason`** (the audit trail, and the only friction — no approval environment or confirmation input on top of it) and an optional `deployment` id. When `deployment` is blank the target defaults to the **most recent READY `target=production` deployment created before the live one**, where "live" is read from the project's production target (not creation order). It refuses to run unless the resolved target is `READY` and `target=production`, promotes via `POST /v10/projects/{projectId}/promote/{deploymentId}`, then **verifies by polling the Vercel production target until it becomes the promoted deployment id** (cap 180s) — the age-proof liveness signal. A single follow-up `/api/health` check confirms the now-live build is serving (200 / `ok` / `database`); its `commit` is asserted only when the build emits it (see the first-live-run findings below).
+- **Roll-forward needs no `promote.yml`, and one was deliberately not built.** Rollback and roll-forward are the same operation — promote an existing READY deployment — and the Vercel *API* (unlike the dashboard's Instant Rollback, which only offers the immediately-previous deployment) can promote *any* deployment. So `rollback.yml`'s `deployment` input covers roll-forward: rolling back to a specific prior deployment is that id typed into `deployment`, not a separate workflow or release registry. Routine promotion stays git-driven (`git push origin main:production`).
+- **The default target is resolved from liveness, not creation order.** Promoting an older deployment changes what is live without changing creation order, so "second-most-recent by created" can be the deployment that is *already live* — promoting it is a silent no-op. The resolver reads the live deployment authoritatively from the project's production target and picks the most recent READY production deployment created before it; a load-bearing guard independently refuses to promote when the target's **deployment id** equals the live production target's id (explicit input included). IDs, not commit shas: always present, and unambiguous when two deployments share a sha. The guard degrades to a warning and proceeds only when the Vercel API call itself fails, never because a field is absent.
+- **The trigger-timestamp acceptance criterion is met.** `rollback.yml`'s first step's first log line is the trigger timestamp in UTC ISO-8601 with milliseconds, emitted before any API call / checkout / setup; the final line reports elapsed seconds from that timestamp to the observed production-target flip, with before/after shas. The rehearsal gap — recovery time unmeasurable because the dashboard doesn't timestamp the click — is closed for the workflow path.
+- **`staging-verify.yml`** runs on push to `main` (plus dispatch): waits for the preview deployment whose `githubCommitSha == GITHUB_SHA` to reach READY (poll, cap 10m), then GETs staging `/api/health` through the `x-vercel-protection-bypass` header (`VERCEL_AUTOMATION_BYPASS_SECRET`) and asserts HTTP 200, `ok === true`, `checks.database === "ok"`, and `commit === GITHUB_SHA`, printing the full body on any mismatch. A commit mismatch means the staging alias didn't flip — the failure it exists to catch. Skips with an `::notice::` (stays green) when `VERCEL_TOKEN` is unset, matching `staging-seed.yml`.
+
 ---
+
+## Promote/rollback rehearsal (2026-07-31)
+
+Ran the full **promote → rollback → roll-forward** loop end to end against production, before relying on it — presentation-layer only, no migration. Canary: `/api/health` now returns the build's `commit` (PR #136), so "what's live" is a curl, not a dashboard guess. The pre-canary production build had **no `commit` field at all**, which made every flip unmistakable.
+
+**Deployments involved**
+
+| Role | Deployment | Commit | Notes |
+|---|---|---|---|
+| Old production / rollback target | `dpl_4xTRMmFBFYu5cuWBnxXzopL2i9zq` | `076ed39` (#133) | built 2026-07-29; stayed READY throughout — rollback needs the target warm |
+| Promoted build (the canary) | `dpl_35YKSCiQrvLmENNHiN6dzKdMN6eq` | `7f7ed39` (#136) | `target=production`, all five prod aliases |
+| Staging Preview of `main` | `dpl_BEZpziWNnzt3F9jFY4DcZwGGJaEY` | `7f7ed39` (#136) | staging alias auto-flipped to it, no manual re-point |
+
+**Timeline (UTC)**
+
+- **Promote.** `git push origin main:production` at 12:05:16 → a `target=production` deployment was auto-created at 12:05:19 (**+3s — the Git integration builds the `production` branch with no intervention; confirming this was the single most important goal of the rehearsal**) → READY 12:07:31 (+2m15s) → production aliases flipped to the new build between 12:07:31 and 12:08:30 (old still serving at 12:07:13, new by 12:08:30).
+- **Rollback** (Instant Rollback → `dpl_4x`, driven in the dashboard). Trigger **not recorded** (est. ~12:55:30 ±30s). Observed by polling `/api/health` every 5s: last poll on the new build 12:55:15, first poll on the old build 12:55:21 — production reverted **by 12:55:21**, inside a single 5-second interval. All five aliases moved back together (`www` via its 301 → apex).
+- **Roll-forward** (Promote to Production → `dpl_35YK`). Confirmed serving `7f7ed39` again at 13:11:34 — rollback is not a one-way door. The flip itself wasn't polled (checked after the fact).
+
+**Measured recovery / roll-forward times.** Both are **sub-minute alias swaps** — no rebuild, the target build was already warm. Exact elapsed figures could **not** be computed: neither dashboard trigger was timestamped, and the rollback estimate (~12:55:30) actually falls *after* the observed old-serving (12:55:21), i.e. it's inconsistent with the poll data. The trustworthy bound is the serving-flip resolution (≤6s), not the trigger. **Fix for a real drill: `rollback.yml`/`promote.yml` (Click Path B) must log the trigger time** — the `commit` canary already makes the serving-flip precisely observable, so a workflow-driven path would capture both ends automatically.
+
+**What surprised us**
+
+- **Roll-forward is a PROMOTE, not a rollback.** Instant Rollback only offers the *previous* deployment; to move forward again you use "Promote to Production" on the target deployment. Different control, different menu — the runbook must say so, or someone will hunt for a "roll forward" button that doesn't exist.
+- **Vercel's `get_deployment.alias` is stale / eventually-consistent.** After the promote, the *old* deployment's metadata still *listed* the production domains (and `staging.`). The authoritative "what's live" signal is the `/api/health` `commit` curl, never the alias array — which is exactly why the canary earns its keep.
+- **Rollback is genuinely a warm alias swap** — no rebuild, seconds, old build untouched — matching the Workstream 3 claim. The staging alias auto-flipping on the new Preview build (no re-point) confirms the branch-rebuild behaviour from watch-item 7 works in the healthy direction too.
+
+### First live `rollback.yml` run (2026-08-06)
+
+The first production run of `rollback.yml` proved the **promote path works and the original verification did not**.
+
+- **Run 1 (default target)** promoted `076ed39` — production traffic really did move — then failed the assertion `/api/health did not report commit=076ed39 within 180s (last saw '<none>')`. `076ed39` predates PR #136, the build that added `commit` to the health 200. That build **cannot emit the field**, so the commit-equality assertion could never pass even though the rollback had succeeded.
+- **Run 2 (explicit roll-forward)** succeeded but warned `could not read the live commit from /api/health — skipping the already-live guard`. Health was fine; the live build simply had **no `commit` field**, and the guard mistook an absent field for a dead endpoint and disabled itself.
+- **Root cause:** the health `commit` field was being used as the **liveness** signal. It is not one — it is an app-level canary present only on post-#136 builds. **Vercel's production target** (`GET /v9/projects/{id}` → `targets.production.id`) is the authoritative answer to what is live, and it holds for every deployment regardless of age.
+- **Fix (this PR):** liveness — both the primary verification poll and the already-live guard — is determined from the Vercel production target by **deployment id**. The health commit is a **secondary** "is it serving" check, asserted only when the response carries a `commit` field; for targets older than #136 its absence is a pass (`verified via Vercel production target instead`), not a warning and not a failure. The already-live guard degrades to a warning only when the Vercel API call itself fails, never because a field is absent.
+- **Production was left on `7f7ed39`** after the first-run investigation.
+
+### Second live run — workflow-driven rehearsal (2026-08-06)
+
+Re-ran with the liveness fix (#142) in place, workflow-driven this time (default target, `reason=workflow rehearsal`).
+
+- **The rollback worked and the primary verification proved it.** The resolver picked `dpl_4xTR…` (`076ed39`, the READY production build created just before live `7f7ed39`), promote returned 201, and the **Vercel production-target poll confirmed the flip in 2.8s** — age-proof, even though `076ed39` emits no commit field. This is the fix behaving exactly as intended.
+- **But the secondary serving check tripped on propagation lag.** It did one eager `/api/health` GET ~4s after the promote and caught the **outgoing** build `7f7ed39` still on the edge: the Vercel production-target flip **leads the Cloudflare edge by seconds to minutes**. Because `7f7ed39` is post-#136 it emits a `commit`, so the "assert commit when present" branch compared `7f7ed39 ≠ 076ed39` and failed. ~90s later the edge finished propagating to `076ed39` (no commit field) — i.e. the rollback had in fact succeeded. The subsequent roll-forward to `7f7ed39` went green only because the lingering old build (`076ed39`) emits no commit and hit the pass branch — the benign side of the same two defects.
+- **Finding: the edge and the Vercel production target are two different propagation points, and the edge lags.** The health `commit` is an *arrival* signal that also can't fire for pre-#136 targets, so the serving check must key off **departure** from the edge's own pre-promote state, not arrival of a specific commit.
+- **Fix (this PR):** snapshot the edge's `commit` (or `<none>`) as `PRE_COMMIT` immediately before the promote, then after the primary flip poll `/api/health` (cap 180s), classifying each reachable read into three cases: **(1)** served `== TARGET_SHA` → confirmed (arrival); **(2)** served **absent** and `PRE_COMMIT` was concrete → confirmed (old build gone, and a pre-#136 target has nothing to "arrive" with); **(3)** served is a concrete sha that is **neither** → *not* confirmed, an unexpected build — keep polling. Deadline outcomes: still serving `PRE_COMMIT` → red **EDGE STALE** (promote took at Vercel, don't re-run, check the Cloudflare cache and DNS); serving an unexpected sha → red **UNEXPECTED BUILD** naming the sha (check the Vercel dashboard for a manual redeploy / competing promotion); edge unreachable or the departure unobservable (`<none>`→`<none>`) → `::warning::`, green, because the primary already confirmed. Primary assertion, id-based guard, trigger-timestamp first line, and trigger→flip elapsed are unchanged.
+- **Production is on `7f7ed39`** (rolled forward after the rehearsal).
 
 ## Phasing & effort
 

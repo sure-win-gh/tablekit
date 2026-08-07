@@ -1,0 +1,66 @@
+name: staging-seed
+
+# Reseeds the London staging Supabase weekly so its synthetic data never rots
+# (deployment-pipeline.md Workstream 1.2). Also runnable on demand. Uses a
+# dedicated STAGING_* secret set — never the CI project's secrets, so a mistake
+# here can't touch CI data. The seeder's own guard is the real backstop: it
+# refuses unless every target resolves to STAGING_PROJECT_REF.
+
+on:
+  schedule:
+    # Mondays 04:00 UTC — quiet hours, well before anyone demos against staging.
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      reset:
+        description: "Fully delete + recreate the seed orgs (use after a master-key change so DEKs are reprovisioned)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-seed
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    name: seed staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Staging-only secrets, mapped onto the env var names the app reads.
+      # STAGING_DATABASE_URL is this workflow's alone — CI jobs stay on the CI
+      # project. If it's unset the job skips loudly rather than failing.
+      DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+      TABLEKIT_MASTER_KEY: ${{ secrets.STAGING_TABLEKIT_MASTER_KEY }}
+      STAGING_PROJECT_REF: ${{ secrets.STAGING_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Seed staging (skipped)
+        if: env.DATABASE_URL == ''
+        run: echo "::notice::STAGING_DATABASE_URL not set — skipping staging reseed. Wire the STAGING_* secrets to enable."
+
+      - name: Seed staging
+        if: env.DATABASE_URL != ''
+        env:
+          # `reset` deletes + recreates the seed orgs so their DEKs are
+          # reprovisioned under the current STAGING_TABLEKIT_MASTER_KEY.
+          SEED_RESET: ${{ inputs.reset && '1' || '' }}
+        run: pnpm seed:staging

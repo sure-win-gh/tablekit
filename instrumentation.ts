@@ -19,7 +19,7 @@ export async function register(): Promise<void> {
   // In production that's a serious misconfiguration — surface it loudly in
   // logs (and to Sentry below once it's initialised) rather than degrade
   // silently. See docs/playbooks/{security,deploy}.md.
-  const upstashMissing = missingUpstashInProd();
+  const upstashMissing = missingUpstashInProdLike();
   if (upstashMissing.length > 0) {
     console.error(
       `[boot] CRITICAL: rate limiter fails OPEN — Upstash not configured (${upstashMissing.join(", ")}). Auth/abuse throttling is DISABLED.`,
@@ -77,12 +77,14 @@ export async function register(): Promise<void> {
   }
 }
 
-// Which Upstash env vars are missing in a production Node runtime (empty
-// otherwise). Gated to the Node server runtime so the check fires once, not
+// Which Upstash env vars are missing in a prod-like Node runtime (empty
+// otherwise). Uses isProdLike() — the SAME "environment that matters"
+// definition as the env-parity tripwire below (Vercel production OR
+// TABLEKIT_ENV=staging) — so a broken Upstash config alarms on staging too,
+// not just production. Gated to the Node server runtime so it fires once, not
 // also on edge. Exported for the unit test.
-export function missingUpstashInProd(): string[] {
-  const isProd = (process.env["VERCEL_ENV"] ?? process.env["NODE_ENV"]) === "production";
-  if (!isProd) return [];
+export function missingUpstashInProdLike(): string[] {
+  if (!isProdLike(process.env)) return [];
   const runtime = process.env["NEXT_RUNTIME"];
   if (runtime && runtime !== "nodejs") return [];
   return ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"].filter((k) => !process.env[k]);

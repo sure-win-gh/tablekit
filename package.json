@@ -21,6 +21,7 @@
     "db:backfill-phone-hash": "tsx --conditions=react-server scripts/backfill-phone-hash.ts",
     "check:rls": "tsx scripts/check-rls.ts",
     "check:migrations": "tsx scripts/check-migration-safety.ts",
+    "seed:staging": "tsx --conditions=react-server scripts/seed-staging.ts",
     "check:env": "tsx scripts/check-env-parity.ts",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -98,8 +99,8 @@
       "axios": "^1.18.0",
       "ws": ">=8.21.0",
       "form-data": ">=4.0.6",
-      "brace-expansion@>=3.0.0 <5.0.8": ">=5.0.8",
-      "fast-uri": "^3.1.4",
+      "brace-expansion@>=3.0.0 <5.0.9": ">=5.0.9",
+      "fast-uri": "^3.1.5",
       "sharp": ">=0.35.0",
       "postcss": ">=8.5.18"
     }
