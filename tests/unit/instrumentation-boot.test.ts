@@ -1,5 +1,7 @@
-// Unit tests for the Upstash boot tripwire in instrumentation.ts. The rate
-// limiter fails open when Upstash is unset, so production boot must flag it.
+// Unit tests for the Upstash boot tripwire in instrumentation.ts. Missing
+// Upstash degrades the rate limiter either way — it fails CLOSED in production
+// (every rate-limited route returns 429) and OPEN in staging (no throttling at
+// all) — so the tripwire spans both prod-like envs, as the cases below assert.
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 

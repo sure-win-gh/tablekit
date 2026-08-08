@@ -14,15 +14,28 @@ import { isProdLike, missingRequiredEnv } from "@/lib/env-check";
 import { scrubEvent } from "@/lib/observability/sentry-scrub";
 
 export async function register(): Promise<void> {
-  // Boot tripwire: the rate limiter (lib/public/rate-limit.ts) fails OPEN if
-  // Upstash isn't configured, silently disabling all auth/abuse throttling.
-  // In production that's a serious misconfiguration — surface it loudly in
-  // logs (and to Sentry below once it's initialised) rather than degrade
-  // silently. See docs/playbooks/{security,deploy}.md.
+  // Boot tripwire: Upstash missing means the rate limiter (lib/public/
+  // rate-limit.ts) is degraded — but which way depends on the environment,
+  // because this tripwire and the limiter gate on DIFFERENT predicates:
+  //
+  //   • This tripwire  → isProdLike(): VERCEL_ENV=production OR
+  //     TABLEKIT_ENV=staging. Fires in both.
+  //   • The limiter    → isProduction(): (VERCEL_ENV ?? NODE_ENV) ===
+  //     "production". True in production only.
+  //
+  // So in PRODUCTION missingConfigResult() returns ok:false for every caller
+  // and each rate-limited route answers 429 with retry-after set to that
+  // bucket's window — a hard outage of the booking flow and every credential
+  // endpoint, not a silent degradation. In STAGING (a Vercel preview, so
+  // VERCEL_ENV=preview) it returns ok:true instead: the limiter fails OPEN
+  // and there is no throttling at all. Both are worth waking up for, which
+  // is why the tripwire deliberately spans both. Surface it loudly in logs
+  // (and to Sentry below once it's initialised) so it's diagnosed in
+  // seconds. See docs/playbooks/{security,deploy}.md.
   const upstashMissing = missingUpstashInProdLike();
   if (upstashMissing.length > 0) {
     console.error(
-      `[boot] CRITICAL: rate limiter fails OPEN — Upstash not configured (${upstashMissing.join(", ")}). Auth/abuse throttling is DISABLED.`,
+      `[boot] CRITICAL: Upstash not configured (${upstashMissing.join(", ")}) — in production the rate limiter fails CLOSED (bookings, availability, events/purchase, login, signup, password reset, api-key auth and enquiries all return 429); in staging it fails OPEN, so there is no throttling at all.`,
     );
   }
 
@@ -60,7 +73,7 @@ export async function register(): Promise<void> {
     // Now that Sentry is up, also page on the Upstash misconfig.
     if (upstashMissing.length > 0) {
       Sentry.captureMessage(
-        `rate limiter fails open: Upstash not configured in production (${upstashMissing.join(", ")})`,
+        `rate limiter degraded: Upstash not configured (${upstashMissing.join(", ")}) — in production it fails CLOSED and every rate-limited route returns 429; in staging it fails OPEN, so there is no throttling at all`,
         "fatal",
       );
     }
